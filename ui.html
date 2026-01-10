@@ -1,0 +1,1963 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Systemic Auditor</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" />
+    <!-- Material Symbols (Google) for iconography -->
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0" rel="stylesheet" />
+    <style>
+
+      :root {
+        --font-sans: Manrope, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Inter, Arial;
+        --bg: #05080a;
+        --panel: #0b0f14;
+        --panel-2: rgba(255, 255, 255, 0.04);
+        --stroke: rgba(255, 255, 255, 0.10);
+        --stroke-2: rgba(255, 255, 255, 0.16);
+        --text: rgba(255, 255, 255, 0.94);
+        --muted: rgba(255, 255, 255, 0.62);
+        --muted-2: rgba(255, 255, 255, 0.40);
+
+        --orange: #f59e0b;
+        --cyan: #22d3ee;
+        --red: #f87171;
+        --violet: #a78bfa;
+        --lime: #A3E635;
+      }
+
+      /* Celebration (A-grade) */
+      .celebrateMsg{
+        margin: 8px 0 0;
+        font-size: 14px;
+        font-weight: 700;
+        line-height: 18px;
+        color: rgba(255,255,255,.70);
+      }
+
+      .statusCard[data-celebrate="true"]::after{
+        background: radial-gradient(140px 240px at 90% 40%, rgba(163,230,53,.18), transparent 70%);
+      }
+
+      .confettiWrap{
+        position: absolute;
+        z-index: 2;
+        inset: 0;
+        pointer-events: none;
+        overflow: hidden;
+      }
+      .confettiWrap span{
+        position: absolute;
+        top: -12px;
+        width: 6px;
+        height: 10px;
+        border-radius: 2px;
+        opacity: .95;
+        animation: confettiFall 900ms var(--ease) both;
+      }
+      @keyframes confettiFall{
+        0%{ transform: translateY(-10px) rotate(0deg); opacity: 0; }
+        10%{ opacity: 1; }
+        100%{ transform: translateY(140px) rotate(220deg); opacity: 0; }
+      }
+      @media (prefers-reduced-motion: reduce){
+        .confettiWrap span{ animation: none; display: none; }
+      }
+      .proTease{
+        padding: 10px 12px;
+        border-top: 1px solid rgba(255,255,255,.06);
+        background: rgba(255,255,255,.02);
+      }
+      .proBtn{
+        width: 100%;
+        height: 40px;
+        border-radius: 10px;
+        border: 1px solid rgba(255,255,255,.10);
+        background: rgba(255,255,255,.03);
+        color: rgba(255,255,255,.45);
+        font-family: var(--font-sans);
+        font-weight: 600;
+        font-size: 13px;
+        letter-spacing: 0.1px;
+        cursor: pointer;
+        position: relative;
+      }
+      .proBtn:hover{ border-color: rgba(255,255,255,.14); background: rgba(255,255,255,.04); }
+      .proBtn:active{ transform: translateY(1px); }
+
+      .tooltip{
+        position: absolute;
+        left: 50%;
+        bottom: 48px;
+        transform: translateX(-50%);
+        background: rgba(15,23,42,.92);
+        color: rgba(255,255,255,.90);
+        border: 1px solid rgba(255,255,255,.12);
+        border-radius: 10px;
+        padding: 8px 10px;
+        font-size: 12px;
+        line-height: 16px;
+        white-space: nowrap;
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity var(--dur) var(--ease), transform var(--dur) var(--ease);
+        box-shadow: 0 18px 40px rgba(0,0,0,.45);
+      }
+      .tooltip::after{
+        content: "";
+        position: absolute;
+        left: 50%;
+        bottom: -6px;
+        transform: translateX(-50%);
+        border: 6px solid transparent;
+        border-top-color: rgba(15,23,42,.92);
+      }
+      .proBtnWrap{ position: relative; }
+      .proBtnWrap:hover .tooltip{
+        opacity: 1;
+        transform: translateX(-50%) translateY(-2px);
+      }
+      @media (prefers-reduced-motion: reduce){
+        .tooltip{ transition: none; }
+      }
+
+      :root {
+        --radius: 8px;
+        --ease: cubic-bezier(.2,.8,.2,1);
+        --dur-fast: 140ms;
+        --dur: 180ms;
+        --dur-slow: 260ms;
+      }
+
+      * { box-sizing: border-box; }
+      html, body { height: 100%; }
+      body {
+        position: relative;
+        margin: 0;
+        padding: 16px;
+        background: var(--bg);
+        color: var(--text);
+        font-family: var(--font-sans);
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+        text-rendering: optimizeLegibility;
+      }
+
+      /* Main container */
+      .shell {
+        width: 100%;
+        border-radius: 12px;
+        border: 1px solid var(--stroke);
+        background: var(--panel);
+        overflow: hidden;
+        box-shadow: 0 24px 60px rgba(0,0,0,.55);
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+        height: calc(100vh - 32px);
+      }
+
+      .topGlow {
+        height: 4px;
+        width: 100%;
+        background: linear-gradient(90deg, var(--panel), #A3E635, var(--panel));
+        opacity: .55;
+      }
+
+
+      /* Ensure app chrome stays above background */
+      .shell{ position: relative; z-index: 1; }
+
+      .content {
+        padding: 20px 20px 24px; /* tighter bottom padding */
+        display: flex;
+        flex-direction: column;
+        gap: 20px;
+        min-height: 0;
+        flex: 1 1 auto;
+        overflow-y: auto;
+        scrollbar-gutter: stable;
+      }
+
+      /* Shared vertical scroll + scrollbar styling (reuse for content + lists) */
+      .scrollY{
+        overflow-y: auto;
+        overscroll-behavior: contain;
+        /* Reserve space so content doesn't reflow when scrollbar appears */
+        scrollbar-gutter: stable;
+      }
+
+      /* If the host webview supports overlay scrollbars, use them so the bar floats above content */
+      @supports (overflow-y: overlay){
+        .scrollY{
+          overflow-y: overlay;
+          scrollbar-gutter: auto;
+        }
+      }
+      .scrollY::-webkit-scrollbar{ width: 10px; }
+      .scrollY::-webkit-scrollbar-thumb{
+        background: rgba(255,255,255,.10);
+        border-radius: 999px;
+        border: 3px solid rgba(0,0,0,0);
+        background-clip: padding-box;
+      }
+      .scrollY::-webkit-scrollbar-thumb:hover{
+        background: rgba(255,255,255,.16);
+        border: 3px solid rgba(0,0,0,0);
+        background-clip: padding-box;
+      }
+
+      .header h1 {
+        margin: 0;
+        color: #F8FAFC;
+        font-family: "Funnel Display", var(--font-sans);
+        font-size: 20px;
+        font-style: normal;
+        font-weight: 700;
+        line-height: 24px;
+        letter-spacing: 0;
+      }
+      .header p {
+        margin: 0;
+        font-size: 14px;
+        line-height: 20px;
+        color: var(--muted);
+      }
+
+      /* Buttons */
+      .actions {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 12px;
+      }
+
+      .btn {
+        height: 48px;
+        border-radius: 8px;
+        border: 1px solid var(--stroke);
+        background: rgba(255,255,255,.04);
+        color: var(--text);
+        font-family: var(--font-sans);
+        font-weight: 600;
+        font-size: 14px;
+        letter-spacing: 0.1px;
+        font-feature-settings: "kern" 1, "liga" 1;
+        -webkit-font-smoothing: antialiased;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 10px;
+        transition: transform var(--dur-fast) var(--ease), border-color var(--dur) var(--ease), background var(--dur) var(--ease), box-shadow var(--dur) var(--ease);
+        user-select: none;
+      }
+      .btnLabel{
+        font-family: var(--font-sans);
+        font-weight: 600;
+        font-size: 14px;
+        line-height: 20px;
+        display: inline-block;
+        transform: translateY(0);
+        transition: transform var(--dur-fast) var(--ease);
+      }
+
+      /* Scan selection hover: subtle, smooth micro-interaction (no size jump) */
+      #scanBtn{
+        position: relative;
+        overflow: hidden;
+        /* Keep base button surface as-is; hover adds animated lime gradient */
+      }
+
+      /* animated text */
+      #scanBtn .btnLabel{
+        font-size: 14px;
+        display: inline-block;
+        transform: translate3d(0,0,0);
+        transition: transform var(--dur) var(--ease), letter-spacing var(--dur) var(--ease), opacity var(--dur) var(--ease);
+        will-change: transform;
+      }
+
+      #scanBtn:hover .btnLabel{
+        transform: translate3d(0,-1px,0);
+        letter-spacing: 0.2px;
+        opacity: 0.98;
+      }
+
+      /* Animated monochromatic lime gradient (hover only) */
+      /* Animate the button background itself (more visible than blend-mode overlays) */
+      #scanBtn{
+        background-image: none;
+        background-size: 240% 100%;
+        background-position: 0% 50%;
+      }
+
+      #scanBtn:hover{
+        /* Lime-only range: dark → base → light → base → dark */
+        background-image: linear-gradient(
+          90deg,
+          #65A30D 0%,
+          #A3E635 22%,
+          #D9F99D 50%,
+          #A3E635 78%,
+          #65A30D 100%
+        );
+        animation: scanLimeLoop 400ms linear infinite;
+      }
+
+      /* Optional soft sheen so the motion reads even on bright displays */
+      #scanBtn::before{
+        content: "";
+        position: absolute;
+        inset: 0;
+        border-radius: 8px;
+        background: radial-gradient(140px 40px at 50% 0%, rgba(255,255,255,0.22), transparent 70%);
+        opacity: 0;
+        transition: opacity var(--dur) var(--ease);
+        pointer-events: none;
+      }
+      #scanBtn:hover::before{ opacity: 1; }
+
+      @media (prefers-reduced-motion: reduce){
+        #scanBtn .btnLabel,
+        #scanBtn::before{ transition: none !important; animation: none !important; }
+        #scanBtn:hover .btnLabel{ transform: none; letter-spacing: 0; }
+        #scanBtn:hover{ animation: none !important; background-image: none; }
+        #scanBtn:hover::before{ opacity: 0; }
+      }
+      .btn:hover { border-color: var(--stroke-2); }
+      .btn:active { transform: translateY(1px); }
+      .btn:disabled { opacity: .55; cursor: not-allowed; }
+      .btn:focus-visible{
+        outline: none;
+        box-shadow: 0 0 0 3px rgba(34,211,238,.18), 0 0 0 1px rgba(255,255,255,.18) inset;
+      }
+      .btnPrimary:focus-visible{
+        box-shadow: 0 0 0 3px rgba(173,70,255,.22), 0 0 0 1px rgba(15,23,42,.25) inset;
+      }
+      /* Health Gauge (single source of truth — 120px) */
+      .healthGaugeWrap{
+        width: 120px;
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
+        flex-shrink: 0;
+      }
+
+      .healthGauge{
+        width: 120px;
+        height: 60px;
+        position: relative;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .healthGaugeChart{
+        width: 120px;
+        height: 60px;
+        position: relative;
+        overflow: visible;
+      }
+
+      .healthGaugeChart svg{
+        width: 100%;
+        height: 100%;
+        display: block;
+      }
+
+      .healthGaugeGrade{
+        position: absolute;
+        bottom: 4px;
+        left: 0;
+        width: 100%;
+        display: flex;
+        justify-content: center;
+        align-items: flex-end;
+        font-weight: 800;
+        font-size: 24px;
+        line-height: 1;
+        letter-spacing: -1px;
+        color: #f59e0b;
+        pointer-events: none;
+      }
+
+      .healthGaugeLabel{
+        margin-top: 6px;
+        font-size: 12px;
+        font-weight: 500;
+        line-height: 16px; /* 133.333% of 12px */
+        letter-spacing: -0.2px;
+        white-space: nowrap;
+        color: rgba(255,255,255,.42);
+      }
+
+      /* Gauge controls */
+      .healthGauge[data-show-label="false"] .healthGaugeLabel{ display: none; }
+      .healthGauge[data-show-grade="false"] .healthGaugeGrade{ display: none; }
+
+      #results{
+        opacity: 0;
+        transform: translateY(6px);
+        transition: opacity var(--dur) var(--ease), transform var(--dur) var(--ease);
+      }
+      #results.isVisible{
+        opacity: 1;
+        transform: translateY(0);
+        pointer-events: auto;
+      }
+      /* Staggered entry for data-driven blocks */
+      #results.isVisible .statusCard{ animation: fadeUp var(--dur-slow) var(--ease) both; }
+      #results.isVisible .statsGrid{ animation: fadeUp var(--dur-slow) var(--ease) both; animation-delay: 40ms; }
+      #results.isVisible #secIssues{ animation: fadeUp var(--dur-slow) var(--ease) both; animation-delay: 70ms; }
+      
+     @media (prefers-reduced-motion: reduce){
+      #results{ transition: none; }
+      .gValue{ transition: none; }
+      .btn{ transition: none; }
+      .sectionBody{ transition: none; }
+      .statusCard, .statsGrid, #secIssues, .noSelectionCard, .row{ animation: none !important; }
+      #scanBtn .btnLabel{ transition: none !important; }
+    }
+
+      .btnPrimary {
+        background: #A3E635;
+        font-weight: 800;
+        color: #0f172a;
+        border-color: rgba(248,250,252,.22);
+        position: relative;
+        overflow: hidden;
+      }
+      .btnPrimary:hover {
+        box-shadow: 0 10px 15px -3px rgba(247, 254, 231, 0.15), 0 4px 6px 1px rgba(163, 230, 53, 0.10);
+      }
+
+      .btnPrimary::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        border-radius: 8px;
+        padding: 2px;
+        background: linear-gradient(90deg, #4D7C0F, #D9F99D);
+        -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+        -webkit-mask-composite: xor;
+        mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+        mask-composite: exclude;
+        opacity: 0;
+        transition: opacity .18s ease;
+        pointer-events: none;
+      }
+      .btnPrimary:hover::after { opacity: 1; }
+
+      .spinner {
+        width: 14px;
+        height: 14px;
+        border-radius: 999px;
+        border: 2px solid rgba(15,23,42,.25);
+        border-top-color: rgba(15,23,42,.85);
+        animation: spin 0.8s linear infinite;
+      }
+      @keyframes spin { to { transform: rotate(360deg); } }
+
+      /* Subtle motion primitives */
+      @keyframes fadeUp {
+        from { opacity: 0; transform: translateY(8px); }
+        to { opacity: 1; transform: translateY(0); }
+      }
+
+      @keyframes softPop {
+        from { opacity: 0; transform: translateY(6px) scale(0.99); }
+        to { opacity: 1; transform: translateY(0) scale(1); }
+      }
+
+      @keyframes rowIn {
+        from { opacity: 0; transform: translateY(6px); }
+        to { opacity: 1; transform: translateY(0); }
+      }
+
+      /* Collapsible */
+      .sectionHeader {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 6px 2px;
+        cursor: pointer;
+        user-select: none;
+      }
+      .sectionHeader h3 {
+        margin: 0;
+        font-size: 14px;
+        font-weight: 700;
+      }
+      .chev {
+        width: 24px;
+        height: 24px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        opacity: .95;
+        transition: opacity .12s ease, transform .18s ease;
+      }
+
+      /* Material Symbols sizing + defaults */
+      .material-symbols-outlined {
+        font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        font-family: 'Material Symbols Outlined';
+        font-size: 24px;
+        line-height: 1;
+        display: inline-block;
+        vertical-align: middle;
+      }
+
+      /* Inline SVG chevron used in plugin (preferred for environments
+         where webfonts are blocked). */
+      .chevIcon {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 24px;
+        height: 24px;
+        color: #ffffff; /* icon color */
+      }
+      .chevIcon svg {
+        width: 24px;
+        height: 24px;
+        display: block;
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 1.8;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+        transition: transform .18s ease, opacity .12s ease, color .12s ease;
+        opacity: 1;
+      }
+
+      /* Keep chev background transparent; icon is white. Add smooth transitions. */
+      .section .chev{
+        background: transparent;
+        border-radius: 6px;
+        transition: transform .18s ease, opacity .12s ease;
+      }
+      .section .chev .material-symbols-outlined{
+        color: #ffffff;
+        transition: transform .18s ease, opacity .12s ease, color .12s ease;
+        opacity: 1;
+        transform-origin: center;
+      }
+
+      .sectionBody {
+        overflow: hidden;
+        max-height: 900px;
+        opacity: 1;
+        transform: translateY(0);
+        transition: max-height .22s ease, opacity var(--dur) var(--ease), transform var(--dur) var(--ease);
+      }
+      .section[data-open="false"] .sectionBody {
+        max-height: 0;
+        opacity: 0;
+        transform: translateY(-2px);
+      }
+
+      /* Options grid */
+      .optionsGrid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+        margin-top: 8px;
+      }
+
+      .optCard {
+        border: 1px solid var(--stroke);
+        background: rgba(255,255,255,.03);
+        border-radius: 8px;
+        padding: 16px;
+        display: flex;
+        gap: 10px;
+        align-items: flex-start;
+        font-family: var(--font-sans);
+        -webkit-font-smoothing: antialiased;
+        letter-spacing: 0.15px;
+      }
+      .optCard:hover { border-color: var(--stroke-2); }
+
+      .optText { display: flex; flex-direction: column; gap: 2px; }
+      .optLabel { font-size: 12px; font-weight: 600; font-family: var(--font-sans); letter-spacing: 0.2px; }
+      .optDesc { font-size: 11px; color: var(--muted-2); line-height: 14px; font-family: var(--font-sans); }
+
+      .switch {
+        /* Rounded square checkbox (matches reference) */
+        width: 22px;
+        height: 22px;
+        border-radius: 7px;
+        border: 2px solid rgba(255,255,255,.14);
+        background: transparent;
+        position: relative;
+        flex-shrink: 0;
+        margin-top: 2px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+      }
+
+      .switch input { position: absolute; opacity: 0; width: 100%; height: 100%; margin: 0; cursor: pointer; }
+      .knob { display: none; }
+
+      /* placeholder area for checkmark (SVG via data URI) */
+      .switch::after{
+        content: "";
+        display: block;
+        width: 14px;
+        height: 14px;
+        background-repeat: no-repeat;
+        background-position: center;
+        background-size: contain;
+      }
+
+      .switch:not([data-on="true"]) {
+        background: transparent;
+        border-color: rgba(255,255,255,.14);
+      }
+
+      .switch[data-on="true"] {
+        background: #f8fafc; /* white rounded box */
+        border-color: rgba(15,23,42,.08);
+      }
+
+      /* navy checkmark SVG when checked (percent-encoded color) */
+      .switch[data-on="true"]::after{
+        background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path d='M5 13l4 4L19 7' stroke='%230f172a' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round' fill='none'/></svg>");
+      }
+
+      /* Results area */
+      .divider {
+        border-color: rgba(255, 255, 255, 0.4);
+        display: flex;
+        height: 8px;
+        padding: 4px 0;
+        justify-content: center;
+        align-items: center;
+        align-self: stretch;
+      }
+      /* No selection state (matches provided design) */
+      .noSelectionCard{
+        border: 1px solid rgba(255,255,255,.10);
+        background: rgba(255,255,255,.04);
+        border-radius: 8px;
+        padding: 16px;
+        min-height: 140px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        animation: softPop var(--dur-slow) var(--ease) both;
+        box-shadow:
+          0 1px 0 rgba(255,255,255,.06) inset,
+          0 24px 60px rgba(0,0,0,.35);
+      }
+
+      .noSelectionText{
+        margin: 0;
+        text-align: center;
+        font-family: Manrope, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Inter, Arial;
+        font-size: 14px;
+        font-style: normal;
+        font-weight: 400;
+        line-height: 20px; /* 142.857% */
+        letter-spacing: 0;
+        color: rgba(255,255,255,.55);
+        max-width: 340px;
+      }
+
+      /* No selection mode: hide all data-driven UI */
+      body[data-view="no-selection"] #resultsContent{ display: none !important; }
+      body[data-view="no-selection"] .statusCard{ display: none !important; }
+      body[data-view="no-selection"] .statsGrid{ display: none !important; }
+      body[data-view="no-selection"] #secIssues{ display: none !important; }
+      body[data-view="no-selection"] #noSelectionState{ display: block !important; }
+      .statusCard {
+      border: 1px solid rgba(255,255,255,.10);
+      background: linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,.02));
+      border-radius: 8px;
+      padding: 16px; /* space/12 */
+      display: flex;
+      align-items: center;
+      gap: 12px; /* space/12 */
+      overflow: hidden;
+      position: relative;
+      min-height: 106px;
+      box-shadow:
+        0 1px 0 rgba(255,255,255,.06) inset,
+        0 24px 60px rgba(0,0,0,.35);
+      }
+      .statusCard::after {
+        content: "";
+        position: absolute;
+        top: 0;
+        right: 0;
+        width: 220px;
+        height: 100%;
+        background: radial-gradient(120px 220px at 90% 50%, rgba(255,255,255,.06), transparent 70%);
+        pointer-events: none;
+      }
+
+      .statusLeft{ 
+      display: flex;
+      width: 220px;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 4px;
+      }
+
+      .statusSpacer{
+      flex: 1 1 auto;
+      }
+
+      .statusRight{
+        flex: 0 0 auto;
+      }
+      .statusTitle {
+        font-size: 14px;
+        font-weight: 600;
+        margin: 0;
+        letter-spacing: -0.2px;
+        white-space: nowrap;
+      }
+      .statusSub {
+        font-size: 14px;
+        line-height: 1.25;
+        color: #94a3b8;
+        margin: 0;
+        font-weight: 400;
+        max-width: none;
+        word-break: normal;
+      }
+
+      @media (max-width: 420px){
+        .statusTitle{ white-space: normal; }
+        .statusSub{ font-size: 12px; }
+      }
+
+      @media (max-width: 380px){
+        .healthGaugeWrap{ width: 120px; }
+        .healthGauge{ width: 120px; height: 60px; }
+        .healthGaugeChart{ width: 120px; height: 60px; }
+        .healthGaugeGrade{ font-size: 30px; }
+        .healthGaugeLabel{ font-size: 12px; }
+        .statusSub{ font-size: 12px; }
+      }
+
+      .statsGrid {
+        display: grid;
+        grid-template-columns: repeat(6, 1fr);
+        gap: 12px;
+        margin-top: 10px;
+      }
+
+      /* Grid placement to match Figma:
+         Row 1: Total (wide) + Detached (narrow)
+         Row 2: Unstyled text / Rogue fills / Rogue strokes (3 equal)
+
+         Using 6 columns:
+         - Total spans 4/6
+         - Detached spans 2/6
+         - Bottom row cards span 2/6 each
+      */
+      #filterAll{ grid-column: span 4; }
+      #filterDetached{ grid-column: span 2; }
+      #filterText{ grid-column: span 2; }
+      #filterFills{ grid-column: span 2; }
+      #filterStrokes{ grid-column: span 2; }
+
+      .statCard {
+        border: 1px solid rgba(51,65,85,.12);
+        background: rgba(51,65,85,.06);
+        border-radius: 8px;
+        padding: 12px;
+        cursor: pointer;
+        transition: border-color .12s ease, background .12s ease, transform .08s ease, box-shadow .12s ease;
+      }
+      .statCard:hover { border-color: var(--stroke-2); }
+      .statCard:active { transform: translateY(1px); }
+      .statCard[data-active="true"] {
+        border-color: rgba(255,255,255,.22);
+        background: rgba(255,255,255,.04);
+        box-shadow: 0 6px 18px rgba(0,0,0,.35), 0 0 0 1px rgba(51,65,85,.12) inset;
+      }
+
+      .statValue { font-size: 30px; line-height: 36px; font-weight: 700; margin: 0; }
+      .statLabel {
+        margin-top: 6px;
+        font-size: 14px;
+        color: #94a3b8;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        transition: color .12s ease;
+      }
+      .statCard:hover .statLabel { color: #ffffff; }
+      .statCard .statValue { font-variant-numeric: tabular-nums; }
+      .statCard::before{
+        content: "";
+        position: absolute;
+        inset: 0;
+        border-radius: 8px;
+        pointer-events: none;
+      }
+      .dot { width: 8px; height: 8px; border-radius: 999px; display: inline-block; }
+
+      /* Issues list */
+      .issuesBox {
+        border: 1px solid var(--stroke);
+        background: rgba(255,255,255,.02);
+        border-radius: 8px;
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+        position: relative;
+        margin-bottom: 12px;
+        min-height: 0;
+        height: 312px;
+        max-height: 312px;
+      }
+      .issuesScroll {
+        flex: 1 1 auto;
+        min-height: 0;
+      }
+
+      .row {
+        padding: 12px;
+        border-bottom: 1px solid rgba(255,255,255,.06);
+        cursor: pointer;
+        display: flex;
+        animation: rowIn 220ms var(--ease) both;
+        animation-delay: calc(var(--i, 0) * 18ms);
+        will-change: transform, opacity;
+        align-items: stretch;
+      }
+      .row:hover { background: rgba(51,65,85,.12); }
+      .row:last-child { border-bottom: none; }
+
+      .rowTop {
+        width: 100%;
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 12px;
+      }
+
+      .name {
+        font-size: 14px;
+        font-weight: 700;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 100%;
+      }
+
+      .leftGroup{
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 4px;
+        flex: 1 1 auto;
+        min-width: 0;
+      }
+      .path {
+        font-size: 11px;
+        color: var(--muted-2);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 100%;
+      }
+
+      .rowActions {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-shrink: 0;
+      }
+
+      .pill {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        height: 25px;
+        padding: 5px 11px;
+        border-radius: 999px;
+        border: 1px solid rgba(148,163,184,.18);
+        color: #94a3b8;
+        background: transparent;
+        white-space: nowrap;
+      }
+      .pill.detached { border-color: rgba(245,158,11,.35); color: rgba(245,158,11,.98); }
+      .pill.text { border-color: rgba(34,211,238,.35); color: rgba(34,211,238,.98); }
+      .pill.fill { border-color: rgba(248,113,113,.35); color: rgba(248,113,113,.98); }
+
+      .row .iconBtn { color: #94a3b8; }
+      .row:hover .iconBtn { color: #ffffff; border-color: rgba(255,255,255,.12); background: rgba(255,255,255,.03); }
+
+      .iconBtn {
+        width: 28px;
+        height: 28px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 10px;
+        border: 1px solid var(--stroke);
+        background: rgba(255,255,255,.02);
+        color: var(--text);
+        cursor: pointer;
+        padding: 0;
+      }
+      .iconBtn:hover { border-color: var(--stroke-2); background: rgba(255,255,255,.04); }
+      .iconBtn:active { transform: translateY(1px); }
+      .iconBtn svg { width: 14px; height: 14px; opacity: .9; }
+
+      .empty {
+        padding: 16px 12px;
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      /* status element removed — status is now shown in the statusCard */
+
+      /* Resize handle (bottom-right) */
+      #resize-handle{
+        position: absolute;
+        right: 10px;
+        bottom: 10px;
+        width: 14px;
+        height: 14px;
+        border-radius: 6px;
+        border: 1px solid rgba(255,255,255,.14);
+        background: rgba(255,255,255,.06);
+        cursor: nwse-resize;
+      }
+      #resize-handle:hover{
+        border-color: rgba(255,255,255,.22);
+      }
+    </style>
+  </head>
+
+  <body>
+    <div class="shell">
+      <div class="topGlow"></div>
+      <div class="content scrollY">
+        <div class="header">
+          <h1>Systemic Auditor</h1>
+          <p>Scan your selection for design-system debt.</p>
+        </div>
+
+        <div class="actions">
+          <button class="btn btnPrimary" id="scanBtn"><span class="btnLabel">Scan selection</span></button>
+            <button class="btn" id="resetBtn"><span class="btnLabel">Reset</span></button>
+        </div>
+
+        <div class="section" id="secOptions" data-open="true">
+          <div class="sectionHeader" data-toggle="secOptions">
+            <h3>Scanner Options</h3>
+            <div class="chev" aria-hidden="true"><span class="chevIcon" aria-hidden="true"></span></div>
+          </div>
+          <div class="sectionBody">
+            <div class="optionsGrid">
+              <div class="optCard">
+                <label class="switch" id="swChildren" data-on="true">
+                  <input type="checkbox" id="includeChildren" checked />
+                  <span class="knob"></span>
+                </label>
+                <div class="optText">
+                  <div class="optLabel">Include children</div>
+                  <div class="optDesc">Recursively scan inside frames</div>
+                </div>
+              </div>
+
+              <div class="optCard">
+                <label class="switch" id="swDetached" data-on="true">
+                  <input type="checkbox" id="detachedInstances" checked />
+                  <span class="knob"></span>
+                </label>
+                <div class="optText">
+                  <div class="optLabel">Detached instances</div>
+                  <div class="optDesc">Detect detached components</div>
+                </div>
+              </div>
+
+              <div class="optCard">
+                <label class="switch" id="swText" data-on="true">
+                  <input type="checkbox" id="textWithoutStyle" checked />
+                  <span class="knob"></span>
+                </label>
+                <div class="optText">
+                  <div class="optLabel">Text without style</div>
+                  <div class="optDesc">Text style is missing or mixed</div>
+                </div>
+              </div>
+
+              <div class="optCard">
+                <label class="switch" id="swFills" data-on="true">
+                  <input type="checkbox" id="rogueFills" checked />
+                  <span class="knob"></span>
+                </label>
+                <div class="optText">
+                  <div class="optLabel">Rogue fills</div>
+                  <div class="optDesc">Fill without paint style or variable</div>
+                </div>
+              </div>
+
+              <div class="optCard">
+                <label class="switch" id="swStrokes" data-on="true">
+                  <input type="checkbox" id="rogueStrokes" checked />
+                  <span class="knob"></span>
+                </label>
+                <div class="optText">
+                  <div class="optLabel">Rogue strokes</div>
+                  <div class="optDesc">Stroke without paint style or variable</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div id="results" style="display:none;">
+        <div class="divider"></div>
+
+        <!-- No selection state -->
+        <div id="noSelectionState" style="display:none;">
+          <div class="noSelectionCard">
+            <p class="noSelectionText">Choose a frame, layer, or element to view related issues.</p>
+          </div>
+        </div>
+
+        <!-- Results content -->
+        <div id="resultsContent">
+
+        <div class="statusCard">
+            <div class="statusLeft">
+              <p class="statusTitle" id="statusTitle">Scan status: completed</p>
+              <p class="statusSub" id="statusSub">Found 0 total issues in scan.</p>
+              <p class="celebrateMsg" id="celebrateMsg" style="display:none;">You’re all set — nothing to fix. ✨</p>
+            </div>
+
+            <div class="statusSpacer" aria-hidden="true"></div>
+
+            <div class="statusRight">
+              <div class="healthGaugeWrap" title="Health score">
+                <div
+                  class="healthGauge"
+                  data-gauge
+                  data-size="md"
+                  data-scheme="byScore"
+                  data-show-label="true"
+                  data-show-grade="true"
+                >
+                  <div class="healthGaugeChart">
+                    <svg viewBox="0 0 110 60" preserveAspectRatio="xMidYMax meet" aria-hidden="true">
+                      <defs>
+                        <mask data-role="maskDef" id="systemic-gauge-mask">
+                          <path data-role="mask" d="M 55 55 L -5 55 A 60 60 0 0 1 -5 55 Z" fill="white" />
+                        </mask>
+                      </defs>
+
+                      <!-- Track -->
+                      <path
+                        data-role="track"
+                        d="M106 55C108.209 55 110.015 53.2068 109.855 51.0035C109.428 45.1489 108.066 39.3915 105.813 33.9524C103.049 27.2795 98.9981 21.2163 93.8909 16.1091C88.7836 11.0019 82.7205 6.95063 76.0476 4.18663C69.3747 1.42262 62.2227 -3.15714e-07 55 0C47.7773 3.15714e-07 40.6253 1.42262 33.9524 4.18663C27.2795 6.95064 21.2163 11.0019 16.1091 16.1091C11.0019 21.2164 6.95063 27.2795 4.18662 33.9524C1.93367 39.3915 0.571929 45.1489 0.145389 51.0035C-0.0151345 53.2068 1.79086 55 4 55L12.5 55C14.7091 55 16.4785 53.2044 16.7076 51.0072C17.0919 47.3214 18.0072 43.7033 19.4306 40.2667C21.3654 35.5957 24.2013 31.3514 27.7764 27.7764C31.3514 24.2013 35.5957 21.3654 40.2667 19.4306C44.9377 17.4958 49.9441 16.5 55 16.5C60.0559 16.5 65.0623 17.4958 69.7333 19.4306C74.4043 21.3654 78.6486 24.2013 82.2236 27.7764C85.7987 31.3514 88.6346 35.5957 90.5694 40.2667C91.9928 43.7033 92.9081 47.3214 93.2924 51.0072C93.5215 53.2044 95.2909 55 97.5 55H106Z"
+                        fill="#334155"
+                        opacity="0.30"
+                      />
+
+                      <!-- Active (masked) -->
+                      <path
+                        data-role="active"
+                        d="M106 55C108.209 55 110.015 53.2068 109.855 51.0035C109.428 45.1489 108.066 39.3915 105.813 33.9524C103.049 27.2795 98.9981 21.2163 93.8909 16.1091C88.7836 11.0019 82.7205 6.95063 76.0476 4.18663C69.3747 1.42262 62.2227 -3.15714e-07 55 0C47.7773 3.15714e-07 40.6253 1.42262 33.9524 4.18663C27.2795 6.95064 21.2163 11.0019 16.1091 16.1091C11.0019 21.2164 6.95063 27.2795 4.18662 33.9524C1.93367 39.3915 0.571929 45.1489 0.145389 51.0035C-0.0151345 53.2068 1.79086 55 4 55L12.5 55C14.7091 55 16.4785 53.2044 16.7076 51.0072C17.0919 47.3214 18.0072 43.7033 19.4306 40.2667C21.3654 35.5957 24.2013 31.3514 27.7764 27.7764C31.3514 24.2013 35.5957 21.3654 40.2667 19.4306C44.9377 17.4958 49.9441 16.5 55 16.5C60.0559 16.5 65.0623 17.4958 69.7333 19.4306C74.4043 21.3654 78.6486 24.2013 82.2236 27.7764C85.7987 31.3514 88.6346 35.5957 90.5694 40.2667C91.9928 43.7033 92.9081 47.3214 93.2924 51.0072C93.5215 53.2044 95.2909 55 97.5 55H106Z"
+                        fill="#f59e0b"
+                        mask=""
+                      />
+                    </svg>
+
+                    <div class="healthGaugeGrade" data-role="grade">—</div>
+                  </div>
+
+                  <div class="healthGaugeLabel" data-role="label">Health Score</div>
+                     </div>
+                  </div>
+                </div>
+              <div class="confettiWrap" id="confetti" style="display:none;"></div>
+            </div>
+
+          <div class="statsGrid">
+            <div class="statCard" id="filterAll" data-active="true">
+              <p class="statValue" id="statTotal">0</p>
+              <div class="statLabel"><span class="dot" style="background:#ffffff"></span>Total issues found</div>
+            </div>
+            <div class="statCard" id="filterDetached" data-active="false">
+              <p class="statValue" id="statDetached">0</p>
+              <div class="statLabel"><span class="dot" style="background:var(--orange)"></span>Detached</div>
+            </div>
+            <div class="statCard" id="filterText" data-active="false">
+              <p class="statValue" id="statText">0</p>
+              <div class="statLabel"><span class="dot" style="background:var(--cyan)"></span>Unstyled text</div>
+            </div>
+            <div class="statCard" id="filterFills" data-active="false">
+              <p class="statValue" id="statFills">0</p>
+              <div class="statLabel"><span class="dot" style="background:var(--red)"></span>Rogue fills</div>
+            </div>
+            <div class="statCard" id="filterStrokes" data-active="false">
+              <p class="statValue" id="statStrokes">0</p>
+              <div class="statLabel"><span class="dot" style="background:var(--violet)"></span>Rogue strokes</div>
+            </div>
+          </div>
+
+          <div class="divider" id="issuesDivider" style="margin-top:14px;"></div>
+
+          <div class="section" id="secIssues" data-open="true">
+            <div class="sectionHeader" data-toggle="secIssues">
+              <h3>Issues found</h3>
+              <div class="chev" aria-hidden="true"><span class="chevIcon" aria-hidden="true"></span></div>
+            </div>
+            <div class="sectionBody">
+              <div class="issuesBox" id="issuesBox">
+                <div class="issuesScroll scrollY" id="list" role="list">
+                  <div class="empty">Run a scan to see issues here.</div>
+                </div>
+                <div class="proTease">
+                  <div class="proBtnWrap">
+                    <button class="proBtn" type="button" aria-disabled="true" id="proAutofixBtn">✨ Auto-fix all 251 issues</button>
+                    <div class="tooltip">Unlock Auto-fix with Systemic Pro.</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="resize-handle" title="Resize"></div>
+
+    <script>
+      const $ = (id) => document.getElementById(id);
+
+      const PRO_BUY_URL = "https://systemicauditor.com";
+
+      function openProPurchasePage(){
+        // Open via the plugin host so it opens only once and works consistently.
+        // (Avoid window.open fallback, which can cause double-open when host also opens.)
+        parent.postMessage({ pluginMessage: { type: "open-external", url: PRO_BUY_URL } }, "*");
+      }
+
+      // --- Auto-resize UI window to fit visible content ---
+      let _fitTimer = null;
+
+      function measureVisibleContentHeight(container){
+        if (!container) return Math.ceil(document.body.scrollHeight || 0);
+
+        const cr = container.getBoundingClientRect();
+        const cs = getComputedStyle(container);
+        const padBottom = parseFloat(cs.paddingBottom || "0") || 0;
+        const padTop = parseFloat(cs.paddingTop || "0") || 0;
+
+        let maxBottom = 0;
+        // Measure the bottom edge of the lowest *visible* direct child.
+        // This avoids using scrollHeight/clientHeight, which can get stuck at the
+        // current window height (and causes incremental whitespace on Reset).
+        for (const child of Array.from(container.children)) {
+          if (!child || child.hidden) continue;
+          const ccs = getComputedStyle(child);
+          if (ccs.display === "none") continue;
+          const r = child.getBoundingClientRect();
+          maxBottom = Math.max(maxBottom, r.bottom - cr.top);
+        }
+
+        // If nothing is visible, fall back to padding height.
+        const contentH = Math.max(padTop + padBottom, maxBottom + padBottom);
+        return Math.ceil(contentH);
+      }
+
+      function clamp(n, min, max){
+        return Math.min(Math.max(n, min), max);
+      }
+
+      function getHostHeightConstraint(){
+        // Best-effort attempt to read the host (Figma) viewport height.
+        // In some environments this is blocked by cross-origin rules.
+        try {
+          const h = window.parent && window.parent.innerHeight;
+          if (typeof h === "number" && isFinite(h) && h > 0) return Math.floor(h);
+        } catch (e) {}
+        return null;
+      }
+
+      function requestResizeToFit(){
+        try {
+          const width = Math.round(document.documentElement.clientWidth);
+          const bodyPadY = 16 * 2; // body has 16px padding top+bottom
+          const topGlow = document.querySelector('.topGlow');
+          const shell = document.querySelector('.shell');
+          const content = document.querySelector('.content');
+          const topGlowH = topGlow ? Math.ceil(topGlow.getBoundingClientRect().height) : 0;
+
+          const contentH = measureVisibleContentHeight(content);
+
+          // shell border (1px top + 1px bottom)
+          const borderY = 2;
+          const safetyY = 18; // slightly larger buffer to prevent bottom clipping
+          const desired = Math.max(360, topGlowH + contentH + bodyPadY + borderY + safetyY);
+
+          const resultsEl = document.getElementById("results");
+          const resultsShown = !!(resultsEl && resultsEl.style.display !== "none");
+          const isNoSelection = document.body.dataset.view === "no-selection";
+          const isDataDrivenVisible = resultsShown && !isNoSelection;
+
+          // If we hide the Issues section (perfect score), allow the window to shrink.
+          const secIssues = document.getElementById('secIssues');
+          const issuesVisible = !!(secIssues && getComputedStyle(secIssues).display !== 'none');
+
+          // Constrain plugin height to the host window when possible (prevents the UI from
+          // becoming taller than the Figma window on small displays).
+          const hostH = getHostHeightConstraint();
+          const hostMaxH = hostH ? Math.max(360, hostH - 24) : null; // small safety margin
+
+          // Data-driven mode is tall only when the Issues list is visible.
+          // When Issues are hidden (100% / no issues), shrink to content.
+          const baseMinH = isDataDrivenVisible ? (issuesVisible ? 1260 : 520) : 360;
+          const baseMaxH = isDataDrivenVisible ? 1600 : 1040;
+
+          const maxH = hostMaxH ? Math.min(baseMaxH, hostMaxH) : baseMaxH;
+          const minH = hostMaxH ? Math.min(baseMinH, maxH) : baseMinH;
+
+          const height = clamp(desired, minH, maxH);
+
+          parent.postMessage({ pluginMessage: { type: "resize", width, height } }, "*");
+        } catch (e) {
+          // ignore
+        }
+      }
+
+      function scheduleResizeToFit(delay = 60){
+        if (_fitTimer) clearTimeout(_fitTimer);
+        _fitTimer = setTimeout(() => {
+          // two frames to ensure layout has settled
+          requestAnimationFrame(() => requestAnimationFrame(requestResizeToFit));
+        }, delay);
+      }
+
+      const state = {
+        isScanning: false,
+        scanComplete: false,
+        activeFilter: "all", // all | DETACHED_INSTANCE | UNSTYLED_TEXT | ROGUE_FILL | ROGUE_STROKE
+        issues: [],
+        summary: { total: 0, detached: 0, unstyledText: 0, rogueFills: 0, rogueStrokes: 0 }
+      };
+
+      const SIMULATE_AUDIT = false;
+
+      const setStatusTitle = (text) => {
+        const el = $("statusTitle");
+        if (el) el.textContent = text;
+      };
+
+
+      function getOptions(){
+        return {
+          scanChildren: $("includeChildren").checked,
+          checkDetached: $("detachedInstances").checked,
+          checkTextStyles: $("textWithoutStyle").checked,
+          checkRogueFills: $("rogueFills").checked,
+          checkRogueStrokes: $("rogueStrokes").checked,
+        };
+      }
+
+      function updateSwitchUI(){
+        $("swChildren").dataset.on = String($("includeChildren").checked);
+        $("swDetached").dataset.on = String($("detachedInstances").checked);
+        $("swText").dataset.on = String($("textWithoutStyle").checked);
+        $("swFills").dataset.on = String($("rogueFills").checked);
+        $("swStrokes").dataset.on = String($("rogueStrokes").checked);
+      }
+
+      function setFiltersActive(){
+        $("filterAll").dataset.active = String(state.activeFilter === "all");
+        $("filterDetached").dataset.active = String(state.activeFilter === "DETACHED_INSTANCE");
+        $("filterText").dataset.active = String(state.activeFilter === "UNSTYLED_TEXT");
+        $("filterFills").dataset.active = String(state.activeFilter === "ROGUE_FILL");
+        $("filterStrokes").dataset.active = String(state.activeFilter === "ROGUE_STROKE");
+      }
+
+      function typeToPill(type){
+        if (type === "DETACHED_INSTANCE") return { text: "Detached", cls: "detached", color: '#f59e0b', border: 'rgba(245,158,11,0.4)' };
+        if (type === "UNSTYLED_TEXT") return { text: "Text", cls: "text", color: '#22d3ee', border: 'rgba(34,211,238,0.4)' };
+        if (type === "ROGUE_FILL") return { text: "Fill", cls: "fill", color: '#f87171', border: 'rgba(248,113,113,0.4)' };
+        if (type === "ROGUE_STROKE") return { text: "Stroke", cls: "stroke", color: 'var(--violet)', border: 'rgba(167,139,250,0.35)' };
+        return { text: type, cls: "", color: '#94a3b8', border: 'rgba(148,163,184,0.18)' };
+      }
+
+      function filteredIssues(){
+        if (state.activeFilter === "all") return state.issues;
+        return state.issues.filter(i => i.type === state.activeFilter);
+      }
+
+      function renderList(){
+        const list = $("list");
+        list.innerHTML = "";
+
+        const issues = filteredIssues();
+        if (!issues || issues.length === 0){
+          const div = document.createElement("div");
+          div.className = "empty";
+          div.textContent = state.scanComplete ? "No issues found for this category." : "Run a scan to see issues here.";
+          list.appendChild(div);
+          // After rendering, re-measure to prevent the list from being clipped
+          scheduleResizeToFit(80);
+          return;
+        }
+        
+        let idx = 0;
+        for (const issue of issues){
+          const row = document.createElement("div");
+          row.className = "row";
+          row.style.setProperty('--i', String(idx++));
+          row.onclick = () => {
+            // Keep scan status text stable; only request canvas focus.
+            parent.postMessage({ pluginMessage: { type: "select-node", id: issue.id } }, "*");
+          };
+
+          const top = document.createElement("div");
+          top.className = "rowTop";
+
+          // left group holds the name and the path inline
+          const leftGroup = document.createElement("div");
+          leftGroup.className = "leftGroup";
+
+          const name = document.createElement("div");
+          name.className = "name";
+          name.textContent = issue.name || "(unnamed)";
+
+          const path = document.createElement("div");
+          path.className = "path";
+          path.textContent = issue.path || "";
+
+          const pill = document.createElement("div");
+          const p = typeToPill(issue.type);
+          pill.className = "pill " + p.cls;
+          pill.textContent = p.text;
+          if (p.border) pill.style.borderColor = p.border;
+          if (p.color) pill.style.color = p.color;
+          pill.style.fontSize = '10px';
+          pill.style.fontWeight = '700';
+
+          const actions = document.createElement("div");
+          actions.className = "rowActions";
+
+          const locateBtn = document.createElement("button");
+          locateBtn.className = "iconBtn";
+          locateBtn.type = "button";
+          locateBtn.title = "Show on canvas";
+          locateBtn.innerHTML = `
+            <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+              <path d="M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8Z" stroke="currentColor" stroke-width="1.8"/>
+              <path d="M12 2v3M12 19v3M2 12h3M19 12h3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+            </svg>
+          `;
+          locateBtn.onclick = (e) => {
+            e.stopPropagation();
+            // Keep scan status text stable; only request canvas focus.
+            parent.postMessage({ pluginMessage: { type: "select-node", id: issue.id } }, "*");
+          };
+
+          actions.appendChild(pill);
+          actions.appendChild(locateBtn);
+
+          leftGroup.appendChild(name);
+          leftGroup.appendChild(path);
+          top.appendChild(leftGroup);
+          top.appendChild(actions);
+
+          row.appendChild(top);
+          list.appendChild(row);
+        }
+        // After rendering, re-measure to prevent the list from being clipped
+        scheduleResizeToFit(80);
+      }
+
+      function scoreToGrade(score){
+        const s = Math.max(0, Math.min(100, Math.round(Number(score || 0))));
+        if (s >= 97) return "A+";
+        if (s >= 93) return "A";
+        if (s >= 90) return "A-";
+        if (s >= 87) return "B+";
+        if (s >= 83) return "B";
+        if (s >= 80) return "B-";
+        if (s >= 77) return "C+";
+        if (s >= 73) return "C";
+        if (s >= 70) return "C-";
+        if (s >= 67) return "D+";
+        if (s >= 63) return "D";
+        if (s >= 60) return "D-";
+        return "F";
+      }
+
+      function setStats(summary){
+        $("statTotal").textContent = summary.total;
+        $("statDetached").textContent = summary.detached;
+        $("statText").textContent = summary.unstyledText;
+        $("statFills").textContent = summary.rogueFills;
+        $("statStrokes").textContent = summary.rogueStrokes;
+
+        const scanned = Number(summary.scannedElements || 0);
+        const withIssues = Number(summary.elementsWithIssues || 0);
+
+        // Prefer element-based health when available; otherwise fall back to issue-count heuristic.
+        const elementScore = scanned > 0 ? Math.round(((scanned - withIssues) / scanned) * 100) : null;
+        const fallbackScore = summary.total === 0 ? 100 : Math.max(0, 100 - Math.min(100, Math.round(summary.total * 3)));
+        const score = elementScore == null ? fallbackScore : Math.max(0, Math.min(100, elementScore));
+
+        // Status line should emphasize coverage, but read nicely when perfect.
+        const totalIssues = Number(summary.total || 0);
+        const elWord = (n) => (Number(n) === 1 ? "element" : "elements");
+        const hasHave = (n) => (Number(n) === 1 ? "has" : "have");
+
+        const elementsLine = scanned > 0
+          ? (withIssues === 0
+              ? `${scanned} audited ${elWord(scanned)} without issues.`
+              : `${withIssues} of ${scanned} audited ${elWord(scanned)} ${hasHave(withIssues)} issues.`)
+          : `Found ${totalIssues} total issues in scan.`;
+
+        // Health % is shown in the gauge; use this line to communicate audit coverage.
+        $("statusSub").textContent = elementsLine;
+
+        // Update Pro button label and visibility, and always bind click
+        const proBtn = document.getElementById('proAutofixBtn');
+        if (proBtn) {
+          const n = Number(summary.total || 0);
+          proBtn.textContent = `✨ Auto-fix all ${n} issues`;
+
+          // Ensure the upsell button always opens the purchase page
+          if (!proBtn.dataset.bound) {
+            proBtn.addEventListener('click', (e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              openProPurchasePage();
+            });
+            proBtn.dataset.bound = 'true';
+          }
+
+          // Hide tease when there are no issues
+          const tease = proBtn.closest('.proTease');
+          if (tease) tease.style.display = n > 0 ? 'block' : 'none';
+        }
+
+        // Use percent as the gauge value; keep letter-grade only for celebration logic.
+        const grade = scoreToGrade(score);
+        updateGauge(score, `${score}%`);
+
+        // Celebration for perfect scans (A-range + zero issues)
+        const isPerfect = (scanned > 0 ? withIssues === 0 : Number(summary.total || 0) === 0) && score >= 90;
+        // Hide the Issues section (and its divider) when the scan is perfect (100% health and no issues)
+        const secIssues = document.getElementById('secIssues');
+        const issuesDivider = document.getElementById('issuesDivider');
+        const shouldHideIssues = score === 100 && (withIssues === 0) && (Number(summary.total || 0) === 0);
+        if (secIssues) secIssues.style.display = shouldHideIssues ? 'none' : '';
+        if (issuesDivider) issuesDivider.style.display = shouldHideIssues ? 'none' : '';
+        const statusCard = document.querySelector('.statusCard');
+        const msgEl = document.getElementById('celebrateMsg');
+        const confetti = document.getElementById('confetti');
+
+        if (statusCard) statusCard.dataset.celebrate = String(isPerfect);
+        if (msgEl) msgEl.style.display = isPerfect ? 'block' : 'none';
+
+        if (confetti) {
+          confetti.style.display = isPerfect ? 'block' : 'none';
+          if (isPerfect) {
+            // Create a quick burst of confetti (deterministic enough + lightweight)
+            confetti.innerHTML = '';
+            const colors = ['#A3E635', '#22d3ee', '#a78bfa', '#f59e0b', '#ffffff'];
+            for (let i = 0; i < 18; i++) {
+              const s = document.createElement('span');
+              s.style.left = (6 + Math.random() * 88) + '%';
+              s.style.background = colors[i % colors.length];
+              s.style.animationDelay = (Math.random() * 120) + 'ms';
+              s.style.transform = `translateY(-10px) rotate(${Math.random()*40}deg)`;
+              confetti.appendChild(s);
+            }
+          } else {
+            confetti.innerHTML = '';
+          }
+        }
+
+        // color stat values to match design
+        try {
+          $("statTotal").style.color = '#ffffff';
+          $("statDetached").style.color = getComputedStyle(document.documentElement).getPropertyValue('--orange') || '#f59e0b';
+          $("statText").style.color = getComputedStyle(document.documentElement).getPropertyValue('--cyan') || '#22d3ee';
+          $("statFills").style.color = getComputedStyle(document.documentElement).getPropertyValue('--red') || '#f87171';
+          $("statStrokes").style.color = getComputedStyle(document.documentElement).getPropertyValue('--violet') || '#A47BF6';
+        } catch (e) {}
+        scheduleResizeToFit(80);
+      }
+
+      // --- HealthGauge.tsx logic (adapted): SVG mask animation ---
+      let _gaugeAnim = null;
+      let _currentGaugeScore = 0;
+
+      function gaugeColor(score){
+        const s = Math.max(0, Math.min(100, Number(score || 0)));
+        // Use Systemic lime for A-range (celebration)
+        if (s >= 90) return "#A3E635";
+        if (s >= 80) return "#6366f1"; // indigo
+        if (s >= 70) return "#f59e0b"; // amber
+        if (s >= 60) return "#f97316"; // orange
+        return "#ef4444"; // red
+      }
+
+      function maskPathForScore(score){
+        const s = Math.max(0, Math.min(100, Number(score || 0)));
+        // angle from 180° (left) to 360° (right)
+        const angleDeg = 180 + (s / 100) * 180;
+        const rad = (angleDeg * Math.PI) / 180;
+        const x = 55 + 60 * Math.cos(rad);
+        const y = 55 + 60 * Math.sin(rad);
+        return `M 55 55 L -5 55 A 60 60 0 0 1 ${x} ${y} Z`;
+      }
+
+      function easeOutCubic(t){
+        return 1 - Math.pow(1 - t, 3);
+      }
+
+      function updateGauge(score, grade, animate = true){
+        const gauge = document.querySelector('[data-gauge]');
+        if (!gauge) return;
+
+        const maskDef = gauge.querySelector('[data-role="maskDef"]');
+        const maskPath = gauge.querySelector('[data-role="mask"]');
+        const active = gauge.querySelector('[data-role="active"]');
+        const healthEl = gauge.querySelector('[data-role="grade"]');
+
+        if (!maskDef || !maskPath || !active || !healthEl) return;
+
+        // Ensure unique mask id (avoids weird SVG masking bugs)
+        if (!gauge.dataset.maskId){
+          const uid = "systemic-gauge-mask-" + Math.random().toString(16).slice(2);
+          gauge.dataset.maskId = uid;
+          maskDef.setAttribute("id", uid);
+          active.setAttribute("mask", `url(#${uid})`);
+        }
+
+        const target = Math.max(0, Math.min(100, Number(score || 0)));
+        const color = gaugeColor(target);
+
+        // Apply color + text
+        active.setAttribute("fill", color);
+        healthEl.style.color = color;
+        healthEl.textContent = grade;
+
+        // Cancel any existing animation
+        if (_gaugeAnim != null) {
+          cancelAnimationFrame(_gaugeAnim);
+          _gaugeAnim = null;
+        }
+
+        if (!animate) {
+          _currentGaugeScore = target;
+          maskPath.setAttribute("d", maskPathForScore(target));
+          return;
+        }
+
+        const start = _currentGaugeScore;
+        const delta = target - start;
+        const duration = 700;
+        const t0 = performance.now();
+
+        const tick = (now) => {
+          const t = Math.min(1, (now - t0) / duration);
+          const eased = easeOutCubic(t);
+          const value = start + delta * eased;
+          maskPath.setAttribute("d", maskPathForScore(value));
+
+          if (t < 1) {
+            _gaugeAnim = requestAnimationFrame(tick);
+          } else {
+            _currentGaugeScore = target;
+            _gaugeAnim = null;
+          }
+        };
+
+        maskPath.setAttribute("d", maskPathForScore(start));
+        _gaugeAnim = requestAnimationFrame(tick);
+      }
+
+            function showResults(visible){
+              const el = $("results");
+              if (!el) return;
+
+              if (visible){
+                el.style.display = "block";
+
+                // Restart transitions/animations every time we show results
+                el.classList.remove("isVisible");
+                void el.offsetHeight; // force reflow
+
+                // next frame: allow transition + stagger animations to run
+                requestAnimationFrame(() => el.classList.add("isVisible"));
+              } else {
+                el.classList.remove("isVisible");
+                // after transition: hide
+                window.setTimeout(() => {
+                  if (!el.classList.contains("isVisible")) {
+                    el.style.display = "none";
+                    // Now that layout has actually changed, resize to fit
+                    requestResizeToFit();
+                  }
+                }, 220);
+              }
+            }
+
+      function showNoSelection(){
+        // Mark empty-state view first so CSS hides data-driven blocks
+        document.body.dataset.view = "no-selection";
+
+        const empty = document.getElementById("noSelectionState");
+        const content = document.getElementById("resultsContent");
+
+        // Hide data-driven UI BEFORE showing/animating results (prevents a flash)
+        if (content) {
+          content.hidden = true;
+          content.style.display = "none";
+        }
+        if (empty) {
+          empty.hidden = false;
+          empty.style.display = "block";
+        }
+
+        // Now show the results container
+        showResults(true);
+
+        // Replay the empty-state animation (it may not re-run when toggling display)
+        const card = empty ? empty.querySelector('.noSelectionCard') : null;
+        if (card) {
+          card.style.animation = 'none';
+          void card.offsetHeight; // force reflow
+          card.style.animation = '';
+        }
+
+        scheduleResizeToFit();
+      }
+
+      function hideNoSelection(){
+        delete document.body.dataset.view;
+        const empty = document.getElementById("noSelectionState");
+        const content = document.getElementById("resultsContent");
+        if (empty) {
+          empty.hidden = true;
+          empty.style.display = "none";
+        }
+        if (content) {
+          content.hidden = false;
+          content.style.display = "block";
+        }
+        scheduleResizeToFit();
+      }
+
+      function setScanButtonLoading(loading){
+        const btn = $("scanBtn");
+        state.isScanning = loading;
+        btn.disabled = loading;
+        $("resetBtn").disabled = loading;
+
+        if (loading){
+          btn.innerHTML = `<span class="spinner"></span><span class="btnLabel"> Scanning…</span>`;
+        } else {
+          btn.innerHTML = `<span class="btnLabel">Scan selection</span>`;
+        }
+
+        updateScanDisabled();
+      }
+
+      function updateScanDisabled(){
+        $("scanBtn").disabled = !!state.isScanning;
+      }
+
+      function resetAll(){
+        state.scanComplete = false;
+        state.activeFilter = "all";
+        state.issues = [];
+        state.summary = { total: 0, detached: 0, unstyledText: 0, rogueFills: 0, rogueStrokes: 0 };
+        const isNoSelectionView = document.body.dataset.view === "no-selection";
+
+        // Always hide data-driven content immediately on reset (prevents any 1-frame flash)
+        const content = document.getElementById("resultsContent");
+        if (content) {
+          content.hidden = true;
+          content.style.display = "none";
+        }
+
+        // If the empty state is currently active, keep it visible
+        if (isNoSelectionView) {
+          showNoSelection();
+        } else {
+          showResults(false);
+          hideNoSelection();
+        }
+        setStats(state.summary);
+        updateGauge(0, "—", false);
+        setFiltersActive();
+        renderList();
+        setStatusTitle("Status: idle");
+        updateScanDisabled();
+        // Always resize to the *currently visible* content after the UI settles.
+        // If we are hiding results, wait for the fade-out to complete; otherwise fit immediately.
+        const wait = isNoSelectionView ? 120 : 320;
+        scheduleResizeToFit(wait);
+      }
+
+      function setupCollapsibles(){
+        // inline SVGs for chevrons (24x24)
+        const svgUp = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 14l5-5 5 5"/></svg>';
+        const svgDown = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 10l5 5 5-5"/></svg>';
+
+        document.querySelectorAll(".sectionHeader[data-toggle]").forEach(h => {
+          const id = h.getAttribute("data-toggle");
+          const sec = document.getElementById(id);
+
+          // ensure icon matches initial open state
+          const icon = h.querySelector('.chev .chevIcon');
+          if (icon && sec) {
+            icon.style.opacity = '1';
+            icon.innerHTML = (sec.dataset.open !== "false") ? svgUp : svgDown;
+          }
+
+          h.addEventListener("click", () => {
+            const id = h.getAttribute("data-toggle");
+            const sec = document.getElementById(id);
+            const open = sec.dataset.open !== "false";
+            sec.dataset.open = open ? "false" : "true";
+
+            // fade icon out, swap SVG, fade in
+            const icon = h.querySelector('.chev .chevIcon');
+            if (icon) {
+              icon.style.opacity = '0';
+              window.setTimeout(() => {
+                icon.innerHTML = (sec.dataset.open !== "false") ? svgUp : svgDown;
+                icon.style.opacity = '1';
+              }, 120);
+            }
+            scheduleResizeToFit(280);
+          });
+        });
+      }
+
+      function setupFilters(){
+        $("filterAll").onclick = () => {
+          state.activeFilter = "all";
+          setFiltersActive();
+          renderList();
+          scheduleResizeToFit(80);
+        };
+        $("filterDetached").onclick = () => {
+          state.activeFilter = "DETACHED_INSTANCE";
+          setFiltersActive();
+          renderList();
+          scheduleResizeToFit(80);
+        };
+        $("filterText").onclick = () => {
+          state.activeFilter = "UNSTYLED_TEXT";
+          setFiltersActive();
+          renderList();
+          scheduleResizeToFit(80);
+        };
+        $("filterFills").onclick = () => {
+          state.activeFilter = "ROGUE_FILL";
+          setFiltersActive();
+          renderList();
+          scheduleResizeToFit(80);
+        };
+        $("filterStrokes").onclick = () => {
+          state.activeFilter = "ROGUE_STROKE";
+          setFiltersActive();
+          renderList();
+          scheduleResizeToFit(80);
+        };
+      }
+
+      function setupOptionCards(){
+        // Make whole optCard clickable and toggle the associated input
+        document.querySelectorAll('.optCard').forEach(card => {
+          card.addEventListener('click', (e) => {
+            const input = card.querySelector('input[type="checkbox"]');
+            if (!input) return;
+
+            // If the click is on the switch/label or the input itself, let the native label toggle happen.
+            // This avoids toggling twice (label toggles + our handler toggles).
+            if (e.target === input) return;
+            if (e.target && e.target.closest && e.target.closest('.switch')) return;
+
+            input.checked = !input.checked;
+            input.dispatchEvent(new Event('change', { bubbles: true }));
+          });
+        });
+      }
+
+      ["includeChildren","detachedInstances","textWithoutStyle","rogueFills","rogueStrokes"].forEach(id => {
+        $(id).addEventListener("change", () => {
+          updateSwitchUI();
+        });
+      });
+
+      $("scanBtn").onclick = () => {
+        const options = getOptions();
+
+        setStatusTitle("Status: scanning selection…");
+        setScanButtonLoading(true);
+        hideNoSelection();
+        updateScanDisabled();
+
+        // Send request to plugin host if available (normal behavior)
+        try {
+          if (window.parent && window.parent !== window) {
+            parent.postMessage({ pluginMessage: { type: "run-audit", options } }, "*");
+          }
+        } catch (e) {
+          // ignore
+        }
+
+        // Simulate an audit result after a short delay so the UI shows results
+        // during local testing. If a real audit-result arrives first, the
+        // timer is cleared in the onmessage handler.
+        if (SIMULATE_AUDIT) {
+          if (window._simAuditTimer) clearTimeout(window._simAuditTimer);
+          window._simAuditTimer = setTimeout(() => {
+            const fakeIssues = [
+              { id: '1', name: 'Button without style', path: 'UI / Header / Button', type: 'UNSTYLED_TEXT' },
+              { id: '2', name: 'Detached icon', path: 'UI / Sidebar / Icon', type: 'DETACHED_INSTANCE' },
+              { id: '3', name: 'Rectangle fill', path: 'UI / Card / Background', type: 'ROGUE_FILL' }
+            ];
+            const summary = { total: 3, detached: 1, unstyledText: 1, rogueFills: 1, scannedElements: 10, elementsWithIssues: 2 };
+
+            // Post to window so existing onmessage handler processes it the same
+            // way a real plugin message would be handled.
+            window.postMessage({ pluginMessage: { type: 'audit-result', issues: fakeIssues, summary } }, '*');
+            window._simAuditTimer = null;
+          }, 700);
+        }
+      };
+
+      $("resetBtn").onclick = resetAll;
+
+      window.onmessage = (event) => {
+        // If we started a simulated audit, cancel the fallback timer when any
+        // message arrives (real response will follow through below).
+        if (SIMULATE_AUDIT && window._simAuditTimer) { clearTimeout(window._simAuditTimer); window._simAuditTimer = null; }
+
+        const msg = event.data.pluginMessage;
+        if (!msg) return;
+
+        if (msg.type === "no-selection") {
+          setScanButtonLoading(false);
+          state.scanComplete = false;
+          showNoSelection();
+          // Clear any previous scan data (even though it’s hidden)
+          state.issues = [];
+          state.summary = { total: 0, detached: 0, unstyledText: 0, rogueFills: 0, rogueStrokes: 0 };
+          state.activeFilter = "all";
+          setStats(state.summary);
+          renderList();
+          setStatusTitle("Status: idle");
+          return;
+        }
+
+        if (msg.type === "locate-status") {
+          // Do not overwrite the scan status title with locate/focus messages.
+          // (Selection still happens; we just keep the status copy stable.)
+          return;
+        }
+
+        if (msg.type === "audit-result") {
+          setScanButtonLoading(false);
+
+          state.scanComplete = true;
+          state.activeFilter = "all";
+          state.issues = msg.issues || [];
+
+          const s = msg.summary || { total: 0, detached: 0, unstyledText: 0, rogueFills: 0, rogueStrokes: 0 };
+          // Preserve any additional summary fields coming from code.ts
+          const scannedElements = Number(
+            (s.scannedElements ?? s.auditedElements ?? s.totalElements ?? s.elementsAudited ?? msg.scannedElements) || 0
+          );
+          const elementsWithIssues = Number(
+            (s.elementsWithIssues ?? s.auditedElementsWithIssues ?? s.elementsWithFindings ?? msg.elementsWithIssues) || 0
+          );
+
+          state.summary = {
+            total: Number(s.total || 0),
+            detached: Number(s.detached || 0),
+            unstyledText: Number(s.unstyledText || 0),
+            rogueFills: Number(s.rogueFills || 0),
+            rogueStrokes: Number(s.rogueStrokes || 0),
+            scannedElements,
+            elementsWithIssues,
+          };
+
+          hideNoSelection();
+          showResults(true);
+
+          // Update stats, then render list, then resize after layout settles
+          requestAnimationFrame(() => {
+            setStats(state.summary);
+            renderList();
+            requestAnimationFrame(() => scheduleResizeToFit(80));
+          });
+
+          setFiltersActive();
+          setStatusTitle(`Scan status: completed`);
+        }
+      };
+
+      // Resize handle
+      const handle = document.getElementById("resize-handle");
+      if (!handle) {
+        console.warn("Resize handle not found");
+      } else {
+        let isDragging = false;
+        let startX = 0;
+        let startY = 0;
+        let startW = 0;
+        let startH = 0;
+
+        const MIN_W = 360;
+        const MIN_H = 520;
+
+        handle.addEventListener("pointerdown", (e) => {
+          isDragging = true;
+          startX = e.clientX;
+          startY = e.clientY;
+          startW = document.documentElement.clientWidth;
+          startH = document.documentElement.clientHeight;
+          handle.setPointerCapture(e.pointerId);
+        });
+
+        handle.addEventListener("pointermove", (e) => {
+          if (!isDragging) return;
+          const nextW = Math.max(MIN_W, Math.round(startW + (e.clientX - startX)));
+          const nextH = Math.max(MIN_H, Math.round(startH + (e.clientY - startY)));
+          parent.postMessage({ pluginMessage: { type: "resize", width: nextW, height: nextH } }, "*");
+        });
+
+        handle.addEventListener("pointerup", () => {
+          isDragging = false;
+        });
+      }
+
+      setupCollapsibles();
+      setupFilters();
+      setupOptionCards();
+      updateSwitchUI();
+      setFiltersActive();
+      resetAll();
+    </script>
+  </body>
+</html>
