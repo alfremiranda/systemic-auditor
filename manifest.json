@@ -1,0 +1,25 @@
+{
+  "name": "Systemic",
+  "id": "1588257751230049347",
+  "api": "1.0.0",
+  "main": "code.js",
+  "capabilities": [],
+  "permissions": [
+    "teamlibrary"
+  ],
+  "enableProposedApi": false,
+  "documentAccess": "dynamic-page",
+  "editorType": [
+    "figma"
+  ],
+  "ui": "ui.html",
+  "networkAccess": {
+    "allowedDomains": [
+      "https://fonts.googleapis.com",
+      "https://fonts.gstatic.com",
+      "https://systemicauditor.com",
+      "https://shop.systemicauditor.com",
+      "https://systemic-license.im-94e.workers.dev"
+    ]
+  }
+}

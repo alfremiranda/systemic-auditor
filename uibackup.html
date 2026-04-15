@@ -1,0 +1,4840 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Systemic Auditor</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" />
+    <!-- Material Symbols (Google) for iconography -->
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0" rel="stylesheet" />
+    <style>
+
+      :root {
+        --font-sans: Manrope, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Inter, Arial;
+        --bg: #05080a;
+        --panel: #0b0f14;
+        --panel-2: rgba(255, 255, 255, 0.04);
+        --stroke: rgba(255, 255, 255, 0.10);
+        --stroke-2: rgba(255, 255, 255, 0.16);
+        --text: rgba(255, 255, 255, 0.94);
+        --muted: rgba(255, 255, 255, 0.62);
+        --muted-2: rgba(255, 255, 255, 0.40);
+        --issue-row-min-h: 58px;
+        --issues-tease-h: 76px;
+        --issues-bottom-gap: 20px;
+
+        --orange: #f59e0b;
+        --cyan: #22d3ee;
+        --red: #f87171;
+        --violet: #a78bfa;
+        --lime: #A3E635;
+      }
+
+      /* Celebration (A-grade) */
+      .celebrateMsg{
+        margin: 8px 0 0;
+        font-size: 14px;
+        font-weight: 700;
+        line-height: 18px;
+        color: rgba(255,255,255,.70);
+      }
+
+      .statusCard[data-celebrate="true"]::after{
+        background: radial-gradient(140px 240px at 90% 40%, rgba(163,230,53,.18), transparent 70%);
+      }
+
+      .confettiWrap{
+        position: absolute;
+        z-index: 2;
+        inset: 0;
+        pointer-events: none;
+        overflow: hidden;
+      }
+      .confettiWrap span{
+        position: absolute;
+        top: -12px;
+        width: 6px;
+        height: 10px;
+        border-radius: 2px;
+        opacity: .95;
+        animation: confettiFall 900ms var(--ease) both;
+      }
+      @keyframes confettiFall{
+        0%{ transform: translateY(-10px) rotate(0deg); opacity: 0; }
+        10%{ opacity: 1; }
+        100%{ transform: translateY(140px) rotate(220deg); opacity: 0; }
+      }
+      @media (prefers-reduced-motion: reduce){
+        .confettiWrap span{ animation: none; display: none; }
+      }
+      .proTease{
+        padding: 10px 12px;
+        border-top: 1px solid rgba(255,255,255,.06);
+        background: rgba(255,255,255,.02);
+      }
+      .proBtn{
+        width: 100%;
+        position: relative;
+      }
+
+      .tooltip{
+        position: absolute;
+        left: 50%;
+        bottom: 48px;
+        transform: translateX(-50%);
+        background: rgba(15,23,42,.92);
+        color: rgba(255,255,255,.90);
+        border: 1px solid rgba(255,255,255,.12);
+        border-radius: 10px;
+        padding: 8px 10px;
+        font-size: 12px;
+        line-height: 16px;
+        white-space: nowrap;
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity var(--dur) var(--ease), transform var(--dur) var(--ease);
+        box-shadow: 0 18px 40px rgba(0,0,0,.45);
+      }
+      .tooltip::after{
+        content: "";
+        position: absolute;
+        left: 50%;
+        bottom: -6px;
+        transform: translateX(-50%);
+        border: 6px solid transparent;
+        border-top-color: rgba(15,23,42,.92);
+      }
+      .proBtnWrap{ position: relative; }
+      .proBtnWrap:hover .tooltip{
+        opacity: 1;
+        transform: translateX(-50%) translateY(-2px);
+      }
+      @media (prefers-reduced-motion: reduce){
+        .tooltip{ transition: none; }
+      }
+
+      :root {
+        --radius: 8px;
+        --ease: cubic-bezier(.2,.8,.2,1);
+        --dur-fast: 140ms;
+        --dur: 180ms;
+        --dur-slow: 260ms;
+      }
+
+      * { box-sizing: border-box; }
+      html, body { height: 100%; }
+      body {
+        position: relative;
+        margin: 0;
+        padding: 0;
+        background: var(--bg);
+        color: var(--text);
+        font-family: var(--font-sans);
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+        text-rendering: optimizeLegibility;
+      }
+
+      /* Main container */
+      .shell {
+        width: 100%;
+        border: 1px solid var(--stroke);
+        background: var(--panel);
+        overflow: hidden;
+        box-shadow: 0 24px 60px rgba(0,0,0,.55);
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+        height: 100vh;
+      }
+
+      .topGlow {
+        height: 4px;
+        width: 100%;
+        background: linear-gradient(90deg, var(--panel), #A3E635, var(--panel));
+        opacity: .55;
+      }
+
+
+      /* Ensure app chrome stays above background */
+      .shell{ position: relative; z-index: 1; }
+
+      .content {
+        padding: 20px 20px 24px; /* tighter bottom padding */
+        display: flex;
+        flex-direction: column;
+        gap: 20px;
+        min-height: 0;
+        flex: 1 1 auto;
+        overflow-y: auto;
+        scrollbar-gutter: stable;
+      }
+
+      /* Shared vertical scroll + scrollbar styling (reuse for content + lists) */
+      .scrollY{
+        overflow-y: auto;
+        overscroll-behavior: contain;
+        /* Reserve space so content doesn't reflow when scrollbar appears */
+        scrollbar-gutter: stable;
+      }
+
+      /* If the host webview supports overlay scrollbars, use them so the bar floats above content */
+      @supports (overflow-y: overlay){
+        .scrollY{
+          overflow-y: overlay;
+          scrollbar-gutter: auto;
+        }
+      }
+      .scrollY::-webkit-scrollbar{ width: 10px; }
+      .scrollY::-webkit-scrollbar-thumb{
+        background: rgba(255,255,255,.10);
+        border-radius: 999px;
+        border: 3px solid rgba(0,0,0,0);
+        background-clip: padding-box;
+      }
+      .scrollY::-webkit-scrollbar-thumb:hover{
+        background: rgba(255,255,255,.16);
+        border: 3px solid rgba(0,0,0,0);
+        background-clip: padding-box;
+      }
+
+      .header h1 {
+        margin: 0;
+        color: #F8FAFC;
+        font-family: "Funnel Display", var(--font-sans);
+        font-size: 22px;
+        font-style: normal;
+        font-weight: 700;
+        line-height: 24px;
+        letter-spacing: 0;
+      }
+      .header p {
+        margin: 0;
+        font-size: 14px;
+        line-height: 20px;
+        color: var(--muted);
+      }
+      .headerBar{
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding-bottom: 8px;
+        gap: 12px;
+      }
+      .licenseBtn{
+        height: 32px;
+        padding: 0 12px;
+        border-radius: 999px;
+        border: 1px solid rgba(255,255,255,.12);
+        background: rgba(255,255,255,.04);
+        color: rgba(255,255,255,.86);
+        font-family: var(--font-sans);
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: 0.2px;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        cursor: pointer;
+      }
+      .licenseBtn:hover{ border-color: rgba(255,255,255,.18); background: rgba(255,255,255,.06); }
+      .licenseBtn:active{ transform: translateY(1px); }
+      .licenseDot{
+        width: 6px;
+        height: 6px;
+        border-radius: 999px;
+        background: rgba(255,255,255,.45);
+      }
+      .devToggleRow{
+        margin-top: 8px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 11px;
+        color: var(--muted-2);
+      }
+      .devToggleLabel{
+        font-weight: 600;
+        letter-spacing: 0.2px;
+      }
+      .devToggleRow .switch{
+        width: 18px;
+        height: 18px;
+        border-radius: 6px;
+        border-width: 1px;
+        margin-top: 0;
+      }
+      .licenseBtn[data-pro="true"]{
+        color: rgba(163,230,53,.95);
+        border-color: rgba(163,230,53,.35);
+        background: rgba(163,230,53,.08);
+      }
+      .licenseBtn[data-pro="true"] .licenseDot{
+        background: rgba(163,230,53,.95);
+      }
+
+      /* Pro modal */
+      .modalOverlay{
+        position: fixed;
+        inset: 0;
+        background: rgba(2,6,23,.55);
+        backdrop-filter: blur(8px);
+        -webkit-backdrop-filter: blur(8px);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 16px;
+        z-index: 10;
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 180ms var(--ease);
+      }
+      .modalOverlay.isOpen{
+        opacity: 1;
+        pointer-events: auto;
+      }
+      .modalDialog{
+        width: 100%;
+        max-width: 380px;
+        transform: translateY(8px) scale(0.98);
+        opacity: 0;
+        transition: transform 220ms var(--ease), opacity 220ms var(--ease);
+        border-radius: 14px;
+        border: 1px solid rgba(99,116,139,.55);
+        background: #0c1116;
+        box-shadow: 0 18px 40px rgba(0,0,0,.55), inset 0 0 0 1px rgba(255,255,255,.04);
+        padding: 16px;
+        position: relative;
+      }
+      .modalOverlay.isOpen .modalDialog{
+        transform: translateY(0) scale(1);
+        opacity: 1;
+      }
+      @media (prefers-reduced-motion: reduce){
+        .modalOverlay,
+        .modalDialog{
+          transition: none;
+        }
+      }
+      .proPanel{
+        border: none;
+        background: transparent;
+        border-radius: 12px;
+        padding: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        box-shadow: none;
+        position: relative;
+      }
+      .proModalHeader{
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding-right: 28px;
+      }
+      .proModalTitleRow{
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .proModalTitle{
+        font-size: 18px;
+        font-family: "Funnel Display", var(--font-sans);
+        font-weight: 800;
+        color: rgba(255,255,255,.92);
+        letter-spacing: -0.2px;
+        line-height: 18px;
+      }
+      .proPill{
+        height: 20px;
+        padding: 0 8px;
+        border-radius: 999px;
+        border: 1px solid rgba(163,230,53,.35);
+        color: rgba(163,230,53,.95);
+        background: rgba(163,230,53,.08);
+        font-weight: 900;
+        font-size: 10px;
+        letter-spacing: 0.6px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        line-height: 1;
+      }
+      .proClose{
+        border: none;
+        background: transparent;
+        color: rgba(255,255,255,.7);
+        cursor: pointer;
+        padding: 4px;
+        position: absolute;
+        top: 8px;
+        right: 8px;
+      }
+      .proClose svg{
+        width: 18px;
+        height: 18px;
+        stroke: currentColor;
+        stroke-width: 2;
+        stroke-linecap: round;
+      }
+      .proModalSub{
+        margin-top: 4px;
+        margin-bottom: 20px;
+        font-size: 12px;
+        font-weight: 500;
+        color: rgba(255,255,255,.55);
+        line-height: 16px;
+      }
+      .proFormRow{
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: 10px;
+        align-items: center;
+        padding-bottom: 6px;
+      }
+      .proKeyInput{
+        width: 100%;
+        height: 40px;
+        border-radius: 10px;
+        border: 1px solid rgba(255,255,255,.10);
+        background: rgba(255,255,255,.02);
+        color: rgba(255,255,255,.92);
+        padding: 0 12px;
+        font-family: var(--font-sans);
+        font-weight: 600;
+        font-size: 13px;
+        outline: none;
+      }
+      .proKeyInput::placeholder{ color: rgba(255,255,255,.35); font-weight: 600; }
+      .proKeyInput:focus{
+        border-color: rgba(34,211,238,.22);
+        box-shadow: 0 0 0 3px rgba(34,211,238,.12);
+      }
+      .proKeyRow{
+        display: none;
+        align-items: center;
+        gap: 10px;
+      }
+      .proKeyGroup{
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        padding-bottom: 6px;
+      }
+      .proKeyInputSlot{
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+      #proPanel[data-state="verified"] .proFormRow{
+        display: none;
+      }
+      .proKeyLabel{
+        font-size: 12px;
+        color: rgba(226,232,240,0.78);
+      }
+      #proPanel[data-state="verified"] .proKeyRow{
+        display: flex;
+      }
+      .proKeyDisplay{
+        height: 40px;
+        border-radius: 10px;
+        border: 1px solid rgba(255,255,255,.10);
+        background: rgba(255,255,255,.02);
+        color: rgba(255,255,255,.92);
+        padding: 0 12px;
+        font-family: var(--font-mono);
+        font-weight: 600;
+        font-size: 12px;
+        outline: none;
+        flex: 1;
+      }
+      .proKeyToggle{
+        width: 40px;
+        height: 40px;
+        border-radius: 10px;
+        border: 1px solid rgba(255,255,255,.12);
+        background: rgba(255,255,255,.06);
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        color: rgba(248,250,252,.9);
+        cursor: pointer;
+      }
+      .proKeyToggle svg{
+        width: 16px;
+        height: 16px;
+      }
+      .proKeyToggle .eyeOn{ display: none; }
+      .proKeyToggle[data-visible="true"] .eyeOn{ display: block; }
+      .proKeyToggle[data-visible="true"] .eyeOff{ display: none; }
+      .proKeyClear{
+        height: 40px;
+        border-radius: 10px;
+        border: 1px solid rgba(255,255,255,.12);
+        background: rgba(255,255,255,.06);
+        color: rgba(255,255,255,.82);
+        font-family: var(--font-sans);
+        font-weight: 700;
+        font-size: 12px;
+        padding: 0 12px;
+        cursor: pointer;
+        width: 100%;
+        display: none;
+        align-items: center;
+        justify-content: center;
+      }
+      #proPanel[data-state="verified"] .proKeyClear{
+        display: inline-flex;
+      }
+      .proVerifyBtn{
+        height: 40px;
+        border-radius: 10px;
+        border: 1px solid rgba(248,250,252,.22);
+        background: #A3E635;
+        color: #0f172a;
+        font-family: var(--font-sans);
+        font-weight: 800;
+        font-size: 13px;
+        letter-spacing: 0.1px;
+        cursor: pointer;
+        padding: 0 14px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+      }
+      .proVerifyBtn:hover{ box-shadow: 0 10px 15px -3px rgba(247, 254, 231, 0.15), 0 4px 6px 1px rgba(163, 230, 53, 0.10); }
+      .proVerifyBtn:active{ transform: translateY(1px); }
+      .proVerifyBtn:disabled{
+        opacity: 1;
+        cursor: not-allowed;
+        background: rgba(255,255,255,.06);
+        color: rgba(255,255,255,.62);
+        border-color: rgba(255,255,255,.14);
+        box-shadow: none;
+        transform: none;
+      }
+      .proVerifyBtn .miniSpinner{
+        width: 12px;
+        height: 12px;
+        border-radius: 999px;
+        border: 2px solid rgba(15,23,42,.25);
+        border-top-color: rgba(15,23,42,.85);
+        animation: spin 0.8s linear infinite;
+      }
+      .proVerifyBtn:disabled .miniSpinner{
+        border-color: rgba(255,255,255,.25);
+        border-top-color: rgba(255,255,255,.8);
+      }
+      .proStateRow{
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 12px;
+        color: rgba(255,255,255,.55);
+      }
+      .proStateDot{
+        width: 8px;
+        height: 8px;
+        border-radius: 999px;
+        background: rgba(255,255,255,.22);
+        box-shadow: 0 0 0 3px rgba(255,255,255,.06);
+      }
+      .proStateText{
+        font-size: 12px;
+        font-weight: 600;
+        color: rgba(255,255,255,.55);
+        line-height: 16px;
+      }
+      #proPanel[data-state="verifying"] .proStateDot{
+        background: rgba(34,211,238,.90);
+        box-shadow: 0 0 0 3px rgba(34,211,238,.12);
+      }
+      #proPanel[data-state="verified"] .proStateDot{
+        background: rgba(163,230,53,.95);
+        box-shadow: 0 0 0 3px rgba(163,230,53,.12);
+      }
+      #proPanel[data-state="verified"] .proStateRow{
+        margin-top: 12px;
+        margin-bottom: 12px;
+        padding: 12px 14px;
+        border-radius: 12px;
+        background: rgba(163,230,53,.12);
+        border: 1px solid rgba(163,230,53,.45);
+      }
+      #proPanel[data-state="verified"] .proStateText{
+        color: rgba(232,255,206,.92);
+        font-size: 13px;
+        font-weight: 700;
+        letter-spacing: -0.1px;
+      }
+      #proPanel[data-state="verified"] .proStateDot{
+        width: 10px;
+        height: 10px;
+        box-shadow: 0 0 0 4px rgba(163,230,53,.16);
+      }
+      #proPanel[data-state="error"] .proStateDot{
+        background: rgba(248,113,113,.95);
+        box-shadow: 0 0 0 3px rgba(248,113,113,.12);
+      }
+      #proPanel[data-state="verified"] .proFormRow{ display: none; }
+      .proUpsell{
+        margin-top: 6px;
+        padding-top: 12px;
+        border-top: 1px solid rgba(255,255,255,.10);
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+      .proUpsellHeader{
+        font-size: 13px;
+        font-weight: 800;
+        color: rgba(255,255,255,.92);
+        letter-spacing: -0.1px;
+        line-height: 16px;
+      }
+      .proUpsellCopy{
+        font-size: 12px;
+        font-weight: 500;
+        color: rgba(255,255,255,.58);
+        line-height: 16px;
+      }
+      .proUpsellCta{
+        margin-top: 4px;
+        height: 36px;
+        border-radius: 8px;
+        border: 1px solid rgba(255,255,255,.14);
+        background: rgba(255,255,255,.05);
+        color: rgba(255,255,255,.92);
+        font-family: var(--font-sans);
+        font-weight: 800;
+        font-size: 12px;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+      }
+      #proPanel[data-state="verified"] #proUpsell{ display: none; }
+
+      /* Buttons */
+      .actions {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 12px;
+      }
+
+      .btn {
+        height: 48px;
+        border-radius: 8px;
+        border: 1px solid var(--stroke);
+        background: rgba(255,255,255,.04);
+        color: var(--text);
+        font-family: var(--font-sans);
+        font-weight: 600;
+        font-size: 14px;
+        letter-spacing: 0.1px;
+        font-feature-settings: "kern" 1, "liga" 1;
+        -webkit-font-smoothing: antialiased;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 10px;
+        transition: transform var(--dur-fast) var(--ease), border-color var(--dur) var(--ease), background var(--dur) var(--ease), box-shadow var(--dur) var(--ease);
+        user-select: none;
+      }
+      .btnLabel{
+        font-family: var(--font-sans);
+        font-weight: 600;
+        font-size: 14px;
+        line-height: 20px;
+        display: inline-block;
+        transform: translateY(0);
+        transition: transform var(--dur-fast) var(--ease);
+      }
+
+      /* Scan selection hover: subtle, smooth micro-interaction (no size jump) */
+      #scanBtn{
+        position: relative;
+        overflow: hidden;
+        /* Keep base button surface as-is; hover adds animated lime gradient */
+      }
+
+      /* animated text */
+      #scanBtn .btnLabel{
+        font-size: 14px;
+        display: inline-block;
+        transform: translate3d(0,0,0);
+        transition: transform var(--dur) var(--ease), letter-spacing var(--dur) var(--ease), opacity var(--dur) var(--ease);
+        will-change: transform;
+      }
+
+      #scanBtn:hover .btnLabel{
+        transform: translate3d(0,-1px,0);
+        letter-spacing: 0.2px;
+        opacity: 0.98;
+      }
+
+      /* Animated monochromatic lime gradient (hover only) */
+      /* Animate the button background itself (more visible than blend-mode overlays) */
+      #scanBtn{
+        background-image: none;
+        background-size: 240% 100%;
+        background-position: 0% 50%;
+      }
+
+      #scanBtn:hover{
+        /* Lime-only range: dark → base → light → base → dark */
+        background-image: linear-gradient(
+          90deg,
+          #65A30D 0%,
+          #A3E635 22%,
+          #D9F99D 50%,
+          #A3E635 78%,
+          #65A30D 100%
+        );
+        animation: scanLimeLoop 400ms linear infinite;
+      }
+
+      /* Optional soft sheen so the motion reads even on bright displays */
+      #scanBtn::before{
+        content: "";
+        position: absolute;
+        inset: 0;
+        border-radius: 8px;
+        background: radial-gradient(140px 40px at 50% 0%, rgba(255,255,255,0.22), transparent 70%);
+        opacity: 0;
+        transition: opacity var(--dur) var(--ease);
+        pointer-events: none;
+      }
+      #scanBtn:hover::before{ opacity: 1; }
+
+      @media (prefers-reduced-motion: reduce){
+        #scanBtn .btnLabel,
+        #scanBtn::before{ transition: none !important; animation: none !important; }
+        #scanBtn:hover .btnLabel{ transform: none; letter-spacing: 0; }
+        #scanBtn:hover{ animation: none !important; background-image: none; }
+        #scanBtn:hover::before{ opacity: 0; }
+      }
+      .btn:hover { border-color: var(--stroke-2); }
+      .btn:active { transform: translateY(1px); }
+      .btn:disabled { opacity: .55; cursor: not-allowed; }
+      .btn:focus-visible{
+        outline: none;
+        box-shadow: 0 0 0 3px rgba(34,211,238,.18), 0 0 0 1px rgba(255,255,255,.18) inset;
+      }
+      .btnPrimary:focus-visible{
+        box-shadow: 0 0 0 3px rgba(173,70,255,.22), 0 0 0 1px rgba(15,23,42,.25) inset;
+      }
+      /* Health Gauge (single source of truth — 120px) */
+      .healthGaugeWrap{
+        width: 120px;
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
+        flex-shrink: 0;
+      }
+      body[data-fixing="true"] .healthGaugeChart [data-role="active"]{
+        animation: none;
+      }
+      body[data-fixing="true"] .healthGaugeGrade{
+        animation: gaugeBeat 1.2s ease-in-out infinite;
+      }
+
+      .healthGauge{
+        width: 120px;
+        height: 60px;
+        position: relative;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .healthGaugeChart{
+        width: 120px;
+        height: 60px;
+        position: relative;
+        overflow: visible;
+      }
+
+      .healthGaugeChart svg{
+        width: 100%;
+        height: 100%;
+        display: block;
+      }
+
+      .healthGaugeGrade{
+        position: absolute;
+        bottom: 4px;
+        left: 0;
+        width: 100%;
+        display: flex;
+        justify-content: center;
+        align-items: flex-end;
+        font-weight: 800;
+        font-size: 24px;
+        line-height: 1;
+        letter-spacing: -1px;
+        color: #f59e0b;
+        pointer-events: none;
+      }
+
+      .healthGaugeLabel{
+        margin-top: 6px;
+        font-size: 12px;
+        font-weight: 500;
+        line-height: 16px; /* 133.333% of 12px */
+        letter-spacing: -0.2px;
+        white-space: nowrap;
+        color: rgba(255,255,255,.42);
+      }
+
+      /* Gauge controls */
+      .healthGauge[data-show-label="false"] .healthGaugeLabel{ display: none; }
+      .healthGauge[data-show-grade="false"] .healthGaugeGrade{ display: none; }
+
+      #results{
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+        min-height: 0;
+        flex: 1 1 auto;
+        opacity: 0;
+        transform: translateY(6px);
+        transition: opacity var(--dur) var(--ease), transform var(--dur) var(--ease);
+      }
+      #resultsContent{
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+        min-height: 0;
+        flex: 1 1 auto;
+      }
+      #secIssues{
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+        flex: 1 1 auto;
+      }
+      #results.isVisible{
+        opacity: 1;
+        transform: translateY(0);
+        pointer-events: auto;
+      }
+      /* Staggered entry for data-driven blocks */
+      #results.isVisible .statusCard{ animation: fadeUp var(--dur-slow) var(--ease) both; }
+      #results.isVisible .statsGrid{ animation: fadeUp var(--dur-slow) var(--ease) both; animation-delay: 40ms; }
+      #results.isVisible #secIssues{ animation: fadeUp var(--dur-slow) var(--ease) both; animation-delay: 70ms; }
+      
+     @media (prefers-reduced-motion: reduce){
+      #results{ transition: none; }
+      .gValue{ transition: none; }
+      .btn{ transition: none; }
+      .sectionBody{ transition: none; }
+      .statusCard, .statsGrid, #secIssues, .noSelectionCard, .row{ animation: none !important; }
+      #scanBtn .btnLabel{ transition: none !important; }
+    }
+
+      .btnPrimary {
+        background: #A3E635;
+        font-weight: 800;
+        color: #0f172a;
+        border-color: rgba(248,250,252,.22);
+        position: relative;
+        overflow: hidden;
+      }
+      .btnPrimary:hover {
+        box-shadow: 0 10px 15px -3px rgba(247, 254, 231, 0.15), 0 4px 6px 1px rgba(163, 230, 53, 0.10);
+      }
+
+      .btnPrimary::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        border-radius: 8px;
+        padding: 2px;
+        background: linear-gradient(90deg, #4D7C0F, #D9F99D);
+        -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+        -webkit-mask-composite: xor;
+        mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+        mask-composite: exclude;
+        opacity: 0;
+        transition: opacity .18s ease;
+        pointer-events: none;
+      }
+      .btnPrimary:hover::after { opacity: 1; }
+
+      .spinner {
+        width: 14px;
+        height: 14px;
+        border-radius: 999px;
+        border: 2px solid rgba(15,23,42,.25);
+        border-top-color: rgba(15,23,42,.85);
+        animation: spin 0.8s linear infinite;
+      }
+      @keyframes spin { to { transform: rotate(360deg); } }
+      @keyframes gaugeFillShift {
+        0%{ filter: brightness(0.98) saturate(1); }
+        50%{ filter: brightness(1.02) saturate(1.02); }
+        100%{ filter: brightness(0.98) saturate(1); }
+      }
+      @keyframes gaugeBeat {
+        0%{ opacity: .7; transform: scale(1); }
+        18%{ opacity: 1; transform: scale(1.03); }
+        40%{ opacity: .85; transform: scale(1); }
+        100%{ opacity: .7; transform: scale(1); }
+      }
+
+      /* Subtle motion primitives */
+      @keyframes fadeUp {
+        from { opacity: 0; transform: translateY(8px); }
+        to { opacity: 1; transform: translateY(0); }
+      }
+
+      @keyframes softPop {
+        from { opacity: 0; transform: translateY(6px) scale(0.99); }
+        to { opacity: 1; transform: translateY(0) scale(1); }
+      }
+
+      @keyframes rowIn {
+        from { opacity: 0; transform: translateY(6px); }
+        to { opacity: 1; transform: translateY(0); }
+      }
+
+      /* Collapsible */
+      .sectionHeader {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 6px 2px;
+        cursor: pointer;
+        user-select: none;
+      }
+      .sectionHeader h3 {
+        margin: 0;
+        font-size: 14px;
+        font-weight: 700;
+      }
+      .chev {
+        width: 24px;
+        height: 24px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        opacity: .95;
+        transition: opacity .12s ease, transform .18s ease;
+      }
+
+      /* Material Symbols sizing + defaults */
+      .material-symbols-outlined {
+        font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        font-family: 'Material Symbols Outlined';
+        font-size: 24px;
+        line-height: 1;
+        display: inline-block;
+        vertical-align: middle;
+      }
+
+      /* Inline SVG chevron used in plugin (preferred for environments
+         where webfonts are blocked). */
+      .chevIcon {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 24px;
+        height: 24px;
+        color: #ffffff; /* icon color */
+      }
+      .chevIcon svg {
+        width: 24px;
+        height: 24px;
+        display: block;
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 1.8;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+        transition: transform .18s ease, opacity .12s ease, color .12s ease;
+        opacity: 1;
+      }
+
+      /* Keep chev background transparent; icon is white. Add smooth transitions. */
+      .section .chev{
+        background: transparent;
+        border-radius: 6px;
+        transition: transform .18s ease, opacity .12s ease;
+      }
+      .section .chev .material-symbols-outlined{
+        color: #ffffff;
+        transition: transform .18s ease, opacity .12s ease, color .12s ease;
+        opacity: 1;
+        transform-origin: center;
+      }
+
+      .sectionBody {
+        overflow: hidden;
+        max-height: 900px;
+        opacity: 1;
+        transform: translateY(0);
+        transition: max-height .22s ease, opacity var(--dur) var(--ease), transform var(--dur) var(--ease);
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+      }
+      #secIssues > .sectionBody{
+        flex: 1 1 auto;
+        min-height: 0;
+      }
+      .section[data-open="false"] .sectionBody {
+        max-height: 0;
+        opacity: 0;
+        transform: translateY(-2px);
+      }
+
+      /* Options grid */
+      .optionsGrid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+        margin-top: 8px;
+      }
+
+      .optCard {
+        border: 1px solid var(--stroke);
+        background: rgba(255,255,255,.03);
+        border-radius: 8px;
+        padding: 10px;
+        display: flex;
+        gap: 10px;
+        align-items: flex-start;
+        font-family: var(--font-sans);
+        -webkit-font-smoothing: antialiased;
+        letter-spacing: 0.15px;
+      }
+      .optCard:hover { border-color: var(--stroke-2); }
+
+      .optText { display: flex; flex-direction: column; gap: 2px; }
+      .optLabel { font-size: 12px; font-weight: 600; font-family: var(--font-sans); letter-spacing: 0.2px; }
+      .optDesc { font-size: 11px; color: var(--muted-2); line-height: 14px; font-family: var(--font-sans); }
+
+      .switch {
+        /* Rounded square checkbox (matches reference) */
+        width: 22px;
+        height: 22px;
+        border-radius: 7px;
+        border: 2px solid rgba(255,255,255,.14);
+        background: transparent;
+        position: relative;
+        flex-shrink: 0;
+        margin-top: 2px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+      }
+
+      .switch input { position: absolute; opacity: 0; width: 100%; height: 100%; margin: 0; cursor: pointer; }
+      .knob { display: none; }
+
+      /* placeholder area for checkmark (SVG via data URI) */
+      .switch::after{
+        content: "";
+        display: block;
+        width: 14px;
+        height: 14px;
+        background-repeat: no-repeat;
+        background-position: center;
+        background-size: contain;
+      }
+
+      .switch:not([data-on="true"]) {
+        background: transparent;
+        border-color: rgba(255,255,255,.14);
+      }
+
+      .switch[data-on="true"] {
+        background: #f8fafc; /* white rounded box */
+        border-color: rgba(15,23,42,.08);
+      }
+
+      /* navy checkmark SVG when checked (percent-encoded color) */
+      .switch[data-on="true"]::after{
+        background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path d='M5 13l4 4L19 7' stroke='%230f172a' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round' fill='none'/></svg>");
+      }
+
+      /* Results area */
+      .divider {
+        border-color: rgba(255, 255, 255, 0.4);
+        display: flex;
+        height: 8px;
+        padding: 4px 0;
+        justify-content: center;
+        align-items: center;
+        align-self: stretch;
+      }
+      /* No selection state (matches provided design) */
+      .noSelectionCard{
+        border: 1px solid rgba(255,255,255,.10);
+        background: rgba(255,255,255,.04);
+        border-radius: 8px;
+        padding: 16px;
+        min-height: 140px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        animation: softPop var(--dur-slow) var(--ease) both;
+        box-shadow:
+          0 1px 0 rgba(255,255,255,.06) inset,
+          0 24px 60px rgba(0,0,0,.35);
+      }
+
+      .noSelectionText{
+        margin: 0;
+        text-align: center;
+        font-family: Manrope, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Inter, Arial;
+        font-size: 14px;
+        font-style: normal;
+        font-weight: 400;
+        line-height: 20px; /* 142.857% */
+        letter-spacing: 0;
+        color: rgba(255,255,255,.55);
+        max-width: 340px;
+      }
+
+      /* No selection mode: hide all data-driven UI */
+      body[data-view="no-selection"] #resultsContent{ display: none !important; }
+      body[data-view="no-selection"] .statusCard{ display: none !important; }
+      body[data-view="no-selection"] .statsGrid{ display: none !important; }
+      body[data-view="no-selection"] #secIssues{ display: none !important; }
+      body[data-view="no-selection"] #noSelectionState{ display: block !important; }
+      body[data-loading="true"] .statsGrid,
+      body[data-loading="true"] #secIssues{
+        display: none !important;
+      }
+      .statusCard {
+      border: 1px solid rgba(255,255,255,.10);
+      background: linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,.02));
+      border-radius: 8px;
+      padding: 12px; /* space/12 */
+      display: flex;
+      align-items: center;
+      gap: 12px; /* space/12 */
+      overflow: hidden;
+      position: relative;
+      min-height: 106px;
+      box-shadow:
+        0 1px 0 rgba(255,255,255,.06) inset,
+        0 24px 60px rgba(0,0,0,.35);
+      }
+      .statusContent{ display: flex; align-items: center; gap: 12px; width: 100%; }
+      .loadingContent{
+        display: none;
+        flex-direction: column;
+        align-items: center;
+        gap: 8px;
+        width: 100%;
+        text-align: center;
+      }
+      .loadingRing{
+        width: 28px;
+        height: 28px;
+        border-radius: 999px;
+        border: 3px solid rgba(255,255,255,.2);
+        border-top-color: rgba(163,230,53,.95);
+        animation: spin 0.8s linear infinite, ringPulse 1.4s ease-in-out infinite;
+        box-shadow: 0 0 0 0 rgba(163,230,53,.25);
+      }
+      @keyframes ringPulse{
+        0%{ box-shadow: 0 0 0 0 rgba(163,230,53,.25); }
+        70%{ box-shadow: 0 0 0 10px rgba(163,230,53,.0); }
+        100%{ box-shadow: 0 0 0 0 rgba(163,230,53,.0); }
+      }
+      body[data-loading="true"] .statusContent{ display: none; }
+      body[data-loading="true"] .loadingContent{ display: flex; }
+      .loadingTitle{
+        font-weight: 700;
+        font-size: 16px;
+        color: rgba(255,255,255,.92);
+      }
+      .loadingSub{
+        font-size: 13px;
+        color: rgba(255,255,255,.7);
+      }
+      .statusCard::after {
+        content: "";
+        position: absolute;
+        top: 0;
+        right: 0;
+        width: 220px;
+        height: 100%;
+        background: radial-gradient(120px 220px at 90% 50%, rgba(255,255,255,.06), transparent 70%);
+        pointer-events: none;
+      }
+
+      .statusLeft{ 
+      display: flex;
+      width: 220px;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 4px;
+      }
+
+      .statusSpacer{
+      flex: 1 1 auto;
+      }
+
+      .statusRight{
+        flex: 0 0 auto;
+      }
+      .statusTitle {
+        font-size: 14px;
+        font-weight: 600;
+        margin: 0;
+        letter-spacing: -0.2px;
+        white-space: nowrap;
+      }
+      .statusSub {
+        font-size: 14px;
+        line-height: 1.25;
+        color: #94a3b8;
+        margin: 0;
+        font-weight: 400;
+        max-width: none;
+        word-break: normal;
+      }
+      .autofixProgress{
+        margin-top: 10px;
+        height: 8px;
+        border-radius: 999px;
+        background: rgba(148,163,184,.18);
+        overflow: hidden;
+        display: none;
+      }
+      .autofixProgressBar{
+        height: 100%;
+        width: 0%;
+        background: linear-gradient(90deg, #A3E635, #22d3ee);
+        transition: width 140ms var(--ease);
+      }
+      .autofixProgressText{
+        margin-top: 8px;
+        font-size: 12px;
+        font-weight: 700;
+        color: rgba(226,232,240,.9);
+        display: none;
+      }
+
+      @media (max-width: 420px){
+        .statusTitle{ white-space: normal; }
+        .statusSub{ font-size: 12px; }
+      }
+
+      @media (max-width: 380px){
+        .healthGaugeWrap{ width: 120px; }
+        .healthGauge{ width: 120px; height: 60px; }
+        .healthGaugeChart{ width: 120px; height: 60px; }
+        .healthGaugeGrade{ font-size: 24px; }
+        .healthGaugeLabel{ font-size: 12px; }
+        .statusSub{ font-size: 12px; }
+     
+      }
+
+      .statsGrid {
+        display: grid;
+        grid-template-columns: repeat(6, 1fr);
+        gap: 12px;
+        margin-top: 10px;
+      }
+
+      /* Grid placement to match Figma:
+         Row 1: Total (wide) + Detached (narrow)
+         Row 2: Unstyled text / Rogue fills / Rogue strokes (3 equal)
+
+         Using 6 columns:
+         - Total spans 4/6
+         - Detached spans 2/6
+         - Bottom row cards span 2/6 each
+      */
+      #filterAll{ grid-column: span 4; }
+      #filterDetached{ grid-column: span 2; }
+      #filterText{ grid-column: span 2; }
+      #filterFills{ grid-column: span 2; }
+      #filterStrokes{ grid-column: span 2; }
+
+      .statCard {
+        border: 1px solid rgba(51,65,85,.12);
+        background: rgba(51,65,85,.06);
+        border-radius: 8px;
+        padding: 10px;
+        cursor: pointer;
+        position: relative;
+        transition: border-color .12s ease, background .12s ease, transform .08s ease, box-shadow .12s ease;
+      }
+      .statCard:hover { border-color: var(--stroke-2); }
+      .statCard:active { transform: translateY(1px); }
+      .statCard[data-active="true"] {
+        border-color: rgba(255,255,255,.22);
+        background: rgba(255,255,255,.04);
+        box-shadow: 0 6px 18px rgba(0,0,0,.35), 0 0 0 1px rgba(51,65,85,.12) inset;
+      }
+
+      .statValue { font-size: 24px; line-height: 32
+        px; font-weight: 700; margin: 0; }
+      .statLabel {
+        margin-top: 6px;
+        font-size: 14px;
+        color: #94a3b8;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        transition: color .12s ease;
+      }
+      .statCard:hover .statLabel { color: #ffffff; }
+      .statCard .statValue { font-variant-numeric: tabular-nums; }
+      .statSpinner{
+        position: absolute;
+        top: 12px;
+        left: 12px;
+        width: 20px;
+        height: 20px;
+        border-radius: 999px;
+        border: 2px solid rgba(148,163,184,.25);
+        border-top-color: var(--spinner-color, #ffffff);
+        animation: spin 0.8s linear infinite;
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity .16s ease;
+      }
+      body[data-fixing="true"] .statValue{ opacity: 0; }
+      body[data-fixing="true"] .statSpinner{ opacity: 1; }
+      body[data-fixing="true"] .autofixProgress,
+      body[data-fixing="true"] .autofixProgressText{
+        display: none !important;
+      }
+      .statCard::before{
+        content: "";
+        position: absolute;
+        inset: 0;
+        border-radius: 8px;
+        pointer-events: none;
+      }
+      .dot { width: 8px; height: 8px; border-radius: 999px; display: inline-block; }
+
+      /* Issues list */
+      .issuesBox {
+        border: 1px solid var(--stroke);
+        background: rgba(255,255,255,.02);
+        border-radius: 8px;
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+        position: relative;
+        margin-bottom: 20px;
+        flex: 1 1 auto;
+        min-height: calc((4 * var(--issue-row-min-h)) + var(--issues-tease-h));
+        height: auto;
+        max-height: none;
+      }
+      .issuesBox[data-autofix="true"] .issuesScroll{
+        filter: blur(2px);
+        opacity: 0.35;
+        pointer-events: none;
+      }
+      .autofixInline{
+        position: absolute;
+        left: 16px;
+        right: 16px;
+        bottom: 76px;
+        display: none;
+        flex-direction: column;
+        align-items: center;
+        gap: 8px;
+        padding: 14px 16px;
+        border-radius: 12px;
+        border: 1px solid rgba(163,230,53,.25);
+        background: rgba(2,6,23,.85);
+        box-shadow:
+          0 20px 40px rgba(0,0,0,.45),
+          0 0 0 rgba(163,230,53,0);
+        pointer-events: auto;
+      }
+      .autofixInline.isVisible{
+        display: flex;
+        animation: autofixGlow 1.8s ease-in-out infinite;
+      }
+      .autofixInlineText{
+        font-size: 13px;
+        font-weight: 700;
+        color: rgba(226,232,240,.95);
+      }
+      .autofixInlineRow{
+        width: 100%;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+      .autofixInlineCancel{
+        width: 100%;
+        margin-top: 6px;
+        height: 40px;
+        border-radius: 10px;
+        border: 1px solid rgba(255,255,255,.12);
+        background: rgba(255,255,255,.04);
+        color: rgba(226,232,240,.9);
+        font-family: var(--font-sans);
+        font-size: 13px;
+        font-weight: 700;
+        cursor: pointer;
+        pointer-events: auto;
+      }
+      .autofixInlineCancel:hover{
+        border-color: rgba(255,255,255,.22);
+        background: rgba(255,255,255,.06);
+      }
+      .autofixInlineCancel:active{ transform: translateY(1px); }
+      .autofixInlineCancel:disabled{
+        cursor: default;
+        opacity: .55;
+        border-color: rgba(255,255,255,.1);
+        background: rgba(255,255,255,.03);
+      }
+      .autofixInlineProgress{
+        flex: 1 1 auto;
+        height: 8px;
+        border-radius: 999px;
+        background: rgba(148,163,184,.2);
+        overflow: hidden;
+      }
+      .autofixInlineBar{
+        height: 100%;
+        width: 0%;
+        background: linear-gradient(90deg, #A3E635, #84CC16, #65A30D);
+        transition: width 140ms var(--ease);
+      }
+      .autofixInlinePercent{
+        font-size: 12px;
+        font-weight: 700;
+        color: rgba(226,232,240,.8);
+        min-width: 36px;
+        text-align: right;
+      }
+      @keyframes autofixGlow{
+        0%{
+          border-color: rgba(163,230,53,.25);
+          box-shadow:
+            0 20px 40px rgba(0,0,0,.45),
+            0 0 0 rgba(163,230,53,0);
+        }
+        50%{
+          border-color: rgba(163,230,53,.75);
+          box-shadow:
+            0 20px 40px rgba(0,0,0,.45),
+            0 0 18px rgba(163,230,53,.35);
+        }
+        100%{
+          border-color: rgba(163,230,53,.35);
+          box-shadow:
+            0 20px 40px rgba(0,0,0,.45),
+            0 0 10px rgba(163,230,53,.2);
+        }
+      }
+      .dataLoading{
+        display: none;
+        align-items: center;
+        gap: 10px;
+        padding: 10px 12px;
+        border-radius: 8px;
+        border: 1px solid rgba(148,163,184,.22);
+        background: rgba(15,23,42,.35);
+        color: rgba(255,255,255,.82);
+        font-size: 12px;
+        font-weight: 600;
+      }
+      .dataLoading.isVisible{ display: inline-flex; }
+      .issuesScroll {
+        flex: 1 1 auto;
+        min-height: calc(4 * var(--issue-row-min-h));
+        overflow-x: hidden;
+      }
+
+      .row {
+        padding: 12px;
+        min-height: var(--issue-row-min-h);
+        border-bottom: 1px solid rgba(255,255,255,.06);
+        cursor: pointer;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        animation: rowIn 220ms var(--ease) both;
+        animation-delay: calc(var(--i, 0) * 18ms);
+        will-change: transform, opacity;
+        align-items: stretch;
+        position: relative;
+      }
+      .row.isOpen{ z-index: 5; }
+      .row:hover { background: rgba(51,65,85,.12); }
+      .row:last-child { border-bottom: none; }
+
+      .rowTop {
+        width: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+      }
+      .issueIcon{
+        width: 25px;
+        height: 25px;
+        flex-shrink: 0;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .issueIconWrap{
+        position: relative;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .issueIconWrap .tooltip{
+        bottom: 34px;
+        padding: 6px 8px;
+        font-size: 11px;
+      }
+      .issueIconWrap:hover .tooltip{
+        opacity: 1;
+        transform: translateX(-50%) translateY(-2px);
+      }
+      .tooltip.tooltipFloating{
+        position: fixed;
+        bottom: auto;
+        left: 0;
+        top: 0;
+        transform: translate(-50%, -100%);
+        z-index: 60;
+      }
+
+      .name {
+        font-size: 16px;
+        font-weight: 800;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 100%;
+      }
+
+      .leftGroup{
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        flex: 1 1 auto;
+        min-width: 0;
+      }
+      .textGroup{
+        display: flex;
+        align-items: center;
+        min-width: 0;
+      }
+      .rowBreadcrumb{
+        font-size: 13px;
+        color: var(--muted-2);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 100%;
+      }
+      .rowMeta{
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+      }
+      .path {
+        font-size: 13px;
+        color: var(--muted-2);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 100%;
+      }
+
+      .rowActions {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-shrink: 0;
+      }
+
+      .fixRow{
+        margin-top: 0;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        width: 100%;
+      }
+      .fixLoading{
+        display: none;
+        align-items: center;
+        gap: 10px;
+        padding: 10px 12px;
+        border-radius: 10px;
+        border: 1px solid rgba(148,163,184,.22);
+        background: rgba(15,23,42,.35);
+        color: rgba(226,232,240,.88);
+        font-size: 13px;
+        font-weight: 600;
+        width: 100%;
+      }
+      .fixLoading .spinner{
+        width: 16px;
+        height: 16px;
+        border-color: rgba(148,163,184,.25);
+        border-top-color: rgba(226,232,240,.95);
+      }
+      body[data-loading="true"] .fixRow .fixLoading{ display: flex; }
+      body[data-loading="true"] .fixRow .fixDropdown,
+      body[data-loading="true"] .fixRow .relinkPill{ display: none; }
+      .fixRow[data-loading="true"] .fixLoading{ display: flex; }
+      .fixRow[data-loading="true"] .fixDropdown,
+      .fixRow[data-loading="true"] .relinkPill{ display: none; }
+      .fixWarning{
+        margin-top: 6px;
+        padding: 6px 8px;
+        border-radius: 8px;
+        border: 1px solid rgba(244,114,182,.35);
+        background: rgba(15,23,42,.55);
+        color: rgba(248,113,113,.95);
+        font-size: 11px;
+        font-weight: 600;
+      }
+      .relinkPill{
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 6px 10px;
+        border-radius: 8px;
+        background: rgba(126,34,206,.20);
+        border: 1px solid rgba(168,85,247,.55);
+        color: #e9d5ff;
+        font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace);
+        font-size: 12px;
+        font-weight: 600;
+        white-space: nowrap;
+        max-width: 100%;
+      }
+      .relinkIcon{
+        width: 14px;
+        height: 14px;
+        flex-shrink: 0;
+        color: #c084fc;
+      }
+      .relinkText{
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .fixDropdown{
+        position: relative;
+        flex: 1 1 auto;
+        z-index: 2;
+      }
+      .fixTrigger{
+        width: 100%;
+        height: 38px;
+        border-radius: 10px;
+        border: 1px solid rgba(148,163,184,.25);
+        background: rgba(15,23,42,.55);
+        color: rgba(255,255,255,.95);
+        font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace);
+        font-size: 12px;
+        font-weight: 600;
+        padding: 0 10px 0 12px;
+        outline: none;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        cursor: pointer;
+        transition: border-color .16s ease, background .16s ease, box-shadow .16s ease;
+      }
+      .fixTrigger:hover{
+        border-color: rgba(148,163,184,.45);
+        background: rgba(30,41,59,.6);
+      }
+      .fixValueWrap{
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        min-width: 0;
+        flex: 1 1 auto;
+      }
+      .fixValue{
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .fixTrigger:disabled{
+        opacity: 0.6;
+        cursor: not-allowed;
+      }
+      .fixChevron{
+        width: 16px;
+        height: 16px;
+        opacity: 0.7;
+        flex-shrink: 0;
+      }
+      .fixDropdown.isOpen .fixTrigger{
+        border-color: rgba(148,163,184,.45);
+        box-shadow: 0 0 0 2px rgba(59,130,246,.18);
+      }
+      .fixMenu{
+        position: fixed;
+        left: 0;
+        top: 0;
+        max-height: 220px;
+        overflow: auto;
+        border-radius: 12px;
+        border: 1px solid rgba(148,163,184,.25);
+        background: rgba(10,15,20,.96);
+        box-shadow: 0 18px 40px rgba(0,0,0,.45), inset 0 0 0 1px rgba(255,255,255,.03);
+        padding: 8px;
+        display: none;
+        z-index: 50;
+      }
+      .fixMenu::-webkit-scrollbar{ width: 8px; }
+      .fixMenu::-webkit-scrollbar-thumb{
+        background: rgba(255,255,255,.14);
+        border-radius: 999px;
+        border: 2px solid rgba(0,0,0,0);
+        background-clip: padding-box;
+      }
+      .fixMenu::-webkit-scrollbar-thumb:hover{
+        background: rgba(255,255,255,.22);
+        border: 2px solid rgba(0,0,0,0);
+        background-clip: padding-box;
+      }
+      .fixMenu::-webkit-scrollbar-track{ background: transparent; }
+      .fixMenu.isOpen{ display: block; }
+      .fixGroup{
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 11px;
+        color: rgba(148,163,184,.85);
+        padding: 6px 8px 4px;
+        font-weight: 700;
+        letter-spacing: 0.2px;
+      }
+      .fixGroup + .fixOption{ margin-top: 4px; }
+      .fixGroup::after{
+        content: "";
+        height: 1px;
+        background: rgba(148,163,184,.35);
+        flex: 1 1 auto;
+      }
+      .fixOption{
+        display: flex;
+        align-items: center;
+        justify-content: flex-start;
+        gap: 8px;
+        padding: 8px 10px;
+        border-radius: 8px;
+        border: 1px solid rgba(148,163,184,.25);
+        background: rgba(15,23,42,.55);
+        font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace);
+        font-size: 12px;
+        color: rgba(255,255,255,.92);
+        cursor: pointer;
+      }
+      .fixSwatch{
+        width: 14px;
+        height: 14px;
+        border-radius: 4px;
+        border: 1px solid rgba(255,255,255,.18);
+        box-shadow: inset 0 0 0 1px rgba(0,0,0,.25);
+        flex-shrink: 0;
+      }
+      .fixOptionText{
+        flex: 1 1 auto;
+      }
+      .fixOptionTag{
+        margin-left: auto;
+        font-size: 10px;
+        font-weight: 700;
+        color: rgba(163,230,53,.95);
+        letter-spacing: 0.2px;
+        padding: 2px 6px;
+        border-radius: 999px;
+        background: rgba(163,230,53,.18);
+        border: 1px solid rgba(163,230,53,.35);
+        white-space: nowrap;
+      }
+      .fixOptionNote{
+        margin-left: auto;
+        font-size: 10px;
+        font-weight: 700;
+        color: rgba(163,230,53,.9);
+        letter-spacing: 0.2px;
+      }
+      .fixOption + .fixOption{ margin-top: 6px; }
+      .fixOption:hover{ background: rgba(255,255,255,.08); }
+      .fixOption[data-selected="true"]{
+        background: rgba(163,230,53,.16);
+        color: rgba(232,255,206,.95);
+        border-color: rgba(163,230,53,.45);
+      }
+      .fixOption[data-disabled="true"]{
+        opacity: 0.45;
+        cursor: not-allowed;
+      }
+      .fixBtn{
+        height: 32px;
+        border-radius: 10px;
+        border: 1px solid rgba(255,255,255,.12);
+        background: rgba(51,65,85,.55);
+        color: rgba(255,255,255,.95);
+        font-family: var(--font-sans);
+        font-weight: 800;
+        font-size: 12px;
+        letter-spacing: 0.3px;
+        cursor: pointer;
+        padding: 0 14px;
+        transition: border-color .16s ease, background .16s ease, transform .08s ease, box-shadow .16s ease;
+      }
+      .fixBtn:hover{
+        border-color: rgba(255,255,255,.22);
+        background: rgba(51,65,85,.75);
+        box-shadow: 0 6px 16px rgba(0,0,0,.25);
+      }
+      .fixBtn:active{ transform: translateY(1px); }
+      .fixBtn[data-state="loading"]{
+        cursor: progress;
+        opacity: 0.75;
+      }
+      .fixBtn[data-state="done"]{
+        border-color: rgba(163,230,53,.45);
+        background: rgba(163,230,53,.18);
+        color: rgba(232,255,206,.95);
+      }
+      .fixBtn:disabled{
+        opacity: 0.55;
+        cursor: not-allowed;
+      }
+      .fixBtnWrap{
+        position: relative;
+        display: inline-flex;
+      }
+
+      .pill {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        height: 28px;
+        padding: 6px 12px;
+        border-radius: 999px;
+        border: 1px solid rgba(148,163,184,.18);
+        color: #94a3b8;
+        background: transparent;
+        white-space: nowrap;
+      }
+      .pill.detached { border-color: rgba(245,158,11,.35); color: rgba(245,158,11,.98); }
+      .pill.text { border-color: rgba(34,211,238,.35); color: rgba(34,211,238,.98); }
+      .pill.fill { border-color: rgba(248,113,113,.35); color: rgba(248,113,113,.98); }
+
+      .row .iconBtn { color: #94a3b8; }
+      .row:hover .iconBtn { color: #ffffff; border-color: rgba(255,255,255,.12); background: rgba(255,255,255,.03); }
+
+      .iconBtn {
+        width: 28px;
+        height: 28px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 10px;
+        border: 1px solid var(--stroke);
+        background: rgba(255,255,255,.02);
+        color: var(--text);
+        cursor: pointer;
+        padding: 0;
+      }
+      .iconBtn:hover { border-color: var(--stroke-2); background: rgba(255,255,255,.04); }
+      .iconBtn:active { transform: translateY(1px); }
+      .iconBtn svg { width: 14px; height: 14px; opacity: .9; }
+
+      .empty {
+        padding: 16px 12px;
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      /* status element removed — status is now shown in the statusCard */
+
+      /* Resize handles (all edges + corners) */
+      .resize-handle{
+        position: fixed;
+        z-index: 40;
+        background: transparent;
+        touch-action: none;
+      }
+      .resize-handle:hover{
+        background: rgba(255,255,255,.04);
+      }
+      .resize-handle[data-dir="n"]{
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 6px;
+        cursor: ns-resize;
+      }
+      .resize-handle[data-dir="s"]{
+        bottom: 0;
+        left: 0;
+        right: 0;
+        height: 8px;
+        cursor: ns-resize;
+      }
+      .resize-handle[data-dir="e"]{
+        top: 0;
+        bottom: 0;
+        right: 0;
+        width: 8px;
+        cursor: ew-resize;
+      }
+      .resize-handle[data-dir="w"]{
+        top: 0;
+        bottom: 0;
+        left: 0;
+        width: 8px;
+        cursor: ew-resize;
+      }
+      .resize-handle.corner{
+        width: 14px;
+        height: 14px;
+      }
+      .resize-handle[data-dir="nw"]{ top: 0; left: 0; cursor: nwse-resize; }
+      .resize-handle[data-dir="ne"]{ top: 0; right: 0; cursor: nesw-resize; }
+      .resize-handle[data-dir="sw"]{ bottom: 0; left: 0; cursor: nesw-resize; }
+      .resize-handle[data-dir="se"]{ bottom: 0; right: 0; cursor: nwse-resize; }
+    </style>
+  </head>
+
+  <body>
+    <div class="shell">
+      <div class="topGlow"></div>
+      <div class="content scrollY">
+        <div class="header">
+          <div class="headerBar">
+            <h1>Systemic Auditor</h1>
+            <button class="licenseBtn" id="openLicenseBtn" type="button" data-pro="false" title="Manage Systemic Pro">
+              <span class="licenseDot" aria-hidden="true"></span>
+              <span id="openLicenseBtnLabel">Activate Pro</span>
+            </button>
+          </div>
+          <p>Scan your selection for design-system debt.</p>
+          <div class="devToggleRow" id="proDebugRow" title="Toggle Pro for testing" style="display:none;">
+            <span class="devToggleLabel">Test Pro</span>
+            <label class="switch" id="proDebugSwitch" data-on="false">
+              <input type="checkbox" id="proDebugToggle" />
+              <span class="knob"></span>
+            </label>
+          </div>
+        </div>
+
+        <div class="actions">
+          <button class="btn btnPrimary" id="scanBtn"><span class="btnLabel">Scan selection</span></button>
+            <button class="btn" id="resetBtn"><span class="btnLabel">Reset</span></button>
+        </div>
+
+        <div class="section" id="secOptions" data-open="false">
+          <div class="sectionHeader" data-toggle="secOptions">
+            <h3>Scanner Options</h3>
+            <div class="chev" aria-hidden="true"><span class="chevIcon" aria-hidden="true"></span></div>
+          </div>
+          <div class="sectionBody">
+            <div class="optionsGrid">
+              <div class="optCard">
+                <label class="switch" id="swChildren" data-on="true">
+                  <input type="checkbox" id="includeChildren" checked />
+                  <span class="knob"></span>
+                </label>
+                <div class="optText">
+                  <div class="optLabel">Include children</div>
+                  <div class="optDesc">Recursively scan inside frames</div>
+                </div>
+              </div>
+
+              <div class="optCard">
+                <label class="switch" id="swDetached" data-on="true">
+                  <input type="checkbox" id="detachedInstances" checked />
+                  <span class="knob"></span>
+                </label>
+                <div class="optText">
+                  <div class="optLabel">Detached instances</div>
+                  <div class="optDesc">Detect detached components</div>
+                </div>
+              </div>
+
+              <div class="optCard">
+                <label class="switch" id="swText" data-on="true">
+                  <input type="checkbox" id="textWithoutStyle" checked />
+                  <span class="knob"></span>
+                </label>
+                <div class="optText">
+                  <div class="optLabel">Text without style</div>
+                  <div class="optDesc">Text style is missing or mixed</div>
+                </div>
+              </div>
+
+              <div class="optCard">
+                <label class="switch" id="swFills" data-on="true">
+                  <input type="checkbox" id="rogueFills" checked />
+                  <span class="knob"></span>
+                </label>
+                <div class="optText">
+                  <div class="optLabel">Rogue fills</div>
+                  <div class="optDesc">Fill without paint style or variable</div>
+                </div>
+              </div>
+
+              <div class="optCard">
+                <label class="switch" id="swStrokes" data-on="true">
+                  <input type="checkbox" id="rogueStrokes" checked />
+                  <span class="knob"></span>
+                </label>
+                <div class="optText">
+                  <div class="optLabel">Rogue strokes</div>
+                  <div class="optDesc">Stroke without paint style or variable</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div id="results" style="display:none;">
+
+
+        <!-- No selection state -->
+        <div id="noSelectionState" style="display:none;">
+          <div class="noSelectionCard">
+            <p class="noSelectionText">Choose a frame, layer, or element to view related issues.</p>
+          </div>
+        </div>
+
+        <!-- Results content -->
+        <div id="resultsContent">
+
+        <div class="statusCard">
+            <div class="statusContent">
+              <div class="statusLeft">
+                <p class="statusTitle" id="statusTitle">Scan status: completed</p>
+                <p class="statusSub" id="statusSub">Found 0 total issues in scan.</p>
+                <p class="celebrateMsg" id="celebrateMsg" style="display:none;">You’re all set — nothing to fix. ✨</p>
+                <div class="autofixProgress" id="autofixProgress">
+                  <div class="autofixProgressBar" id="autofixProgressBar"></div>
+                </div>
+                <div class="autofixProgressText" id="autofixProgressText"></div>
+              </div>
+
+              <div class="statusSpacer" aria-hidden="true"></div>
+
+              <div class="statusRight">
+                <div class="healthGaugeWrap" title="Health score">
+                  <div
+                    class="healthGauge"
+                    data-gauge
+                    data-size="md"
+                    data-scheme="byScore"
+                    data-show-label="true"
+                    data-show-grade="true"
+                  >
+                    <div class="healthGaugeChart">
+                      <svg viewBox="0 0 110 60" preserveAspectRatio="xMidYMax meet" aria-hidden="true">
+                      <defs>
+                        <linearGradient data-role="activeGradient" id="systemic-gauge-gradient" x1="0" y1="0" x2="1" y2="0">
+                          <stop data-role="gradStopA" offset="0%" stop-color="#A3E635"/>
+                          <stop data-role="gradStopB" offset="100%" stop-color="#65A30D"/>
+                        </linearGradient>
+                        <mask data-role="maskDef" id="systemic-gauge-mask">
+                          <path data-role="mask" d="M 55 55 L -5 55 A 60 60 0 0 1 -5 55 Z" fill="white" />
+                        </mask>
+                      </defs>
+
+                      <!-- Track -->
+                      <path
+                        data-role="track"
+                        d="M106 55C108.209 55 110.015 53.2068 109.855 51.0035C109.428 45.1489 108.066 39.3915 105.813 33.9524C103.049 27.2795 98.9981 21.2163 93.8909 16.1091C88.7836 11.0019 82.7205 6.95063 76.0476 4.18663C69.3747 1.42262 62.2227 -3.15714e-07 55 0C47.7773 3.15714e-07 40.6253 1.42262 33.9524 4.18663C27.2795 6.95064 21.2163 11.0019 16.1091 16.1091C11.0019 21.2164 6.95063 27.2795 4.18662 33.9524C1.93367 39.3915 0.571929 45.1489 0.145389 51.0035C-0.0151345 53.2068 1.79086 55 4 55L12.5 55C14.7091 55 16.4785 53.2044 16.7076 51.0072C17.0919 47.3214 18.0072 43.7033 19.4306 40.2667C21.3654 35.5957 24.2013 31.3514 27.7764 27.7764C31.3514 24.2013 35.5957 21.3654 40.2667 19.4306C44.9377 17.4958 49.9441 16.5 55 16.5C60.0559 16.5 65.0623 17.4958 69.7333 19.4306C74.4043 21.3654 78.6486 24.2013 82.2236 27.7764C85.7987 31.3514 88.6346 35.5957 90.5694 40.2667C91.9928 43.7033 92.9081 47.3214 93.2924 51.0072C93.5215 53.2044 95.2909 55 97.5 55H106Z"
+                        fill="#334155"
+                        opacity="0.30"
+                      />
+
+                      <!-- Active (masked) -->
+                      <path
+                        data-role="active"
+                        d="M106 55C108.209 55 110.015 53.2068 109.855 51.0035C109.428 45.1489 108.066 39.3915 105.813 33.9524C103.049 27.2795 98.9981 21.2163 93.8909 16.1091C88.7836 11.0019 82.7205 6.95063 76.0476 4.18663C69.3747 1.42262 62.2227 -3.15714e-07 55 0C47.7773 3.15714e-07 40.6253 1.42262 33.9524 4.18663C27.2795 6.95064 21.2163 11.0019 16.1091 16.1091C11.0019 21.2164 6.95063 27.2795 4.18662 33.9524C1.93367 39.3915 0.571929 45.1489 0.145389 51.0035C-0.0151345 53.2068 1.79086 55 4 55L12.5 55C14.7091 55 16.4785 53.2044 16.7076 51.0072C17.0919 47.3214 18.0072 43.7033 19.4306 40.2667C21.3654 35.5957 24.2013 31.3514 27.7764 27.7764C31.3514 24.2013 35.5957 21.3654 40.2667 19.4306C44.9377 17.4958 49.9441 16.5 55 16.5C60.0559 16.5 65.0623 17.4958 69.7333 19.4306C74.4043 21.3654 78.6486 24.2013 82.2236 27.7764C85.7987 31.3514 88.6346 35.5957 90.5694 40.2667C91.9928 43.7033 92.9081 47.3214 93.2924 51.0072C93.5215 53.2044 95.2909 55 97.5 55H106Z"
+                        fill="#f59e0b"
+                        mask=""
+                      />
+                      </svg>
+
+                      <div class="healthGaugeGrade" data-role="grade">—</div>
+                    </div>
+
+                    <div class="healthGaugeLabel" data-role="label">Health Score</div>
+                  </div>
+                </div>
+              </div>
+              <div class="confettiWrap" id="confetti" style="display:none;"></div>
+            </div>
+
+            <div class="loadingContent" id="statusLoading">
+              <span class="loadingRing" aria-hidden="true"></span>
+              <div class="loadingTitle">Scan status:</div>
+              <div class="loadingSub">Finding issues and matching variables/styles…</div>
+            </div>
+          </div>
+
+          <div class="statsGrid">
+            <div class="statCard" id="filterAll" data-active="true">
+              <span class="statSpinner" style="--spinner-color:#ffffff"></span>
+              <p class="statValue" id="statTotal">0</p>
+              <div class="statLabel"><span class="dot" style="background:#ffffff"></span>Total issues found</div>
+            </div>
+            <div class="statCard" id="filterDetached" data-active="false">
+              <span class="statSpinner" style="--spinner-color:var(--violet)"></span>
+              <p class="statValue" id="statDetached">0</p>
+              <div class="statLabel"><span class="dot" style="background:var(--violet)"></span>Detached</div>
+            </div>
+            <div class="statCard" id="filterText" data-active="false">
+              <span class="statSpinner" style="--spinner-color:var(--cyan)"></span>
+              <p class="statValue" id="statText">0</p>
+              <div class="statLabel"><span class="dot" style="background:var(--cyan)"></span>Text</div>
+            </div>
+            <div class="statCard" id="filterFills" data-active="false">
+              <span class="statSpinner" style="--spinner-color:var(--red)"></span>
+              <p class="statValue" id="statFills">0</p>
+              <div class="statLabel"><span class="dot" style="background:var(--red)"></span>Fills</div>
+            </div>
+            <div class="statCard" id="filterStrokes" data-active="false">
+              <span class="statSpinner" style="--spinner-color:var(--orange)"></span>
+              <p class="statValue" id="statStrokes">0</p>
+              <div class="statLabel"><span class="dot" style="background:var(--orange)"></span>Strokes</div>
+            </div>
+          </div>
+
+          <div class="dataLoading" id="dataLoading">
+            <span class="spinner" aria-hidden="true"></span>
+            <span>Finding issues and matching variables…</span>
+          </div>
+
+          <div class="divider" id="issuesDivider" style="margin-top:14px;"></div>
+
+          <div class="section" id="secIssues" data-open="true">
+            <div class="sectionHeader" data-toggle="secIssues">
+              <h3>Issues found</h3>
+              <div class="chev" aria-hidden="true"><span class="chevIcon" aria-hidden="true"></span></div>
+            </div>
+            <div class="sectionBody">
+              <div class="issuesBox" id="issuesBox">
+                <div class="issuesScroll scrollY" id="list" role="list">
+                  <div class="empty">Run a scan to see issues here.</div>
+                </div>
+                <div class="autofixInline" id="autofixInline" aria-hidden="true">
+                  <div class="autofixInlineText" id="autofixInlineText">Auditing for high-confidence fixes...</div>
+                <div class="autofixInlineRow">
+                  <div class="autofixInlineProgress">
+                    <div class="autofixInlineBar" id="autofixInlineBar"></div>
+                  </div>
+                  <div class="autofixInlinePercent" id="autofixInlinePercent">0%</div>
+                </div>
+                <button class="autofixInlineCancel" id="autofixInlineCancel" type="button">Cancel Auto-fix</button>
+              </div>
+                <div class="proTease">
+                  <div class="proBtnWrap">
+                    <button class="btn btnPrimary proBtn" type="button" aria-disabled="true" id="proAutofixBtn"><span class="btnLabel">✨ Auto-fix all 251 issues</span></button>
+                    <div class="tooltip">Unlock Auto-fix with Systemic Pro.</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="resize-handle" data-dir="n" title="Resize"></div>
+    <div class="resize-handle" data-dir="e" title="Resize"></div>
+    <div class="resize-handle" data-dir="s" title="Resize"></div>
+    <div class="resize-handle" data-dir="w" title="Resize"></div>
+    <div class="resize-handle corner" data-dir="nw" title="Resize"></div>
+    <div class="resize-handle corner" data-dir="ne" title="Resize"></div>
+    <div class="resize-handle corner" data-dir="sw" title="Resize"></div>
+    <div class="resize-handle corner" data-dir="se" title="Resize"></div>
+
+    <!-- Pro license modal -->
+    <div class="modalOverlay" id="proModal" style="display:none;" aria-hidden="true">
+      <div class="modalDialog" role="dialog" aria-modal="true" aria-label="Systemic Pro license">
+        <div class="proPanel" id="proPanel" data-state="idle">
+          <div class="proModalHeader">
+            <div>
+              <div class="proModalTitleRow">
+                <div class="proModalTitle">Systemic Auditor</div>
+                <div class="proPill" title="Pro">PRO</div>
+              </div>
+              <div class="proModalSub" id="proPanelSub">Pro features are unlock.</div>
+            </div>
+          </div>
+
+          <div class="proKeyGroup">
+            <div class="proKeyLabel">License Key</div>
+            <div class="proFormRow" id="proFormRow">
+              <input
+                class="proKeyInput"
+                id="proKeyInput"
+                type="password"
+                placeholder="Enter License Key"
+                autocomplete="off"
+                spellcheck="false"
+              />
+              <button class="proVerifyBtn" id="proVerifyBtn" type="button">
+                <span class="btnLabel">Activate</span>
+              </button>
+            </div>
+            <div class="proKeyRow" id="proKeyRow" data-has-key="false">
+              <input
+                class="proKeyDisplay"
+                id="proKeyDisplay"
+                type="password"
+                readonly
+                spellcheck="false"
+              />
+              <button class="proKeyToggle" id="proKeyToggle" type="button" aria-label="Show license key" aria-pressed="false" data-visible="false">
+                <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                  <path class="eyeOff" d="M10.1167 5.5499C10.4389 5.87212 10.675 6.23879 10.825 6.6499C10.975 7.06101 11.0278 7.48324 10.9834 7.91657C10.9834 8.08324 10.9223 8.2249 10.8 8.34157C10.6778 8.45824 10.5334 8.51657 10.3667 8.51657C10.2 8.51657 10.0584 8.45824 9.94171 8.34157C9.82504 8.2249 9.76671 8.08324 9.76671 7.91657C9.82226 7.62768 9.8056 7.3499 9.71671 7.08324C9.62782 6.81657 9.48893 6.58879 9.30004 6.3999C9.11115 6.21101 8.88338 6.06657 8.61671 5.96657C8.35004 5.86657 8.06671 5.84435 7.76671 5.8999C7.60004 5.8999 7.45837 5.83879 7.34171 5.71657C7.22504 5.59435 7.16671 5.4499 7.16671 5.28324C7.16671 5.11657 7.22504 4.9749 7.34171 4.85824C7.45837 4.74157 7.60004 4.68324 7.76671 4.68324C8.18893 4.63879 8.6056 4.69157 9.01671 4.84157C9.42782 4.99157 9.79449 5.22768 10.1167 5.5499ZM8.00004 3.9999C7.78893 3.9999 7.58337 4.00824 7.38337 4.0249C7.18337 4.04157 6.98337 4.07212 6.78337 4.11657C6.59449 4.1499 6.42504 4.12212 6.27504 4.03324C6.12504 3.94435 6.02226 3.81101 5.96671 3.63324C5.91115 3.45546 5.9306 3.28324 6.02504 3.11657C6.11949 2.9499 6.2556 2.8499 6.43337 2.81657C6.68893 2.76101 6.94726 2.72212 7.20837 2.6999C7.46949 2.67768 7.73337 2.66657 8.00004 2.66657C9.52226 2.66657 10.9139 3.06657 12.175 3.86657C13.4362 4.66657 14.4 5.74435 15.0667 7.0999C15.1112 7.18879 15.1445 7.28046 15.1667 7.3749C15.1889 7.46935 15.2 7.56657 15.2 7.66657C15.2 7.76657 15.1917 7.86379 15.175 7.95824C15.1584 8.05268 15.1278 8.14435 15.0834 8.23324C14.8834 8.67768 14.6362 9.09435 14.3417 9.48324C14.0473 9.87212 13.7223 10.2277 13.3667 10.5499C13.2334 10.6721 13.0778 10.7221 12.9 10.6999C12.7223 10.6777 12.5778 10.5888 12.4667 10.4332C12.3556 10.2777 12.3084 10.1082 12.325 9.9249C12.3417 9.74157 12.4167 9.58879 12.55 9.46657C12.8167 9.21101 13.0612 8.93324 13.2834 8.63324C13.5056 8.33324 13.7 8.01101 13.8667 7.66657C13.3112 6.54435 12.5084 5.65268 11.4584 4.99157C10.4084 4.33046 9.2556 3.9999 8.00004 3.9999ZM8.00004 12.6666C6.51115 12.6666 5.15004 12.2638 3.91671 11.4582C2.68337 10.6527 1.71115 9.59435 1.00004 8.28324C0.944485 8.19435 0.902818 8.09712 0.875041 7.99157C0.847263 7.88601 0.833374 7.77768 0.833374 7.66657C0.833374 7.55546 0.844485 7.4499 0.866707 7.3499C0.88893 7.2499 0.927818 7.1499 0.983374 7.0499C1.2056 6.60546 1.46393 6.18046 1.75837 5.7749C2.05282 5.36935 2.38893 4.9999 2.76671 4.66657L1.38337 3.26657C1.26115 3.13324 1.20282 2.9749 1.20837 2.79157C1.21393 2.60824 1.27782 2.45546 1.40004 2.33324C1.52226 2.21101 1.67782 2.1499 1.86671 2.1499C2.0556 2.1499 2.21115 2.21101 2.33337 2.33324L13.6667 13.6666C13.7889 13.7888 13.8528 13.9416 13.8584 14.1249C13.8639 14.3082 13.8 14.4666 13.6667 14.5999C13.5445 14.7221 13.3889 14.7832 13.2 14.7832C13.0112 14.7832 12.8556 14.7221 12.7334 14.5999L10.4 12.2999C10.0112 12.4221 9.61671 12.5138 9.21671 12.5749C8.81671 12.636 8.41115 12.6666 8.00004 12.6666ZM3.70004 5.5999C3.37782 5.88879 3.08337 6.20546 2.81671 6.5499C2.55004 6.89435 2.32226 7.26657 2.13337 7.66657C2.68893 8.78879 3.49171 9.68046 4.54171 10.3416C5.59171 11.0027 6.74449 11.3332 8.00004 11.3332C8.22226 11.3332 8.43893 11.3193 8.65004 11.2916C8.86115 11.2638 9.07782 11.2332 9.30004 11.1999L8.70004 10.5666C8.57782 10.5999 8.46115 10.6249 8.35004 10.6416C8.23893 10.6582 8.12226 10.6666 8.00004 10.6666C7.16671 10.6666 6.45837 10.3749 5.87504 9.79157C5.29171 9.20824 5.00004 8.4999 5.00004 7.66657C5.00004 7.54435 5.00837 7.42768 5.02504 7.31657C5.04171 7.20546 5.06671 7.08879 5.10004 6.96657L3.70004 5.5999Z" fill="#F8FAFC"/>
+                  <path class="eyeOn" d="M7.99998 10.6667C8.83331 10.6667 9.54164 10.3751 10.125 9.79175C10.7083 9.20841 11 8.50008 11 7.66675C11 6.83341 10.7083 6.12508 10.125 5.54175C9.54164 4.95841 8.83331 4.66675 7.99998 4.66675C7.16664 4.66675 6.45831 4.95841 5.87498 5.54175C5.29164 6.12508 4.99998 6.83341 4.99998 7.66675C4.99998 8.50008 5.29164 9.20841 5.87498 9.79175C6.45831 10.3751 7.16664 10.6667 7.99998 10.6667ZM7.99998 9.46675C7.49998 9.46675 7.07498 9.29175 6.72498 8.94175C6.37498 8.59175 6.19998 8.16675 6.19998 7.66675C6.19998 7.16675 6.37498 6.74175 6.72498 6.39175C7.07498 6.04175 7.49998 5.86675 7.99998 5.86675C8.49998 5.86675 8.92497 6.04175 9.27497 6.39175C9.62497 6.74175 9.79998 7.16675 9.79998 7.66675C9.79998 8.16675 9.62497 8.59175 9.27497 8.94175C8.92497 9.29175 8.49998 9.46675 7.99998 9.46675ZM7.99998 12.6667C6.51109 12.6667 5.15275 12.2667 3.92498 11.4667C2.6972 10.6667 1.72775 9.61119 1.01664 8.30008C0.961087 8.20008 0.91942 8.0973 0.891642 7.99175C0.863864 7.88619 0.849976 7.77786 0.849976 7.66675C0.849976 7.55564 0.863864 7.4473 0.891642 7.34175C0.91942 7.23619 0.961087 7.13341 1.01664 7.03341C1.72775 5.7223 2.6972 4.66675 3.92498 3.86675C5.15275 3.06675 6.51109 2.66675 7.99998 2.66675C9.48886 2.66675 10.8472 3.06675 12.075 3.86675C13.3028 4.66675 14.2722 5.7223 14.9833 7.03341C15.0389 7.13341 15.0805 7.23619 15.1083 7.34175C15.1361 7.4473 15.15 7.55564 15.15 7.66675C15.15 7.77786 15.1361 7.88619 15.1083 7.99175C15.0805 8.0973 15.0389 8.20008 14.9833 8.30008C14.2722 9.61119 13.3028 10.6667 12.075 11.4667C10.8472 12.2667 9.48886 12.6667 7.99998 12.6667ZM7.99998 11.3334C9.25553 11.3334 10.4083 11.0029 11.4583 10.3417C12.5083 9.68064 13.3111 8.78897 13.8666 7.66675C13.3111 6.54453 12.5083 5.65286 11.4583 4.99175C10.4083 4.33064 9.25553 4.00008 7.99998 4.00008C6.74442 4.00008 5.59164 4.33064 4.54164 4.99175C3.49164 5.65286 2.68886 6.54453 2.13331 7.66675C2.68886 8.78897 3.49164 9.68064 4.54164 10.3417C5.59164 11.0029 6.74442 11.3334 7.99998 11.3334Z" fill="#F8FAFC"/>
+                </svg>
+              </button>
+            </div>
+            <div class="proStateRow" id="proVerifyState" data-state="idle">
+              <span class="proStateDot" aria-hidden="true"></span>
+              <span class="proStateText" id="proStateText">Not verified</span>
+            </div>
+            <button class="proKeyClear" id="proKeyClear" type="button">Clear license key</button>
+          </div>
+
+          <div class="proUpsell" id="proUpsell">
+            <div class="proUpsellHeader">Upgrade to Systemic Pro</div>
+            <div class="proUpsellCopy">Stop fixing design errors manually. Unlock the Auto-fix engine to resolve systemic inconsistencies and compliance issues in a single click.</div>
+            <button class="proUpsellCta" id="proUpsellCta" type="button">
+              <span class="btnLabel">Get Pro Access</span>
+            </button>
+          </div>
+        </div>
+
+        <button class="proClose" id="closeProModal" type="button" aria-label="Close">
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M6 6L18 18M18 6L6 18"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+
+    <script>
+      const $ = (id) => document.getElementById(id);
+
+      const PRO_BUY_URL = "https://systemicauditor.com";
+      const PRO_CHECKOUT_URL = "https://shop.systemicauditor.com/checkout/buy/ed3ae526-aaf8-482d-a0de-d12852511261";
+
+      const proState = {
+        entitlements: {},
+        verified: false,
+        verifying: false,
+        error: null,
+        licenseKey: "",
+        pendingLicenseKey: "",
+        licenseKeyLast4: "",
+      };
+      const autofixState = {
+        candidatesByKey: {},
+        recommendedByKey: {},
+        requestedByKey: {},
+        retryByKey: {},
+        pendingTimers: {},
+        selectedByKey: {},
+        pendingKeys: {},
+        pendingCount: 0,
+        allActive: false,
+        baseSummary: null,
+        baseScore: null,
+        baseTotal: null,
+        canceling: false,
+        preloadingAll: false,
+        preloadQueue: [],
+        preloadInFlight: 0,
+        preloadRemaining: new Set(),
+        preloadPromise: null,
+        preloadResolve: null,
+        preloadTotal: 0,
+        preloadDone: 0,
+      };
+      const autofixQueue = {
+        queue: [],
+        inFlight: new Set(),
+        maxConcurrent: 3,
+        timer: null,
+      };
+      function resetAutofixState(){
+        autofixState.candidatesByKey = {};
+        autofixState.recommendedByKey = {};
+        autofixState.requestedByKey = {};
+        autofixState.retryByKey = {};
+        autofixState.selectedByKey = {};
+        autofixState.pendingKeys = {};
+        autofixState.pendingCount = 0;
+        autofixState.baseSummary = null;
+        autofixState.baseScore = null;
+        autofixState.baseTotal = null;
+        autofixState.canceling = false;
+        autofixState.preloadingAll = false;
+        autofixState.preloadQueue = [];
+        autofixState.preloadInFlight = 0;
+        autofixState.preloadRemaining = new Set();
+        autofixState.preloadPromise = null;
+        autofixState.preloadResolve = null;
+        autofixState.preloadTotal = 0;
+        autofixState.preloadDone = 0;
+        for (const key of Object.keys(autofixState.pendingTimers)) {
+          clearTimeout(autofixState.pendingTimers[key]);
+        }
+        autofixState.pendingTimers = {};
+        autofixQueue.queue = [];
+        autofixQueue.inFlight = new Set();
+      }
+
+      function setDataLoading(loading){
+        const el = document.getElementById("dataLoading");
+        if (loading) {
+          document.body.dataset.loading = "true";
+        } else {
+          delete document.body.dataset.loading;
+        }
+        if (el) el.classList.remove("isVisible");
+        requestAnimationFrame(() => {
+          scheduleResizeToFit(120);
+        });
+      }
+
+      function markCandidatePending(key){
+        if (autofixState.pendingKeys[key]) return;
+        autofixState.pendingKeys[key] = true;
+        autofixState.pendingCount += 1;
+        if (state.isScanning) {
+          setDataLoading(true);
+        }
+      }
+
+      function markCandidateDone(key){
+        if (!autofixState.pendingKeys[key]) return;
+        delete autofixState.pendingKeys[key];
+        autofixState.pendingCount = Math.max(0, autofixState.pendingCount - 1);
+        if (autofixState.pendingCount === 0 && state.scanComplete) {
+          setDataLoading(false);
+          setTimeout(refreshAutofixRows, 60);
+          setTimeout(ensureAutofixRequests, 120);
+          setTimeout(finalizeStuckAutofixRows, 200);
+        }
+      }
+
+      function recalcSummaryFromIssues(issues, prevSummary){
+        const summary = {
+          total: 0,
+          detached: 0,
+          unstyledText: 0,
+          rogueFills: 0,
+          rogueStrokes: 0,
+          scannedElements: Number(prevSummary?.scannedElements || 0),
+          elementsWithIssues: 0,
+        };
+        const uniqueIds = new Set();
+        for (const issue of issues) {
+          summary.total += 1;
+          if (issue.type === "DETACHED_INSTANCE") summary.detached += 1;
+          if (issue.type === "UNSTYLED_TEXT") summary.unstyledText += 1;
+          if (issue.type === "ROGUE_FILL") summary.rogueFills += 1;
+          if (issue.type === "ROGUE_STROKE") summary.rogueStrokes += 1;
+          if (issue.id) uniqueIds.add(issue.id);
+        }
+        summary.elementsWithIssues = uniqueIds.size;
+        return summary;
+      }
+
+      function setProDebugToggle(isPro){
+        const toggle = document.getElementById("proDebugToggle");
+        const switchEl = document.getElementById("proDebugSwitch");
+        if (!toggle || !switchEl) return;
+        toggle.checked = !!isPro;
+        switchEl.dataset.on = String(!!isPro);
+      }
+
+      function openProPurchasePage(url){
+        // Open via the plugin host so it opens only once and works consistently.
+        // (Avoid window.open fallback, which can cause double-open when host also opens.)
+        const target = url || PRO_BUY_URL;
+        parent.postMessage({ pluginMessage: { type: "open-external", url: target } }, "*");
+      }
+
+      function openProModal(){
+        const modal = document.getElementById("proModal");
+        if (!modal) return;
+        modal.style.display = "flex";
+        modal.setAttribute("aria-hidden", "false");
+        requestAnimationFrame(() => {
+          modal.classList.add("isOpen");
+        });
+        const input = document.getElementById("proKeyInput");
+        if (input) {
+          try { input.focus(); } catch (e) {}
+        }
+        scheduleResizeToFit(60);
+      }
+
+      function closeProModal(){
+        const modal = document.getElementById("proModal");
+        if (!modal) return;
+        if (modal.getAttribute("aria-hidden") === "true" || modal.style.display === "none") return;
+        modal.classList.remove("isOpen");
+        modal.setAttribute("aria-hidden", "true");
+        window.setTimeout(() => {
+          if (!modal.classList.contains("isOpen")) {
+            modal.style.display = "none";
+            scheduleResizeToFit(80);
+          }
+        }, 220);
+      }
+
+      function setProHeaderButton(isPro){
+        const btn = document.getElementById("openLicenseBtn");
+        const label = document.getElementById("openLicenseBtnLabel");
+        if (btn) btn.dataset.pro = String(!!isPro);
+        if (label) label.textContent = isPro ? "Pro active" : "Activate Pro";
+      }
+
+      function updateAutofixRow(key, dropdownEl, triggerEl, menuEl, fixBtnEl){
+        const dropdown = dropdownEl || document.querySelector(`.fixDropdown[data-issue-key="${key}"]`);
+        const trigger = triggerEl || document.querySelector(`.fixTrigger[data-issue-key="${key}"]`);
+        const menu = menuEl || document.querySelector(`.fixMenu[data-issue-key="${key}"]`);
+        const fixBtn = fixBtnEl || document.querySelector(`.fixBtn[data-issue-key="${key}"]`);
+        const fixRow = dropdown ? dropdown.closest(".fixRow") : null;
+        if (fixRow) fixRow.dataset.loading = "false";
+        if (!dropdown || !trigger || !menu || !fixBtn) return;
+        const valueEl = trigger.querySelector(".fixValue");
+        const swatchEl = trigger.querySelector(".fixSwatch");
+        const kind = String(key || "").split(":").pop();
+        const rowEl = dropdown.closest(".row");
+        const wasOpen = dropdown.classList.contains("isOpen") || menu.classList.contains("isOpen");
+        if (!wasOpen) {
+          dropdown.classList.remove("isOpen");
+          if (rowEl) rowEl.classList.remove("isOpen");
+          menu.classList.remove("isOpen");
+          if (!menu.parentElement || !menu.parentElement.classList.contains("fixDropdown")) {
+            dropdown.appendChild(menu);
+          }
+        }
+
+        const candidates = autofixState.candidatesByKey[key] || [];
+        const recommendedId = autofixState.recommendedByKey[key] || "";
+        const selectedId = autofixState.selectedByKey[key] || recommendedId || "";
+
+        const prevScrollTop = wasOpen ? menu.scrollTop : 0;
+        menu.innerHTML = "";
+        trigger.disabled = !proState.verified;
+
+        if (!proState.verified) {
+          if (valueEl) valueEl.textContent = "Unlock Pro to auto-fix";
+          if (swatchEl) {
+            swatchEl.style.background = "";
+            swatchEl.style.display = "none";
+          }
+          dropdown.dataset.value = "";
+          fixBtn.disabled = true;
+          return;
+        }
+
+        if (!candidates.length) {
+          if (valueEl) valueEl.textContent = kind === "text" ? "No matching styles" : "No matching variables";
+          if (swatchEl) {
+            swatchEl.style.background = "";
+            swatchEl.style.display = "none";
+          }
+          dropdown.dataset.value = "";
+          trigger.disabled = true;
+          fixBtn.disabled = true;
+          if (wasOpen) {
+            dropdown.classList.add("isOpen");
+            if (rowEl) rowEl.classList.add("isOpen");
+            document.body.appendChild(menu);
+            menu.classList.add("isOpen");
+            positionFixDropdown(dropdown, menu);
+            menu.scrollTop = prevScrollTop;
+          }
+          return;
+        }
+
+        const grouped = new Map();
+        const groupScores = new Map();
+        for (const c of candidates) {
+          const groupLabel = c.collectionName || (c.source === "style" ? "Styles" : "Variables");
+          if (!grouped.has(groupLabel)) grouped.set(groupLabel, []);
+          grouped.get(groupLabel).push(c);
+          const score = typeof c.score === "number" ? c.score : 0;
+          const prev = groupScores.get(groupLabel);
+          if (prev == null || score > prev) groupScores.set(groupLabel, score);
+        }
+        const groupLabels = Array.from(grouped.keys()).sort((a, b) => {
+          const sa = groupScores.get(a) || 0;
+          const sb = groupScores.get(b) || 0;
+          if (sb !== sa) return sb - sa;
+          return a.localeCompare(b);
+        });
+        for (const label of groupLabels) {
+          const group = document.createElement("div");
+          group.className = "fixGroup";
+          group.textContent = label;
+          menu.appendChild(group);
+          const items = grouped.get(label) || [];
+          for (const c of items) {
+            const opt = document.createElement("div");
+            opt.className = "fixOption";
+            opt.dataset.value = c.id;
+            opt.dataset.selected = String(c.id === selectedId);
+            if (c.disabled) opt.dataset.disabled = "true";
+            if (c.color) {
+              const swatch = document.createElement("span");
+              swatch.className = "fixSwatch";
+              swatch.style.background = c.color;
+              opt.appendChild(swatch);
+            }
+            const label = document.createElement("span");
+            label.className = "fixOptionText";
+            label.textContent = c.name || c.displayName || "Unnamed";
+            opt.appendChild(label);
+            if (c.note) {
+              const note = document.createElement("span");
+              note.className = "fixOptionNote";
+              note.textContent = c.note;
+              opt.appendChild(note);
+            }
+            if (c.id === recommendedId) {
+              const tag = document.createElement("span");
+              tag.className = "fixOptionTag";
+              tag.textContent = "Best match";
+              opt.appendChild(tag);
+            }
+            opt.addEventListener("click", (e) => {
+              e.stopPropagation();
+              if (c.disabled) return;
+              autofixState.selectedByKey[key] = c.id;
+              dropdown.dataset.value = c.id;
+              if (valueEl) valueEl.textContent = c.name || c.displayName || "Unnamed";
+              if (swatchEl) {
+                swatchEl.style.background = c.color || "";
+                swatchEl.style.display = c.color ? "inline-block" : "none";
+              }
+              menu.querySelectorAll(".fixOption").forEach((optEl) => {
+                const isSelected = optEl.dataset.value === c.id;
+                optEl.dataset.selected = String(isSelected);
+                const existing = optEl.querySelector(".fixCheck");
+                if (existing) existing.remove();
+              });
+              fixBtn.disabled = false;
+              dropdown.classList.remove("isOpen");
+              const rowEl = dropdown.closest(".row");
+              if (rowEl) rowEl.classList.remove("isOpen");
+              if (menu) menu.classList.remove("isOpen");
+              if (menu && menu.parentElement) menu.parentElement.removeChild(menu);
+            });
+            menu.appendChild(opt);
+          }
+        }
+
+        dropdown.dataset.value = selectedId;
+        if (valueEl) {
+          valueEl.textContent = (candidates.find((c) => c.id === selectedId)?.name) || (kind === "text" ? "Select text style" : "Select variable");
+        }
+        if (swatchEl) {
+          const color = (candidates.find((c) => c.id === selectedId)?.color) || "";
+          swatchEl.style.background = color;
+          swatchEl.style.display = color ? "inline-block" : "none";
+        }
+        fixBtn.disabled = !selectedId;
+        if (wasOpen) {
+          dropdown.classList.add("isOpen");
+          if (rowEl) rowEl.classList.add("isOpen");
+          document.body.appendChild(menu);
+          menu.classList.add("isOpen");
+          positionFixDropdown(dropdown, menu);
+          menu.scrollTop = Math.min(prevScrollTop, menu.scrollHeight);
+        }
+      }
+
+      function setAutofixLoading(key, dropdown, trigger, menu, fixBtn){
+        if (!dropdown || !trigger || !menu || !fixBtn) return;
+        const kind = String(key || "").split(":").pop();
+        const fixRow = dropdown.closest(".fixRow");
+        if (fixRow) fixRow.dataset.loading = "true";
+        menu.innerHTML = "";
+        dropdown.classList.remove("isOpen");
+        const rowEl = dropdown.closest(".row");
+        if (rowEl) rowEl.classList.remove("isOpen");
+        menu.classList.remove("isOpen");
+        if (!menu.parentElement || !menu.parentElement.classList.contains("fixDropdown")) {
+          dropdown.appendChild(menu);
+        }
+        const valueEl = trigger.querySelector(".fixValue");
+        const swatchEl = trigger.querySelector(".fixSwatch");
+        if (valueEl) valueEl.textContent = kind === "text" ? "Loading styles…" : "Loading variables…";
+        if (swatchEl) {
+          swatchEl.style.background = "";
+          swatchEl.style.display = kind === "text" ? "none" : "inline-block";
+        }
+        trigger.disabled = true;
+        dropdown.dataset.value = "";
+        fixBtn.disabled = true;
+        const rowId = dropdown.dataset.issueId || "";
+        if (autofixState.pendingTimers[key]) {
+          clearTimeout(autofixState.pendingTimers[key]);
+        }
+        autofixState.pendingTimers[key] = window.setTimeout(() => {
+          // If the response is slow, keep the loading state instead of
+          // prematurely showing "No matching variables".
+          markCandidateDone(key);
+        }, 2000);
+      }
+
+      function refreshAutofixRows(){
+        document.querySelectorAll(".fixDropdown[data-issue-key]").forEach((dropdown) => {
+          const key = dropdown.dataset.issueKey;
+          if (!key) return;
+          updateAutofixRow(key);
+        });
+      }
+
+      function ensureAutofixRequests(){
+        scheduleAutofixQueue();
+      }
+
+      function finalizeStuckAutofixRows(){
+        if (!state.scanComplete) return;
+        document.querySelectorAll(".fixDropdown[data-issue-key]").forEach((dropdown) => {
+          const key = dropdown.dataset.issueKey;
+          if (!key) return;
+          const trigger = dropdown.querySelector(".fixTrigger");
+          const valueEl = trigger ? trigger.querySelector(".fixValue") : null;
+          if (!valueEl || !valueEl.textContent || !valueEl.textContent.includes("Loading")) return;
+          // Keep loading until we receive a real response.
+        });
+      }
+
+      function closeAllFixDropdowns(exceptKey){
+        document.querySelectorAll(".fixDropdown.isOpen").forEach((el) => {
+          if (exceptKey && el.dataset.issueKey === exceptKey) return;
+          el.classList.remove("isOpen");
+        });
+        document.querySelectorAll(".row.isOpen").forEach((el) => {
+          if (exceptKey && el.dataset.issueId === (exceptKey || "").split(":")[0]) return;
+          el.classList.remove("isOpen");
+        });
+        document.querySelectorAll(".fixMenu").forEach((menu) => {
+          const key = menu.dataset.issueKey;
+          if (exceptKey && key === exceptKey) return;
+          if (!menu.closest(".fixDropdown")) {
+            menu.classList.remove("isOpen");
+            if (key) {
+              const dropdown = document.querySelector(`.fixDropdown[data-issue-key="${key}"]`);
+              if (dropdown) dropdown.appendChild(menu);
+            }
+          }
+        });
+      }
+
+      function bindFixDropdownClose(){
+        if (window.__fixDropdownBound) return;
+        const closeAll = () => closeAllFixDropdowns();
+        document.addEventListener("click", (e) => {
+          const target = e.target;
+          if (target && target.closest && (target.closest(".fixTrigger") || target.closest(".fixMenu"))) {
+            return;
+          }
+          closeAll();
+        });
+        const content = document.querySelector(".content");
+        if (content) content.addEventListener("scroll", closeAll, { passive: true });
+        window.addEventListener("resize", closeAll);
+        window.addEventListener("scroll", closeAll, { passive: true });
+        const hideIconTips = () => {
+          document.querySelectorAll(".tooltip.tooltipFloating").forEach((el) => {
+            if (el.parentElement) el.parentElement.removeChild(el);
+          });
+        };
+        if (content) content.addEventListener("scroll", hideIconTips, { passive: true });
+        window.addEventListener("resize", hideIconTips);
+        window.addEventListener("scroll", hideIconTips, { passive: true });
+        window.__fixDropdownBound = true;
+      }
+
+      function bindAutofixQueueScroll(){
+        const list = document.getElementById("list");
+        if (!list || list.dataset.bound) return;
+        list.addEventListener("scroll", () => {
+          closeAllFixDropdowns();
+          scheduleAutofixQueue();
+          closeOffscreenDropdowns();
+        }, { passive: true });
+        list.dataset.bound = "true";
+      }
+
+      function closeOffscreenDropdowns(){
+        const list = document.getElementById("list");
+        if (!list) return;
+        const listRect = list.getBoundingClientRect();
+        document.querySelectorAll(".fixMenu.isOpen").forEach((menu) => {
+          const key = menu.dataset.issueKey;
+          if (!key) return;
+          const dropdown = document.querySelector(`.fixDropdown[data-issue-key="${key}"]`);
+          if (!dropdown) return;
+          const row = dropdown.closest(".row");
+          const rowRect = row ? row.getBoundingClientRect() : null;
+          const inView = rowRect && rowRect.bottom > listRect.top && rowRect.top < listRect.bottom;
+          if (!inView) {
+            dropdown.classList.remove("isOpen");
+            if (row) row.classList.remove("isOpen");
+            menu.classList.remove("isOpen");
+            if (!menu.closest(".fixDropdown")) {
+              dropdown.appendChild(menu);
+            }
+          }
+        });
+      }
+
+      function scheduleAutofixQueue(){
+        if (!proState.verified) return;
+        if (autofixQueue.timer) clearTimeout(autofixQueue.timer);
+        autofixQueue.timer = window.setTimeout(rebuildAutofixQueue, 80);
+      }
+
+      function scheduleCandidateRetry(key, delay = 1200){
+        const next = (Number(autofixState.retryByKey[key]) || 0) + 1;
+        if (next > 5) return;
+        autofixState.retryByKey[key] = next;
+        window.setTimeout(() => {
+          delete autofixState.requestedByKey[key];
+          scheduleAutofixQueue();
+        }, delay);
+      }
+
+      function updatePreloadProgress(){
+        if (!autofixState.preloadingAll) return;
+        const total = autofixState.preloadTotal || 0;
+        const done = Math.min(autofixState.preloadDone || 0, total);
+        const pct = total > 0 ? Math.round((done / total) * 100) : 0;
+        setAutofixInline(true, `Preparing fixes ${done}/${total}...`, pct);
+        const proBtn = document.getElementById('proAutofixBtn');
+        if (proBtn) {
+          const label = proBtn.querySelector('.btnLabel');
+          if (label) label.textContent = "⏳ Preparing fixes...";
+          proBtn.disabled = true;
+        }
+      }
+
+      function startAutofixPreload(forceRefresh = false){
+        if (autofixState.preloadingAll) return autofixState.preloadPromise;
+        const issues = Array.isArray(state.issues) ? state.issues : [];
+        const keys = [];
+        for (const issue of issues) {
+          if (!issue || !issue.id) continue;
+          if (issue.type === "DETACHED_INSTANCE") continue;
+          if (issue.type === "UNSTYLED_TEXT" && issue.mixedText) continue;
+          if (issue.type === "UNSTYLED_TEXT") keys.push(`${issue.id}:text`);
+          if (issue.type === "ROGUE_FILL") keys.push(`${issue.id}:fill`);
+          if (issue.type === "ROGUE_STROKE") keys.push(`${issue.id}:stroke`);
+        }
+        if (forceRefresh) {
+          autofixState.candidatesByKey = {};
+          autofixState.recommendedByKey = {};
+          autofixState.requestedByKey = {};
+          autofixState.retryByKey = {};
+          autofixState.pendingKeys = {};
+          autofixState.pendingCount = 0;
+          autofixQueue.queue = [];
+          autofixQueue.inFlight = new Set();
+        }
+        const pending = forceRefresh
+          ? keys
+          : keys.filter((key) => !autofixState.candidatesByKey[key]);
+        autofixState.preloadingAll = true;
+        autofixState.preloadQueue = pending.slice();
+        autofixState.preloadInFlight = 0;
+        autofixState.preloadRemaining = new Set(pending);
+        autofixState.preloadTotal = pending.length;
+        autofixState.preloadDone = 0;
+        autofixState.preloadPromise = new Promise((resolve) => {
+          autofixState.preloadResolve = resolve;
+        });
+        if (pending.length === 0) {
+          autofixState.preloadingAll = false;
+          if (autofixState.preloadResolve) autofixState.preloadResolve();
+          return Promise.resolve();
+        }
+        updatePreloadProgress();
+        processAutofixPreloadQueue();
+        return autofixState.preloadPromise;
+      }
+
+      function processAutofixPreloadQueue(){
+        if (!autofixState.preloadingAll) return;
+        const maxConcurrent = Math.max(3, autofixQueue.maxConcurrent || 3);
+        while (autofixState.preloadInFlight < maxConcurrent && autofixState.preloadQueue.length > 0) {
+          const key = autofixState.preloadQueue.shift();
+          if (!key) continue;
+          if (autofixState.candidatesByKey[key]) {
+            autofixState.preloadRemaining.delete(key);
+            continue;
+          }
+          if (autofixState.requestedByKey[key]) continue;
+          const parts = key.split(":");
+          const issueId = parts[0];
+          const kind = parts[1];
+          const dropdown = document.querySelector(`.fixDropdown[data-issue-key="${key}"]`);
+          const trigger = dropdown ? dropdown.querySelector(".fixTrigger") : null;
+          const menu = dropdown ? dropdown.querySelector(".fixMenu") : null;
+          const fixBtn = document.querySelector(`.fixBtn[data-issue-key="${key}"]`);
+          if (dropdown && trigger && menu && fixBtn) {
+            setAutofixLoading(key, dropdown, trigger, menu, fixBtn);
+          }
+          autofixState.requestedByKey[key] = true;
+          autofixState.preloadInFlight += 1;
+          parent.postMessage({ pluginMessage: { type: "pro:autofix:candidates", id: issueId, kind, key } }, "*");
+        }
+        if (autofixState.preloadInFlight === 0 && autofixState.preloadRemaining.size === 0) {
+          autofixState.preloadingAll = false;
+          if (autofixState.preloadResolve) autofixState.preloadResolve();
+          autofixState.preloadPromise = null;
+          autofixState.preloadResolve = null;
+        }
+      }
+
+      function rebuildAutofixQueue(){
+        if (!proState.verified) return;
+        const list = document.getElementById("list");
+        const listRect = list ? list.getBoundingClientRect() : null;
+        const visible = [];
+        const hidden = [];
+        document.querySelectorAll(".fixDropdown[data-issue-key]").forEach((dropdown) => {
+          const key = dropdown.dataset.issueKey || "";
+          const issueId = dropdown.dataset.issueId || "";
+          if (!key || !issueId) return;
+          if (autofixState.candidatesByKey[key]) return;
+          if (autofixState.requestedByKey[key]) return;
+          if (autofixQueue.inFlight.has(key)) return;
+          const kind = key.split(":").pop() || "";
+          if (kind === "detached") return;
+          const row = dropdown.closest(".row");
+          const rect = row ? row.getBoundingClientRect() : null;
+          const entry = { key, issueId, kind, dropdown, rectTop: rect ? rect.top : 0 };
+          const isVisible = listRect && rect ? (rect.bottom > listRect.top && rect.top < listRect.bottom) : false;
+          if (isVisible) {
+            visible.push(entry);
+          } else {
+            hidden.push(entry);
+          }
+        });
+        visible.sort((a, b) => a.rectTop - b.rectTop);
+        hidden.sort((a, b) => a.rectTop - b.rectTop);
+        autofixQueue.queue = [...visible, ...hidden];
+        processAutofixQueue();
+      }
+
+      function processAutofixQueue(){
+        if (!proState.verified) return;
+        while (autofixQueue.inFlight.size < autofixQueue.maxConcurrent && autofixQueue.queue.length > 0) {
+          const next = autofixQueue.queue.shift();
+          if (!next) break;
+          const { key, issueId, kind, dropdown } = next;
+          const trigger = dropdown.querySelector(".fixTrigger");
+          const menu = dropdown.querySelector(".fixMenu");
+          const fixBtn = document.querySelector(`.fixBtn[data-issue-key="${key}"]`);
+          if (!trigger || !menu || !fixBtn) continue;
+          autofixState.requestedByKey[key] = true;
+          autofixQueue.inFlight.add(key);
+          markCandidatePending(key);
+          setAutofixLoading(key, dropdown, trigger, menu, fixBtn);
+          parent.postMessage({ pluginMessage: { type: "pro:autofix:candidates", id: issueId, kind, key } }, "*");
+        }
+      }
+
+      function positionIconTooltip(iconWrap, tip){
+        const rect = iconWrap.getBoundingClientRect();
+        tip.style.left = `${Math.round(rect.left + rect.width / 2)}px`;
+        tip.style.top = `${Math.round(rect.top - 8)}px`;
+      }
+
+      function showIconTooltip(iconWrap, tip){
+        if (!tip) return;
+        document.querySelectorAll(".tooltip.tooltipFloating").forEach((el) => {
+          if (el !== tip && el.parentElement) el.parentElement.removeChild(el);
+        });
+        if (tip.parentElement) tip.parentElement.removeChild(tip);
+        tip.classList.add("tooltipFloating");
+        document.body.appendChild(tip);
+        positionIconTooltip(iconWrap, tip);
+        tip.style.opacity = "1";
+      }
+
+      function hideIconTooltip(iconWrap, tip){
+        if (!tip) return;
+        tip.style.opacity = "0";
+        tip.classList.remove("tooltipFloating");
+        if (tip.parentElement) tip.parentElement.removeChild(tip);
+        if (iconWrap && !iconWrap.contains(tip)) iconWrap.appendChild(tip);
+      }
+
+      function showFixTooltip(wrapper, tip){
+        if (!wrapper || !tip) return;
+        document.querySelectorAll(".tooltip.tooltipFloating").forEach((el) => {
+          if (el !== tip && el.parentElement) el.parentElement.removeChild(el);
+        });
+        if (tip.parentElement) tip.parentElement.removeChild(tip);
+        tip.classList.add("tooltipFloating");
+        document.body.appendChild(tip);
+        const rect = wrapper.getBoundingClientRect();
+        tip.style.left = `${Math.round(rect.left + rect.width / 2)}px`;
+        tip.style.top = `${Math.round(rect.top - 8)}px`;
+        tip.style.opacity = "1";
+      }
+
+      function hideFixTooltip(wrapper, tip){
+        if (!tip) return;
+        tip.style.opacity = "0";
+        tip.classList.remove("tooltipFloating");
+        if (tip.parentElement) tip.parentElement.removeChild(tip);
+        if (wrapper && !wrapper.contains(tip)) wrapper.appendChild(tip);
+      }
+
+      function positionFixDropdown(dropdown, menu){
+        if (!dropdown || !menu) return;
+        const rect = dropdown.getBoundingClientRect();
+        const viewportH = window.innerHeight || document.documentElement.clientHeight || 0;
+        const spaceBelow = viewportH - rect.bottom;
+        const spaceAbove = rect.top;
+        const preferAbove = spaceAbove > spaceBelow && spaceAbove > 140;
+        const available = Math.max(120, Math.min(240, (preferAbove ? spaceAbove : spaceBelow) - 12));
+        menu.style.maxHeight = `${available}px`;
+        menu.style.width = `${Math.round(rect.width)}px`;
+        menu.style.left = `${Math.round(rect.left)}px`;
+        const menuHeight = menu.getBoundingClientRect().height || available;
+        const top = preferAbove ? rect.top - menuHeight - 6 : rect.bottom + 6;
+        menu.style.top = `${Math.max(8, Math.round(top))}px`;
+      }
+
+      function setVerifyUI(stateKey, msg){
+        const panel = document.getElementById("proPanel");
+        const st = document.getElementById("proVerifyState");
+        const tx = document.getElementById("proStateText");
+        const btn = document.getElementById("proVerifyBtn");
+        const input = document.getElementById("proKeyInput");
+
+        const safeText = (value) => {
+          if (typeof value === "string") {
+            return value === "[object Object]" ? "Could not verify license. Please try again." : value;
+          }
+          if (value == null) return "";
+          try { return JSON.stringify(value); } catch (e) { return String(value); }
+        };
+
+        if (panel) panel.dataset.state = stateKey;
+        if (st) st.dataset.state = stateKey;
+        if (tx) tx.textContent = safeText(msg);
+
+        if (btn) {
+          if (stateKey === "verifying") {
+            btn.disabled = true;
+            btn.innerHTML = `<span class="miniSpinner" aria-hidden="true"></span><span class="btnLabel">Verifying</span>`;
+          } else {
+            btn.disabled = false;
+            btn.innerHTML = `<span class="btnLabel">Activate</span>`;
+          }
+        }
+
+        if (input) input.disabled = (stateKey === "verifying");
+      }
+
+      function setProKeyDisplay(key, last4){
+        const row = document.getElementById("proKeyRow");
+        const input = document.getElementById("proKeyDisplay");
+        const toggle = document.getElementById("proKeyToggle");
+        const inputFallback = document.getElementById("proKeyInput");
+        const inputValue = inputFallback && inputFallback.value ? String(inputFallback.value).trim() : "";
+        const fallback = proState && proState.pendingLicenseKey ? String(proState.pendingLicenseKey) : inputValue;
+        const value = key ? String(key) : fallback;
+        const tail = last4 ? String(last4) : "";
+        const hasKey = !!value;
+        if (row) row.dataset.hasKey = String(hasKey);
+        if (input) {
+          input.value = value || (tail ? `••••-••••-••••-${tail}` : "");
+          input.placeholder = value ? "" : "License key unavailable";
+          input.type = "password";
+        }
+        if (toggle) {
+          toggle.dataset.visible = "false";
+          toggle.setAttribute("aria-pressed", "false");
+          toggle.setAttribute("aria-label", "Show license key");
+          toggle.disabled = !hasKey;
+        }
+      }
+
+      function setProLockedUI(isPro){
+        const proBtn = document.getElementById("proAutofixBtn");
+        if (proBtn) {
+          proBtn.setAttribute("aria-disabled", String(!isPro));
+          proBtn.disabled = false;
+        }
+
+        const tip = document.querySelector(".proBtnWrap .tooltip");
+        if (tip) tip.style.display = isPro ? "none" : "";
+
+        const upsell = document.getElementById("proUpsell");
+        if (upsell) upsell.style.display = isPro ? "none" : "";
+
+        setProHeaderButton(!!isPro);
+      }
+
+      function requestVerifyLicense(){
+        const input = document.getElementById("proKeyInput");
+        const btn = document.getElementById("proVerifyBtn");
+        const key = (input && input.value ? String(input.value).trim() : "");
+
+        if (!key) {
+          setVerifyUI("error", "Enter a license key.");
+          return;
+        }
+
+        proState.pendingLicenseKey = key;
+        proState.licenseKey = key;
+        proState.licenseKeyLast4 = key.slice(-4);
+        proState.verifying = true;
+        proState.error = null;
+        if (btn) btn.disabled = true;
+        setVerifyUI("verifying", "Verifying…");
+
+        parent.postMessage({ pluginMessage: { type: "pro:verify", key } }, "*");
+      }
+
+      function bindProModalUI(){
+        const openBtn = document.getElementById("openLicenseBtn");
+        const closeBtn = document.getElementById("closeProModal");
+        const modal = document.getElementById("proModal");
+        const verifyBtn = document.getElementById("proVerifyBtn");
+        const keyInput = document.getElementById("proKeyInput");
+        const keyDisplay = document.getElementById("proKeyDisplay");
+        const keyToggle = document.getElementById("proKeyToggle");
+        const keyClear = document.getElementById("proKeyClear");
+        const upsellCta = document.getElementById("proUpsellCta");
+
+        if (openBtn && !openBtn.dataset.bound){
+          openBtn.addEventListener("click", (e) => {
+            e.preventDefault();
+            openProModal();
+          });
+          openBtn.dataset.bound = "true";
+        }
+
+        if (closeBtn && !closeBtn.dataset.bound){
+          closeBtn.addEventListener("click", (e) => {
+            e.preventDefault();
+            closeProModal();
+          });
+          closeBtn.dataset.bound = "true";
+        }
+
+        if (modal && !modal.dataset.bound){
+          modal.addEventListener("click", (e) => {
+            if (e.target === modal) closeProModal();
+          });
+          modal.dataset.bound = "true";
+        }
+
+        if (!window.__proEscBound){
+          window.addEventListener("keydown", (e) => {
+            if (e.key === "Escape") closeProModal();
+          });
+          window.__proEscBound = true;
+        }
+
+        if (verifyBtn && !verifyBtn.dataset.bound){
+          verifyBtn.addEventListener("click", (e) => {
+            e.preventDefault();
+            requestVerifyLicense();
+          });
+          verifyBtn.dataset.bound = "true";
+        }
+
+        if (upsellCta && !upsellCta.dataset.bound){
+          upsellCta.addEventListener("click", (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            openProPurchasePage(PRO_CHECKOUT_URL);
+          });
+          upsellCta.dataset.bound = "true";
+        }
+
+        if (keyInput && !keyInput.dataset.bound){
+          keyInput.addEventListener("keydown", (e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              requestVerifyLicense();
+            }
+          });
+          keyInput.dataset.bound = "true";
+        }
+
+        if (keyToggle && !keyToggle.dataset.bound){
+          keyToggle.addEventListener("click", (e) => {
+            e.preventDefault();
+            if (!keyDisplay) return;
+            const isVisible = keyToggle.dataset.visible === "true";
+            const nextVisible = !isVisible;
+            keyDisplay.type = nextVisible ? "text" : "password";
+            keyToggle.dataset.visible = String(nextVisible);
+            keyToggle.setAttribute("aria-pressed", String(nextVisible));
+            keyToggle.setAttribute("aria-label", nextVisible ? "Hide license key" : "Show license key");
+          });
+          keyToggle.dataset.bound = "true";
+        }
+
+        if (keyClear && !keyClear.dataset.bound){
+          keyClear.addEventListener("click", (e) => {
+            e.preventDefault();
+            if (keyInput) keyInput.value = "";
+            proState.pendingLicenseKey = "";
+            proState.licenseKey = "";
+            proState.licenseKeyLast4 = "";
+            proState.verified = false;
+            proState.verifying = false;
+            proState.error = null;
+            setVerifyUI("idle", "");
+            setProKeyDisplay("", "");
+            parent.postMessage({ pluginMessage: { type: "pro:clearLicense" } }, "*");
+          });
+          keyClear.dataset.bound = "true";
+        }
+
+        setProHeaderButton(!!proState.verified);
+      }
+
+      function bindProDebugToggle(){
+        const toggle = document.getElementById("proDebugToggle");
+        const switchEl = document.getElementById("proDebugSwitch");
+        if (!toggle || !switchEl || switchEl.dataset.bound) return;
+
+        toggle.addEventListener("change", () => {
+          const isPro = !!toggle.checked;
+          switchEl.dataset.on = String(isPro);
+          parent.postMessage({ pluginMessage: { type: "pro:debug:set", isPro } }, "*");
+        });
+
+        switchEl.dataset.bound = "true";
+      }
+
+      // --- Auto-resize UI window to fit visible content ---
+      let _fitTimer = null;
+      let _lastResize = { width: 0, height: 0 };
+      let _resizeInFlight = false;
+      let _lastResizeAt = 0;
+
+      function measureVisibleContentHeight(container){
+        if (!container) return Math.ceil(document.body.scrollHeight || 0);
+
+        const cr = container.getBoundingClientRect();
+        const cs = getComputedStyle(container);
+        const padBottom = parseFloat(cs.paddingBottom || "0") || 0;
+        const padTop = parseFloat(cs.paddingTop || "0") || 0;
+
+        let maxBottom = 0;
+        // Measure the bottom edge of the lowest *visible* direct child.
+        // This avoids using scrollHeight/clientHeight, which can get stuck at the
+        // current window height (and causes incremental whitespace on Reset).
+        for (const child of Array.from(container.children)) {
+          if (!child || child.hidden) continue;
+          const ccs = getComputedStyle(child);
+          if (ccs.display === "none") continue;
+          const r = child.getBoundingClientRect();
+          maxBottom = Math.max(maxBottom, r.bottom - cr.top);
+        }
+
+        // If nothing is visible, fall back to padding height.
+        const contentH = Math.max(padTop + padBottom, maxBottom + padBottom);
+        return Math.ceil(contentH);
+      }
+
+      function clamp(n, min, max){
+        return Math.min(Math.max(n, min), max);
+      }
+
+      function getHostHeightConstraint(){
+        // Best-effort attempt to read the host (Figma) viewport height.
+        // In some environments this is blocked by cross-origin rules.
+        try {
+          const h = window.parent && window.parent.innerHeight;
+          if (typeof h === "number" && isFinite(h) && h > 0) return Math.floor(h);
+        } catch (e) {}
+        return null;
+      }
+
+      function requestResizeToFit(){
+        try {
+          const width = Math.round(document.documentElement.clientWidth);
+          const bodyPadY = 16 * 2; // body has 16px padding top+bottom
+          const topGlow = document.querySelector('.topGlow');
+          const shell = document.querySelector('.shell');
+          const content = document.querySelector('.content');
+          const topGlowH = topGlow ? Math.ceil(topGlow.getBoundingClientRect().height) : 0;
+
+          let contentH = measureVisibleContentHeight(content);
+          const resultsEl = document.getElementById("results");
+          const resultsVisible = !!(resultsEl && resultsEl.style.display !== "none");
+          if (content && resultsVisible) {
+            const scrollH = Math.ceil(content.scrollHeight || 0);
+            if (scrollH > contentH + 8) contentH = scrollH;
+          }
+
+          // shell border (1px top + 1px bottom)
+          const borderY = 2;
+          const safetyY = 32; // buffer to prevent bottom clipping
+          const desired = Math.max(360, topGlowH + contentH + bodyPadY + borderY + safetyY);
+
+          // Let the window hug content; keep only a simple guardrail.
+          const minH = 360;
+          const maxH = 1800;
+          const height = clamp(desired, minH, maxH);
+
+          const now = Date.now();
+          if (_resizeInFlight && now - _lastResizeAt < 180) return;
+          if (Math.abs(_lastResize.width - width) < 2 && Math.abs(_lastResize.height - height) < 2) return;
+          _lastResize = { width, height };
+          _resizeInFlight = true;
+          _lastResizeAt = now;
+          parent.postMessage({ pluginMessage: { type: "resize", width, height } }, "*");
+          window.setTimeout(() => {
+            _resizeInFlight = false;
+          }, 180);
+        } catch (e) {
+          // ignore
+        }
+      }
+
+      function scheduleResizeToFit(delay = 60){
+        if (_fitTimer) clearTimeout(_fitTimer);
+        _fitTimer = setTimeout(() => {
+          // two frames to ensure layout has settled
+          requestAnimationFrame(() => requestAnimationFrame(requestResizeToFit));
+        }, delay);
+      }
+
+      const state = {
+        isScanning: false,
+        scanComplete: false,
+        activeFilter: "all", // all | DETACHED_INSTANCE | UNSTYLED_TEXT | ROGUE_FILL | ROGUE_STROKE
+        issues: [],
+        summary: { total: 0, detached: 0, unstyledText: 0, rogueFills: 0, rogueStrokes: 0 },
+        lastStatusSub: ""
+      };
+
+      const SIMULATE_AUDIT = false;
+
+      const setStatusTitle = (text) => {
+        const el = $("statusTitle");
+        if (el) el.textContent = text;
+      };
+
+      function getIssuesMinHeight(){
+        const root = getComputedStyle(document.documentElement);
+        const row = parseFloat(root.getPropertyValue("--issue-row-min-h")) || 58;
+        const tease = parseFloat(root.getPropertyValue("--issues-tease-h")) || 76;
+        return Math.round((row * 4) + tease);
+      }
+
+      function updateIssuesBoxHeight(){
+        const box = document.getElementById("issuesBox");
+        const sec = document.getElementById("secIssues");
+        if (!box || !sec) return;
+
+        const secDisplay = getComputedStyle(sec).display;
+        if (secDisplay === "none") {
+          box.style.height = "";
+          box.style.maxHeight = "";
+          return;
+        }
+
+        const rect = box.getBoundingClientRect();
+        if (!rect || !isFinite(rect.top)) return;
+
+        const root = getComputedStyle(document.documentElement);
+        const padBottom = 16;
+        const bottomGap = parseFloat(root.getPropertyValue("--issues-bottom-gap")) || 20;
+        const content = document.querySelector(".content");
+        const contentRect = content ? content.getBoundingClientRect() : null;
+        const viewportBottom = contentRect ? contentRect.bottom : window.innerHeight;
+        const available = Math.floor(viewportBottom - rect.top - padBottom - bottomGap);
+        const minH = getIssuesMinHeight();
+        const height = Math.max(minH, available);
+        box.style.height = `${height}px`;
+        box.style.maxHeight = `${height}px`;
+      }
+
+      function scheduleIssuesResize(delay = 260){
+        window.setTimeout(() => {
+          requestAnimationFrame(() => {
+            requestAnimationFrame(updateIssuesBoxHeight);
+          });
+        }, delay);
+      }
+
+      function getOptions(){
+        return {
+          scanChildren: $("includeChildren").checked,
+          checkDetached: $("detachedInstances").checked,
+          checkTextStyles: $("textWithoutStyle").checked,
+          checkRogueFills: $("rogueFills").checked,
+          checkRogueStrokes: $("rogueStrokes").checked,
+        };
+      }
+
+      function updateSwitchUI(){
+        $("swChildren").dataset.on = String($("includeChildren").checked);
+        $("swDetached").dataset.on = String($("detachedInstances").checked);
+        $("swText").dataset.on = String($("textWithoutStyle").checked);
+        $("swFills").dataset.on = String($("rogueFills").checked);
+        $("swStrokes").dataset.on = String($("rogueStrokes").checked);
+      }
+
+      function setFiltersActive(){
+        $("filterAll").dataset.active = String(state.activeFilter === "all");
+        $("filterDetached").dataset.active = String(state.activeFilter === "DETACHED_INSTANCE");
+        $("filterText").dataset.active = String(state.activeFilter === "UNSTYLED_TEXT");
+        $("filterFills").dataset.active = String(state.activeFilter === "ROGUE_FILL");
+        $("filterStrokes").dataset.active = String(state.activeFilter === "ROGUE_STROKE");
+      }
+
+      function typeToPill(type){
+        if (type === "DETACHED_INSTANCE") return { text: "Detached", cls: "detached", color: '#f59e0b', border: 'rgba(245,158,11,0.4)' };
+        if (type === "UNSTYLED_TEXT") return { text: "Text", cls: "text", color: '#22d3ee', border: 'rgba(34,211,238,0.4)' };
+        if (type === "ROGUE_FILL") return { text: "Fill", cls: "fill", color: '#f87171', border: 'rgba(248,113,113,0.4)' };
+        if (type === "ROGUE_STROKE") return { text: "Stroke", cls: "stroke", color: 'var(--violet)', border: 'rgba(167,139,250,0.35)' };
+        return { text: type, cls: "", color: '#94a3b8', border: 'rgba(148,163,184,0.18)' };
+      }
+
+      function getIssueIconSvg(type, uniqueId){
+        const id = String(uniqueId || "mask").replace(/[^a-zA-Z0-9_-]/g, "");
+        if (type === "ROGUE_FILL") {
+          return `<svg width="25" height="25" viewBox="0 0 25 25" fill="none" xmlns="http://www.w3.org/2000/svg">
+<rect width="25" height="25" rx="12.5" fill="#F87171" fill-opacity="0.2"/>
+<mask id="${id}" style="mask-type:alpha" maskUnits="userSpaceOnUse" x="5" y="5" width="15" height="15">
+<rect x="5.5" y="5.5" width="14" height="14" fill="#D9D9D9"/>
+</mask>
+<g mask="url(#${id})">
+<path d="M10.5458 17.4584L6.95829 13.8709C6.86107 13.7737 6.78815 13.6668 6.73954 13.5501C6.69093 13.4334 6.66663 13.3119 6.66663 13.1855C6.66663 13.0591 6.69093 12.9376 6.73954 12.8209C6.78815 12.7043 6.86107 12.5973 6.95829 12.5001L10.3125 9.16051L9.21871 8.06676C9.09232 7.94038 9.0267 7.78968 9.02183 7.61468C9.01697 7.43968 9.07774 7.28413 9.20413 7.14801C9.33052 7.0119 9.48607 6.94385 9.67079 6.94385C9.85552 6.94385 10.0159 7.0119 10.152 7.14801L15.5041 12.5001C15.6013 12.5973 15.6718 12.7043 15.7156 12.8209C15.7593 12.9376 15.7812 13.0591 15.7812 13.1855C15.7812 13.3119 15.7593 13.4334 15.7156 13.5501C15.6718 13.6668 15.6013 13.7737 15.5041 13.8709L11.9166 17.4584C11.8194 17.5557 11.7125 17.6286 11.5958 17.6772C11.4791 17.7258 11.3576 17.7501 11.2312 17.7501C11.1048 17.7501 10.9833 17.7258 10.8666 17.6772C10.75 17.6286 10.643 17.5557 10.5458 17.4584ZM11.2312 10.0793L8.11038 13.2001H14.352L11.2312 10.0793ZM17.05 17.7501C16.7 17.7501 16.4034 17.6261 16.1604 17.3782C15.9173 17.1303 15.7958 16.8265 15.7958 16.4668C15.7958 16.2043 15.8614 15.9563 15.9927 15.723C16.1239 15.4897 16.2722 15.2612 16.4375 15.0376L16.7145 14.6876C16.802 14.5807 16.9163 14.5248 17.0573 14.5199C17.1982 14.515 17.3125 14.5661 17.4 14.673L17.6916 15.0376C17.8472 15.2612 17.993 15.4897 18.1291 15.723C18.2652 15.9563 18.3333 16.2043 18.3333 16.4668C18.3333 16.8265 18.2069 17.1303 17.9541 17.3782C17.7013 17.6261 17.4 17.7501 17.05 17.7501Z" fill="#F87171"/>
+</g>
+</svg>`;
+        }
+        if (type === "UNSTYLED_TEXT") {
+          return `<svg width="25" height="25" viewBox="0 0 25 25" fill="none" xmlns="http://www.w3.org/2000/svg">
+<rect width="25" height="25" rx="12.5" fill="#22D3EE" fill-opacity="0.2"/>
+<mask id="${id}" style="mask-type:alpha" maskUnits="userSpaceOnUse" x="5" y="5" width="15" height="15">
+<rect x="5.5" y="5.5" width="14" height="14" fill="#D9D9D9"/>
+</mask>
+<g mask="url(#${id})">
+<path d="M13.6666 9.58325H11.625C11.3819 9.58325 11.1753 9.49818 11.0052 9.32804C10.835 9.1579 10.75 8.95131 10.75 8.70825C10.75 8.4652 10.835 8.2586 11.0052 8.08846C11.1753 7.91832 11.3819 7.83325 11.625 7.83325H17.4583C17.7013 7.83325 17.9079 7.91832 18.0781 8.08846C18.2482 8.2586 18.3333 8.4652 18.3333 8.70825C18.3333 8.95131 18.2482 9.1579 18.0781 9.32804C17.9079 9.49818 17.7013 9.58325 17.4583 9.58325H15.4166V16.2916C15.4166 16.5346 15.3316 16.7412 15.1614 16.9114C14.9913 17.0815 14.7847 17.1666 14.5416 17.1666C14.2986 17.1666 14.092 17.0815 13.9218 16.9114C13.7517 16.7412 13.6666 16.5346 13.6666 16.2916V9.58325ZM8.41663 12.4999H7.54163C7.29857 12.4999 7.09197 12.4148 6.92183 12.2447C6.7517 12.0746 6.66663 11.868 6.66663 11.6249C6.66663 11.3819 6.7517 11.1753 6.92183 11.0051C7.09197 10.835 7.29857 10.7499 7.54163 10.7499H11.0416C11.2847 10.7499 11.4913 10.835 11.6614 11.0051C11.8316 11.1753 11.9166 11.3819 11.9166 11.6249C11.9166 11.868 11.8316 12.0746 11.6614 12.2447C11.4913 12.4148 11.2847 12.4999 11.0416 12.4999H10.1666V16.2916C10.1666 16.5346 10.0816 16.7412 9.91142 16.9114C9.74128 17.0815 9.53468 17.1666 9.29163 17.1666C9.04857 17.1666 8.84197 17.0815 8.67183 16.9114C8.5017 16.7412 8.41663 16.5346 8.41663 16.2916V12.4999Z" fill="#22D3EE"/>
+</g>
+</svg>`;
+        }
+        if (type === "ROGUE_STROKE") {
+          return `<svg width="25" height="25" viewBox="0 0 25 25" fill="none" xmlns="http://www.w3.org/2000/svg">
+<rect width="25" height="25" rx="12.5" fill="#FDBA74" fill-opacity="0.2"/>
+<mask id="${id}" style="mask-type:alpha" maskUnits="userSpaceOnUse" x="5" y="5" width="15" height="15">
+<rect x="5.5" y="5.5" width="14" height="14" fill="#D9D9D9"/>
+</mask>
+<g mask="url(#${id})">
+<path d="M7.83329 19.5001C7.51246 19.5001 7.23781 19.3858 7.00933 19.1574C6.78086 18.9289 6.66663 18.6542 6.66663 18.3334C6.66663 18.0126 6.78086 17.7379 7.00933 17.5095C7.23781 17.281 7.51246 17.1667 7.83329 17.1667H17.1666C17.4875 17.1667 17.7621 17.281 17.9906 17.5095C18.2191 17.7379 18.3333 18.0126 18.3333 18.3334C18.3333 18.6542 18.2191 18.9289 17.9906 19.1574C17.7621 19.3858 17.4875 19.5001 17.1666 19.5001H7.83329ZM8.99996 14.8334H9.81663L14.3666 10.298L13.5354 9.46675L8.99996 14.0167V14.8334ZM7.83329 15.4167V13.7688C7.83329 13.6911 7.84788 13.6157 7.87704 13.5428C7.90621 13.4699 7.94996 13.4042 8.00829 13.3459L14.3666 7.00216C14.4736 6.89522 14.5975 6.81258 14.7385 6.75425C14.8795 6.69591 15.0277 6.66675 15.1833 6.66675C15.3388 6.66675 15.4895 6.69591 15.6354 6.75425C15.7812 6.81258 15.9125 6.90008 16.0291 7.01675L16.8312 7.83341C16.9479 7.94036 17.0329 8.06675 17.0864 8.21258C17.1399 8.35841 17.1666 8.50911 17.1666 8.66466C17.1666 8.8105 17.1399 8.9539 17.0864 9.09487C17.0329 9.23585 16.9479 9.36466 16.8312 9.48133L10.4875 15.8251C10.4291 15.8834 10.3635 15.9272 10.2906 15.9563C10.2177 15.9855 10.1423 16.0001 10.0645 16.0001H8.41663C8.25135 16.0001 8.11281 15.9442 8.001 15.8324C7.8892 15.7206 7.83329 15.582 7.83329 15.4167Z" fill="#FDBA74"/>
+</g>
+</svg>`;
+        }
+        if (type === "DETACHED_INSTANCE") {
+          return `<svg width="25" height="25" viewBox="0 0 25 25" fill="none" xmlns="http://www.w3.org/2000/svg">
+<rect width="25" height="25" rx="12.5" fill="#A47BF6" fill-opacity="0.2"/>
+<mask id="${id}" style="mask-type:alpha" maskUnits="userSpaceOnUse" x="5" y="5" width="15" height="15">
+<rect x="5.5" y="5.5" width="14" height="14" fill="#D9D9D9"/>
+</mask>
+<g mask="url(#${id})">
+<path d="M14.6146 12.9522L13.5792 11.9168H14.25C14.4153 11.9168 14.5538 11.9727 14.6656 12.0845C14.7774 12.1963 14.8333 12.3348 14.8333 12.5001C14.8333 12.5973 14.8139 12.6848 14.775 12.7626C14.7361 12.8404 14.6826 12.9036 14.6146 12.9522ZM17.4583 18.2751C17.3514 18.382 17.2153 18.4355 17.05 18.4355C16.8847 18.4355 16.7486 18.382 16.6417 18.2751L6.72499 8.35843C6.61805 8.25149 6.56458 8.11538 6.56458 7.9501C6.56458 7.78482 6.61805 7.64871 6.72499 7.54176C6.83194 7.43482 6.96805 7.38135 7.13333 7.38135C7.2986 7.38135 7.43471 7.43482 7.54166 7.54176L17.4583 17.4584C17.5653 17.5654 17.6187 17.7015 17.6187 17.8668C17.6187 18.032 17.5653 18.1682 17.4583 18.2751ZM9.58333 15.4168C8.77638 15.4168 8.08853 15.1324 7.51978 14.5636C6.95103 13.9949 6.66666 13.307 6.66666 12.5001C6.66666 11.8293 6.87083 11.2313 7.27916 10.7063C7.68749 10.1813 8.21249 9.83621 8.85416 9.67093L9.93333 10.7501H9.58333C9.09721 10.7501 8.68402 10.9202 8.34374 11.2605C8.00346 11.6008 7.83333 12.014 7.83333 12.5001C7.83333 12.9862 8.00346 13.3994 8.34374 13.7397C8.68402 14.08 9.09721 14.2501 9.58333 14.2501H11.3333C11.4986 14.2501 11.6371 14.306 11.749 14.4178C11.8608 14.5296 11.9167 14.6682 11.9167 14.8334C11.9167 14.9987 11.8608 15.1373 11.749 15.2491C11.6371 15.3609 11.4986 15.4168 11.3333 15.4168H9.58333ZM10.75 13.0834C10.5847 13.0834 10.4462 13.0275 10.3344 12.9157C10.2226 12.8039 10.1667 12.6654 10.1667 12.5001C10.1667 12.3348 10.2226 12.1963 10.3344 12.0845C10.4462 11.9727 10.5847 11.9168 10.75 11.9168H11.1146L12.2667 13.0834H10.75ZM16.2917 14.7168C16.2042 14.5807 16.1726 14.4348 16.1969 14.2793C16.2212 14.1237 16.3014 14.0022 16.4375 13.9147C16.6611 13.7494 16.8385 13.5452 16.9698 13.3022C17.101 13.0591 17.1667 12.7918 17.1667 12.5001C17.1667 12.014 16.9965 11.6008 16.6562 11.2605C16.316 10.9202 15.9028 10.7501 15.4167 10.7501H13.6667C13.5014 10.7501 13.3628 10.6942 13.251 10.5824C13.1392 10.4706 13.0833 10.332 13.0833 10.1668C13.0833 10.0015 13.1392 9.86294 13.251 9.75114C13.3628 9.63933 13.5014 9.58343 13.6667 9.58343H15.4167C16.2236 9.58343 16.9115 9.86781 17.4802 10.4366C18.049 11.0053 18.3333 11.6932 18.3333 12.5001C18.3333 12.9765 18.224 13.4213 18.0052 13.8345C17.7865 14.2477 17.4826 14.5904 17.0937 14.8626C16.9576 14.9501 16.8118 14.9817 16.6562 14.9574C16.5007 14.9331 16.3792 14.8529 16.2917 14.7168Z" fill="#A47BF6"/>
+</g>
+</svg>`;
+        }
+        return "";
+      }
+
+      function filteredIssues(){
+        if (state.activeFilter === "all") return state.issues;
+        return state.issues.filter(i => i.type === state.activeFilter);
+      }
+
+      function renderList(){
+        const list = $("list");
+        list.innerHTML = "";
+        list.scrollTop = 0;
+
+        const issues = filteredIssues();
+        if (!issues || issues.length === 0){
+          const div = document.createElement("div");
+          div.className = "empty";
+          div.textContent = state.scanComplete ? "No issues found for this category." : "Run a scan to see issues here.";
+          list.appendChild(div);
+          // After rendering, re-measure to prevent the list from being clipped
+          scheduleResizeToFit(80);
+          return;
+        }
+        
+        let idx = 0;
+        for (const issue of issues){
+          const row = document.createElement("div");
+          row.className = "row";
+          row.dataset.issueId = issue.id || "";
+          row.style.setProperty('--i', String(idx++));
+          row.onclick = () => {
+            // Keep scan status text stable; only request canvas focus.
+            parent.postMessage({ pluginMessage: { type: "select-node", id: issue.id } }, "*");
+          };
+
+          const top = document.createElement("div");
+          top.className = "rowTop";
+
+          // left group holds the name and the path inline
+          const leftGroup = document.createElement("div");
+          leftGroup.className = "leftGroup";
+
+          const p = typeToPill(issue.type);
+
+          const iconWrap = document.createElement("div");
+          iconWrap.className = "issueIconWrap";
+
+          const icon = document.createElement("div");
+          icon.className = "issueIcon";
+          icon.innerHTML = getIssueIconSvg(issue.type, `mask-${issue.id}-${idx}`);
+
+          const iconTip = document.createElement("div");
+          iconTip.className = "tooltip";
+          iconTip.textContent = p.text;
+
+          iconWrap.appendChild(icon);
+          iconWrap.appendChild(iconTip);
+          iconWrap.addEventListener("mouseenter", () => {
+            showIconTooltip(iconWrap, iconTip);
+          });
+          iconWrap.addEventListener("mouseleave", () => {
+            hideIconTooltip(iconWrap, iconTip);
+          });
+
+          const textGroup = document.createElement("div");
+          textGroup.className = "textGroup";
+
+          const name = document.createElement("div");
+          name.className = "name";
+          name.textContent = issue.name || "(unnamed)";
+
+          const breadcrumb = document.createElement("div");
+          breadcrumb.className = "rowBreadcrumb";
+          breadcrumb.textContent = issue.path || "";
+
+          const actions = document.createElement("div");
+          actions.className = "rowActions";
+
+          leftGroup.appendChild(iconWrap);
+          textGroup.appendChild(name);
+          leftGroup.appendChild(textGroup);
+          top.appendChild(leftGroup);
+          top.appendChild(actions);
+
+          const meta = document.createElement("div");
+          meta.className = "rowMeta";
+          meta.appendChild(top);
+          meta.appendChild(breadcrumb);
+          row.appendChild(meta);
+
+          const isDetached = issue.type === "DETACHED_INSTANCE";
+          const isTextIssue = issue.type === "UNSTYLED_TEXT";
+          const canAutofix = issue.type === "ROGUE_FILL" || issue.type === "ROGUE_STROKE" || isDetached || isTextIssue;
+          const fixKind = issue.type === "ROGUE_FILL" ? "fill" : issue.type === "ROGUE_STROKE" ? "stroke" : (isDetached ? "detached" : (isTextIssue ? "text" : ""));
+          const issueKey = `${issue.id || ""}:${fixKind}`;
+
+          const fixBtn = document.createElement("button");
+          fixBtn.className = "fixBtn";
+          fixBtn.type = "button";
+          fixBtn.textContent = isDetached ? "Relink" : "Fix";
+          fixBtn.dataset.issueId = issue.id;
+          fixBtn.dataset.issueKey = issueKey;
+
+          let dropdown = null;
+          let trigger = null;
+          let menu = null;
+
+          fixBtn.addEventListener("click", (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            if (!proState.verified) {
+              openProPurchasePage(PRO_CHECKOUT_URL);
+              return;
+            }
+            if (!isDetached) {
+              const value = dropdown ? dropdown.dataset.value || "" : "";
+              if (!value) return;
+            }
+            fixBtn.disabled = true;
+            fixBtn.dataset.state = "loading";
+            fixBtn.textContent = isDetached ? "Relinking…" : "Fixing…";
+            parent.postMessage({
+              pluginMessage: {
+                type: "pro:autofix:apply",
+                id: issue.id,
+                issueType: issue.type,
+                candidateId: isDetached ? "" : (dropdown ? dropdown.dataset.value || "" : ""),
+                kind: fixKind
+              }
+            }, "*");
+          });
+
+          const showAutofixUI = proState.verified;
+          const fixRow = document.createElement("div");
+          fixRow.className = "fixRow";
+          const loadingRow = document.createElement("div");
+          loadingRow.className = "fixLoading";
+          loadingRow.innerHTML = `<span class="spinner" aria-hidden="true"></span><span>Looking for best match...</span>`;
+          fixRow.appendChild(loadingRow);
+
+          if (showAutofixUI && isDetached) {
+            const relinkPill = document.createElement("div");
+            relinkPill.className = "relinkPill";
+
+            const icon = document.createElement("span");
+            icon.className = "relinkIcon";
+            icon.innerHTML = `
+              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M12 3l4.5 4.5L12 12 7.5 7.5 12 3z" fill="currentColor"/>
+                <path d="M12 12l4.5 4.5L12 21l-4.5-4.5L12 12z" fill="currentColor"/>
+                <path d="M3 12l4.5-4.5L12 12 7.5 16.5 3 12z" fill="currentColor"/>
+                <path d="M12 12l4.5-4.5L21 12l-4.5 4.5L12 12z" fill="currentColor"/>
+              </svg>
+            `;
+
+            const text = document.createElement("span");
+            text.className = "relinkText";
+            text.textContent = issue.detachedComponentName || "Component";
+
+            relinkPill.appendChild(icon);
+            relinkPill.appendChild(text);
+            fixRow.appendChild(relinkPill);
+          } else if (showAutofixUI) {
+            dropdown = document.createElement("div");
+            dropdown.className = "fixDropdown";
+            dropdown.dataset.issueId = issue.id;
+            dropdown.dataset.issueKey = issueKey;
+
+            trigger = document.createElement("button");
+            trigger.className = "fixTrigger";
+            trigger.type = "button";
+            trigger.dataset.issueId = issue.id;
+            trigger.dataset.issueKey = issueKey;
+            trigger.addEventListener("click", (e) => {
+              e.stopPropagation();
+              if (trigger.disabled) return;
+              closeAllFixDropdowns(issueKey);
+              dropdown.classList.toggle("isOpen");
+              row.classList.toggle("isOpen");
+            if (dropdown.classList.contains("isOpen")) {
+              document.body.appendChild(menu);
+              menu.classList.add("isOpen");
+              positionFixDropdown(dropdown, menu);
+            } else {
+              menu.classList.remove("isOpen");
+              if (!menu.parentElement || !menu.parentElement.classList.contains("fixDropdown")) {
+                dropdown.appendChild(menu);
+              }
+            }
+          });
+
+            const valueWrap = document.createElement("span");
+            valueWrap.className = "fixValueWrap";
+
+          const triggerSwatch = document.createElement("span");
+          triggerSwatch.className = "fixSwatch";
+          if (isTextIssue) triggerSwatch.style.display = "none";
+
+            const value = document.createElement("span");
+            value.className = "fixValue";
+            value.textContent = isTextIssue ? "Select text style" : "Select variable";
+
+            valueWrap.appendChild(triggerSwatch);
+            valueWrap.appendChild(value);
+
+            const chevron = document.createElement("span");
+            chevron.className = "fixChevron";
+            chevron.innerHTML = `
+              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M7 10l5 5 5-5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            `;
+
+            trigger.appendChild(valueWrap);
+            trigger.appendChild(chevron);
+
+            menu = document.createElement("div");
+            menu.className = "fixMenu";
+            menu.dataset.issueId = issue.id;
+            menu.dataset.issueKey = issueKey;
+            menu.addEventListener("click", (e) => e.stopPropagation());
+            menu.addEventListener("click", () => {});
+
+            dropdown.appendChild(trigger);
+            dropdown.appendChild(menu);
+            fixRow.appendChild(dropdown);
+
+            if (!canAutofix) {
+              value.textContent = "No auto-fix available";
+              triggerSwatch.style.background = "";
+              trigger.disabled = true;
+              dropdown.dataset.value = "";
+              fixBtn.disabled = true;
+            } else if (!proState.verified) {
+              value.textContent = "Unlock Pro to auto-fix";
+              triggerSwatch.style.background = "";
+              trigger.disabled = true;
+              dropdown.dataset.value = "";
+              fixBtn.disabled = true;
+            } else {
+              const cached = autofixState.candidatesByKey[issueKey];
+              if (Array.isArray(cached)) {
+                updateAutofixRow(issueKey, dropdown, trigger, menu, fixBtn);
+              } else {
+                setAutofixLoading(issueKey, dropdown, trigger, menu, fixBtn);
+                scheduleAutofixQueue();
+              }
+            }
+          }
+
+          if (!proState.verified) {
+            fixBtn.disabled = true;
+          } else if (isDetached) {
+            fixBtn.disabled = !canAutofix;
+          }
+
+          const fixWrap = document.createElement("div");
+          fixWrap.className = "fixBtnWrap";
+          fixWrap.dataset.locked = String(!proState.verified);
+          const tip = document.createElement("div");
+          tip.className = "tooltip";
+          tip.textContent = "Unlock with Pro";
+          tip.style.display = proState.verified ? "none" : "";
+          fixWrap.appendChild(fixBtn);
+          fixWrap.appendChild(tip);
+          if (!proState.verified) {
+            fixWrap.addEventListener("mouseenter", () => showFixTooltip(fixWrap, tip));
+            fixWrap.addEventListener("mouseleave", () => hideFixTooltip(fixWrap, tip));
+          }
+          actions.appendChild(fixWrap);
+          if (showAutofixUI && (fixRow.childElementCount > 0)) {
+            if (state.isScanning) {
+              fixRow.dataset.loading = "true";
+            } else if (showAutofixUI && !isDetached && canAutofix && !autofixState.candidatesByKey[issueKey]) {
+              fixRow.dataset.loading = "true";
+            } else {
+              fixRow.dataset.loading = "false";
+            }
+            row.appendChild(fixRow);
+          }
+          if (isTextIssue && issue.mixedText) {
+            const warn = document.createElement("div");
+            warn.className = "fixWarning";
+            warn.textContent = "Mixed styles detected. Applying a style will reset local formatting.";
+            row.appendChild(warn);
+          }
+          list.appendChild(row);
+        }
+        // After rendering, re-measure to prevent the list from being clipped
+        updateIssuesBoxHeight();
+        scheduleResizeToFit(80);
+        // Ensure any cached candidate responses are applied to freshly rendered rows.
+        setTimeout(refreshAutofixRows, 80);
+        setTimeout(scheduleAutofixQueue, 140);
+        setTimeout(finalizeStuckAutofixRows, 240);
+        if (!autofixState.allActive) {
+          setAutofixInline(false, "", 0);
+        }
+      }
+
+      function scoreToGrade(score){
+        const s = Math.max(0, Math.min(100, Math.round(Number(score || 0))));
+        if (s >= 97) return "A+";
+        if (s >= 93) return "A";
+        if (s >= 90) return "A-";
+        if (s >= 87) return "B+";
+        if (s >= 83) return "B";
+        if (s >= 80) return "B-";
+        if (s >= 77) return "C+";
+        if (s >= 73) return "C";
+        if (s >= 70) return "C-";
+        if (s >= 67) return "D+";
+        if (s >= 63) return "D";
+        if (s >= 60) return "D-";
+        return "F";
+      }
+
+      function computeHealthScore(summary, preferIssues = false){
+        const scanned = Number(summary.scannedElements || 0);
+        const withIssues = Number(summary.elementsWithIssues || 0);
+        const totalIssues = Number(summary.total || 0);
+        const elementScore = scanned > 0 ? Math.round(((scanned - withIssues) / scanned) * 100) : null;
+        const fallbackScore = totalIssues === 0 ? 100 : Math.max(0, 100 - Math.min(100, Math.round(totalIssues * 3)));
+        if (preferIssues) return Math.max(0, Math.min(100, fallbackScore));
+        return elementScore == null ? Math.max(0, Math.min(100, fallbackScore)) : Math.max(0, Math.min(100, elementScore));
+      }
+
+      function setStats(summary){
+        $("statTotal").textContent = summary.total;
+        $("statDetached").textContent = summary.detached;
+        $("statText").textContent = summary.unstyledText;
+        $("statFills").textContent = summary.rogueFills;
+        $("statStrokes").textContent = summary.rogueStrokes;
+
+        const scanned = Number(summary.scannedElements || 0);
+        const withIssues = Number(summary.elementsWithIssues || 0);
+
+        const score = computeHealthScore(summary);
+
+        // Status line should emphasize coverage, but read nicely when perfect.
+        const totalIssues = Number(summary.total || 0);
+        const elWord = (n) => (Number(n) === 1 ? "element" : "elements");
+        const hasHave = (n) => (Number(n) === 1 ? "has" : "have");
+
+        const elementsLine = scanned > 0
+          ? (withIssues === 0
+              ? `${scanned} audited ${elWord(scanned)} without issues.`
+              : `${withIssues} of ${scanned} audited ${elWord(scanned)} ${hasHave(withIssues)} issues.`)
+          : `Found ${totalIssues} total issues in scan.`;
+
+        // Health % is shown in the gauge; use this line to communicate audit coverage.
+        $("statusSub").textContent = elementsLine;
+        state.lastStatusSub = elementsLine;
+
+        // Safety reset: if auto-fix is not active, ensure progress UI + button state are restored.
+        if (!autofixState.allActive) {
+          setAutofixProgressUI(false, "", 0);
+          setAutofixInline(false, "", 0);
+          const proBtn = document.getElementById('proAutofixBtn');
+          if (proBtn) {
+            const n = Number(summary.total || 0);
+            const label = proBtn.querySelector('.btnLabel');
+            if (label) label.textContent = `✨ Auto-fix all ${n} issues`;
+            proBtn.disabled = false;
+          }
+        }
+
+        // Update Pro button label and visibility, and bind click
+        const proBtn = document.getElementById('proAutofixBtn');
+        if (proBtn) {
+          const n = Number(summary.total || 0);
+          const label = proBtn.querySelector('.btnLabel');
+          if (label && !autofixState.allActive) label.textContent = `✨ Auto-fix all ${n} issues`;
+          if (autofixState.allActive) {
+            proBtn.disabled = true;
+          } else {
+            proBtn.disabled = false;
+          }
+
+          // Ensure the button is bound once
+          if (!proBtn.dataset.bound) {
+            proBtn.addEventListener('click', (e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              handleAutofixAll();
+            });
+            proBtn.dataset.bound = 'true';
+          }
+
+          // Hide tease when there are no issues
+          const tease = proBtn.closest('.proTease');
+          if (tease) tease.style.display = n > 0 ? 'block' : 'none';
+        }
+
+        // Use percent as the gauge value; keep letter-grade only for celebration logic.
+        const grade = scoreToGrade(score);
+        updateGauge(score, `${score}%`);
+
+        // Celebration for perfect scans (A-range + zero issues)
+        const isPerfect = (scanned > 0 ? withIssues === 0 : Number(summary.total || 0) === 0) && score >= 90;
+        // Hide the Issues section (and its divider) when the scan is perfect (100% health and no issues)
+        const secIssues = document.getElementById('secIssues');
+        const issuesDivider = document.getElementById('issuesDivider');
+        const shouldHideIssues = score === 100 && (withIssues === 0) && (Number(summary.total || 0) === 0);
+        if (secIssues) secIssues.style.display = shouldHideIssues ? 'none' : '';
+        if (issuesDivider) issuesDivider.style.display = shouldHideIssues ? 'none' : '';
+        const statusCard = document.querySelector('.statusCard');
+        const msgEl = document.getElementById('celebrateMsg');
+        const confetti = document.getElementById('confetti');
+
+        if (statusCard) statusCard.dataset.celebrate = String(isPerfect);
+        if (msgEl) msgEl.style.display = isPerfect ? 'block' : 'none';
+
+        if (confetti) {
+          confetti.style.display = isPerfect ? 'block' : 'none';
+          if (isPerfect) {
+            // Create a quick burst of confetti (deterministic enough + lightweight)
+            confetti.innerHTML = '';
+            const colors = ['#A3E635', '#22d3ee', '#a78bfa', '#f59e0b', '#ffffff'];
+            for (let i = 0; i < 18; i++) {
+              const s = document.createElement('span');
+              s.style.left = (6 + Math.random() * 88) + '%';
+              s.style.background = colors[i % colors.length];
+              s.style.animationDelay = (Math.random() * 120) + 'ms';
+              s.style.transform = `translateY(-10px) rotate(${Math.random()*40}deg)`;
+              confetti.appendChild(s);
+            }
+          } else {
+            confetti.innerHTML = '';
+          }
+        }
+      }
+
+      async function handleAutofixAll(){
+        if (!proState.verified) {
+          openProPurchasePage(PRO_CHECKOUT_URL);
+          return;
+        }
+        if (autofixState.preloadingAll) return;
+        const proBtn = document.getElementById('proAutofixBtn');
+        if (proBtn) {
+          const label = proBtn.querySelector('.btnLabel');
+          if (label) label.textContent = "⏳ Preparing fixes...";
+          proBtn.disabled = true;
+        }
+        setAutofixInline(true, "Preparing fixes...", 0);
+        setStatusTitle("Auto-fix: preparing fixes…");
+        await startAutofixPreload(true);
+        const plan = buildAutofixAllPlan();
+        if (!plan.total) {
+          setAutofixProgressUI(true, "No high-confidence fixes found.", 0);
+          setTimeout(() => setAutofixProgressUI(false, "", 0), 1200);
+          autofixState.preloadingAll = false;
+          if (proBtn) {
+            const label = proBtn.querySelector('.btnLabel');
+            if (label) label.textContent = `✨ Auto-fix all ${Number(state.summary.total || 0)} issues`;
+            proBtn.disabled = false;
+          }
+          setAutofixInline(false, "", 0);
+          return;
+        }
+        if (plan.total > 1000) {
+          const ok = window.confirm(`You are about to modify ${plan.total} layers. This may take a few moments. Continue?`);
+          if (!ok) return;
+        }
+        setAutofixProgressUI(false, "", 0);
+        setAutofixInline(true, "Auditing for high-confidence fixes...", 0);
+        autofixState.allActive = true;
+        autofixState.baseSummary = { ...state.summary };
+        autofixState.baseScore = computeHealthScore(state.summary);
+        autofixState.baseTotal = Number(state.summary.total || 0);
+        document.body.dataset.fixing = "true";
+        startFixingGauge();
+        if (state.lastStatusSub) {
+          $("statusSub").textContent = state.lastStatusSub;
+        }
+        if (proBtn) {
+          const label = proBtn.querySelector('.btnLabel');
+          if (label) label.textContent = `⏳ Auto-fixing ${plan.total} issues...`;
+          proBtn.disabled = true;
+        }
+        parent.postMessage({ pluginMessage: { type: "pro:autofix", items: plan.items, skipped: plan.skipped } }, "*");
+      }
+
+      function buildAutofixAllPlan(){
+        const issues = Array.isArray(state.issues) ? state.issues : [];
+        const detachedIds = new Set(issues.filter(i => i.type === "DETACHED_INSTANCE" && i.id).map(i => i.id));
+        const items = [];
+        const skipped = { lowConfidence: 0, mixedText: 0, noCandidate: 0, conflicts: 0 };
+
+        for (const issue of issues) {
+          if (!issue || !issue.id) continue;
+          if (issue.type === "DETACHED_INSTANCE") {
+            items.push({ id: issue.id, issueType: issue.type, kind: "detached", candidateId: "" });
+            continue;
+          }
+          if (detachedIds.has(issue.id)) {
+            skipped.conflicts += 1;
+            continue;
+          }
+          if (issue.type === "UNSTYLED_TEXT") {
+            if (issue.mixedText) {
+              skipped.mixedText += 1;
+              continue;
+            }
+            const key = `${issue.id}:text`;
+            const recId = autofixState.recommendedByKey[key];
+            const selectedId = autofixState.selectedByKey[key];
+            const candidates = autofixState.candidatesByKey[key] || [];
+            const chosenId = selectedId || recId || (candidates[0] && candidates[0].id);
+            const candidate = candidates.find(c => c.id === chosenId);
+            items.push({ id: issue.id, issueType: issue.type, kind: "text", candidateId: chosenId });
+            continue;
+          }
+          if (issue.type === "ROGUE_FILL" || issue.type === "ROGUE_STROKE") {
+            const kind = issue.type === "ROGUE_FILL" ? "fill" : "stroke";
+            const key = `${issue.id}:${kind}`;
+            const recId = autofixState.recommendedByKey[key];
+            const selectedId = autofixState.selectedByKey[key];
+            const candidates = autofixState.candidatesByKey[key] || [];
+            const chosenId = selectedId || recId || (candidates[0] && candidates[0].id);
+            items.push({ id: issue.id, issueType: issue.type, kind, candidateId: chosenId });
+          }
+        }
+
+        return { items, total: items.length, skipped };
+      }
+
+      function setAutofixProgressUI(active, progressText, percent){
+        const bar = document.getElementById("autofixProgress");
+        const barFill = document.getElementById("autofixProgressBar");
+        const text = document.getElementById("autofixProgressText");
+        if (bar) bar.style.display = active ? "block" : "none";
+        if (text) text.style.display = active ? "block" : "none";
+        if (text) text.textContent = progressText || "";
+        if (barFill) barFill.style.width = `${Math.max(0, Math.min(100, percent || 0))}%`;
+      }
+
+      function setAutofixInline(active, text, percent){
+        const box = document.getElementById("issuesBox");
+        const inline = document.getElementById("autofixInline");
+        const inlineText = document.getElementById("autofixInlineText");
+        const inlineBar = document.getElementById("autofixInlineBar");
+        const inlinePercent = document.getElementById("autofixInlinePercent");
+        const inlineRow = document.querySelector(".autofixInlineRow");
+        const inlineCancel = document.getElementById("autofixInlineCancel");
+        if (box) box.dataset.autofix = String(!!active);
+        if (inline) {
+          inline.classList.toggle("isVisible", !!active);
+          inline.style.display = active ? "flex" : "none";
+        }
+        if (inlineText) inlineText.textContent = text || "";
+        const clamped = Math.max(0, Math.min(100, percent || 0));
+        if (inlineBar) inlineBar.style.width = `${clamped}%`;
+        if (inlinePercent) inlinePercent.textContent = `${clamped}%`;
+        const isAudit = /auditing|preparing/i.test(String(text || "").toLowerCase());
+        if (inlineRow) inlineRow.style.display = isAudit ? "none" : "flex";
+        if (inlineCancel) {
+          inlineCancel.style.display = (active && !isAudit) ? "block" : "none";
+          inlineCancel.disabled = !!autofixState.canceling;
+          if (autofixState.canceling) inlineCancel.textContent = "Canceling...";
+          else inlineCancel.textContent = "Cancel Auto-fix";
+        }
+      }
+
+      function clearAutofixUI(){
+        setAutofixProgressUI(false, "", 0);
+        setAutofixInline(false, "", 0);
+        delete document.body.dataset.fixing;
+        stopFixingGauge();
+        autofixState.baseSummary = null;
+        autofixState.baseScore = null;
+        autofixState.baseTotal = null;
+        autofixState.canceling = false;
+        const proBtn = document.getElementById('proAutofixBtn');
+        if (proBtn) {
+          const n = Number(state.summary.total || 0);
+          const label = proBtn.querySelector('.btnLabel');
+          if (label) label.textContent = `✨ Auto-fix all ${n} issues`;
+          proBtn.disabled = false;
+        }
+      }
+
+        // color stat values to match design
+        try {
+          $("statTotal").style.color = '#ffffff';
+          $("statDetached").style.color = getComputedStyle(document.documentElement).getPropertyValue('--violet') || '#A47BF6';
+          $("statText").style.color = getComputedStyle(document.documentElement).getPropertyValue('--cyan') || '#22d3ee';
+          $("statFills").style.color = getComputedStyle(document.documentElement).getPropertyValue('--red') || '#f87171';
+          $("statStrokes").style.color = getComputedStyle(document.documentElement).getPropertyValue('--orange') || '#f59e0b';
+        } catch (e) {}
+        updateIssuesBoxHeight();
+        scheduleResizeToFit(80);
+        if (!autofixState.allActive) {
+          setAutofixInline(false, "", 0);
+        }
+      
+
+      // --- HealthGauge.tsx logic (adapted): SVG mask animation ---
+      let _gaugeAnim = null;
+      let _currentGaugeScore = 0;
+      let _gaugeTargetScore = 0;
+      let _fixGaugeActive = false;
+      let _fixGaugeValue = 0;
+      let _fixGaugeFrame = null;
+
+      function gaugeColor(score){
+        const s = Math.max(0, Math.min(100, Number(score || 0)));
+        // Use Systemic lime for A-range (celebration)
+        if (s >= 90) return "#A3E635";
+        if (s >= 80) return "#6366f1"; // indigo
+        if (s >= 70) return "#f59e0b"; // amber
+        if (s >= 60) return "#f97316"; // orange
+        return "#ef4444"; // red
+      }
+
+      function adjustColor(hex, amount){
+        const clean = String(hex || "").replace("#", "");
+        if (clean.length !== 6) return hex;
+        const num = parseInt(clean, 16);
+        const clamp = (v) => Math.max(0, Math.min(255, v));
+        const r = clamp((num >> 16) + amount);
+        const g = clamp(((num >> 8) & 0xff) + amount);
+        const b = clamp((num & 0xff) + amount);
+        return "#" + [r,g,b].map(v => v.toString(16).padStart(2, "0")).join("");
+      }
+
+      function maskPathForScore(score){
+        const s = Math.max(0, Math.min(100, Number(score || 0)));
+        // angle from 180° (left) to 360° (right)
+        const angleDeg = 180 + (s / 100) * 180;
+        const rad = (angleDeg * Math.PI) / 180;
+        const x = 55 + 60 * Math.cos(rad);
+        const y = 55 + 60 * Math.sin(rad);
+        return `M 55 55 L -5 55 A 60 60 0 0 1 ${x} ${y} Z`;
+      }
+
+      function easeOutCubic(t){
+        return 1 - Math.pow(1 - t, 3);
+      }
+
+      function updateGauge(score, grade, animate = true, force = false){
+        const gauge = document.querySelector('[data-gauge]');
+        if (!gauge) return;
+
+        const maskDef = gauge.querySelector('[data-role="maskDef"]');
+        const maskPath = gauge.querySelector('[data-role="mask"]');
+        const active = gauge.querySelector('[data-role="active"]');
+        const healthEl = gauge.querySelector('[data-role="grade"]');
+        const gradient = gauge.querySelector('[data-role="activeGradient"]');
+        const gradStopA = gradient ? gradient.querySelector('[data-role="gradStopA"]') : null;
+        const gradStopB = gradient ? gradient.querySelector('[data-role="gradStopB"]') : null;
+
+        if (!maskDef || !maskPath || !active || !healthEl) return;
+
+        // Ensure unique mask id (avoids weird SVG masking bugs)
+        if (!gauge.dataset.maskId){
+          const uid = "systemic-gauge-mask-" + Math.random().toString(16).slice(2);
+          gauge.dataset.maskId = uid;
+          maskDef.setAttribute("id", uid);
+          active.setAttribute("mask", `url(#${uid})`);
+        }
+        if (gradient && !gauge.dataset.gradId){
+          const gid = "systemic-gauge-gradient-" + Math.random().toString(16).slice(2);
+          gauge.dataset.gradId = gid;
+          gradient.setAttribute("id", gid);
+        }
+
+        const target = Math.max(0, Math.min(100, Number(score || 0)));
+        _gaugeTargetScore = target;
+        const color = gaugeColor(target);
+
+        // Apply color + text
+        if (gradStopA && gradStopB) {
+          gradStopA.setAttribute("stop-color", adjustColor(color, 28));
+          gradStopB.setAttribute("stop-color", adjustColor(color, -24));
+        }
+        active.setAttribute("fill", color);
+        healthEl.style.color = color;
+        healthEl.textContent = grade;
+
+        // Cancel any existing animation
+        if (_gaugeAnim != null) {
+          cancelAnimationFrame(_gaugeAnim);
+          _gaugeAnim = null;
+        }
+
+        if (!animate) {
+          _currentGaugeScore = target;
+          maskPath.setAttribute("d", maskPathForScore(target));
+          return;
+        }
+
+        const start = _currentGaugeScore;
+        const delta = target - start;
+        const duration = 700;
+        const t0 = performance.now();
+
+        const tick = (now) => {
+          const t = Math.min(1, (now - t0) / duration);
+          const eased = easeOutCubic(t);
+          const value = start + delta * eased;
+          maskPath.setAttribute("d", maskPathForScore(value));
+
+          if (t < 1) {
+            _gaugeAnim = requestAnimationFrame(tick);
+          } else {
+            _currentGaugeScore = target;
+            _gaugeAnim = null;
+          }
+        };
+
+        maskPath.setAttribute("d", maskPathForScore(start));
+        _gaugeAnim = requestAnimationFrame(tick);
+      }
+
+      function startFixingGauge(){
+        _fixGaugeActive = false;
+        if (_fixGaugeFrame != null) {
+          cancelAnimationFrame(_fixGaugeFrame);
+          _fixGaugeFrame = null;
+        }
+        updateGauge(_gaugeTargetScore, `${Math.round(_gaugeTargetScore)}%`, false, true);
+      }
+
+      function stopFixingGauge(){
+        _fixGaugeActive = false;
+        if (_fixGaugeFrame != null) {
+          cancelAnimationFrame(_fixGaugeFrame);
+          _fixGaugeFrame = null;
+        }
+        updateGauge(_gaugeTargetScore, `${Math.round(_gaugeTargetScore)}%`, false, true);
+      }
+
+            function showResults(visible){
+              const el = $("results");
+              if (!el) return;
+
+              if (visible){
+                el.style.display = "flex";
+
+                // Restart transitions/animations every time we show results
+                el.classList.remove("isVisible");
+                void el.offsetHeight; // force reflow
+
+                // next frame: allow transition + stagger animations to run
+                requestAnimationFrame(() => el.classList.add("isVisible"));
+              } else {
+                el.classList.remove("isVisible");
+                // after transition: hide
+                window.setTimeout(() => {
+                  if (!el.classList.contains("isVisible")) {
+                    el.style.display = "none";
+                    // Now that layout has actually changed, resize to fit
+                    requestResizeToFit();
+                  }
+                }, 220);
+              }
+            }
+
+      function showNoSelection(){
+        // Mark empty-state view first so CSS hides data-driven blocks
+        document.body.dataset.view = "no-selection";
+
+        const empty = document.getElementById("noSelectionState");
+        const content = document.getElementById("resultsContent");
+
+        // Hide data-driven UI BEFORE showing/animating results (prevents a flash)
+        if (content) {
+          content.hidden = true;
+          content.style.display = "none";
+        }
+        if (empty) {
+          empty.hidden = false;
+          empty.style.display = "block";
+        }
+
+        // Now show the results container
+        showResults(true);
+
+        // Replay the empty-state animation (it may not re-run when toggling display)
+        const card = empty ? empty.querySelector('.noSelectionCard') : null;
+        if (card) {
+          card.style.animation = 'none';
+          void card.offsetHeight; // force reflow
+          card.style.animation = '';
+        }
+
+        scheduleResizeToFit();
+      }
+
+      function hideNoSelection(){
+        delete document.body.dataset.view;
+        const empty = document.getElementById("noSelectionState");
+        const content = document.getElementById("resultsContent");
+        if (empty) {
+          empty.hidden = true;
+          empty.style.display = "none";
+        }
+        if (content) {
+          content.hidden = false;
+          content.style.display = "block";
+        }
+        scheduleResizeToFit();
+      }
+
+      function setScanButtonLoading(loading){
+        const btn = $("scanBtn");
+        state.isScanning = loading;
+        btn.disabled = loading;
+        $("resetBtn").disabled = loading;
+
+        if (loading){
+          btn.innerHTML = `<span class="spinner"></span><span class="btnLabel"> Scanning…</span>`;
+        } else {
+          btn.innerHTML = `<span class="btnLabel">Scan selection</span>`;
+        }
+
+        updateScanDisabled();
+      }
+
+      function updateScanDisabled(){
+        $("scanBtn").disabled = !!state.isScanning;
+      }
+
+      function resetAll(){
+        state.scanComplete = false;
+        state.activeFilter = "all";
+        state.issues = [];
+        state.summary = { total: 0, detached: 0, unstyledText: 0, rogueFills: 0, rogueStrokes: 0 };
+        setDataLoading(false);
+        const isNoSelectionView = document.body.dataset.view === "no-selection";
+
+        // Always hide data-driven content immediately on reset (prevents any 1-frame flash)
+        const content = document.getElementById("resultsContent");
+        if (content) {
+          content.hidden = true;
+          content.style.display = "none";
+        }
+
+        // If the empty state is currently active, keep it visible
+        if (isNoSelectionView) {
+          showNoSelection();
+        } else {
+          showResults(false);
+          hideNoSelection();
+        }
+        setStats(state.summary);
+        updateGauge(0, "—", false);
+        setFiltersActive();
+        renderList();
+        setStatusTitle("Status: idle");
+        updateScanDisabled();
+        // Always resize to the *currently visible* content after the UI settles.
+        // If we are hiding results, wait for the fade-out to complete; otherwise fit immediately.
+        const wait = isNoSelectionView ? 120 : 320;
+        scheduleResizeToFit(wait);
+      }
+
+      function setupCollapsibles(){
+        // inline SVGs for chevrons (24x24)
+        const svgUp = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 14l5-5 5 5"/></svg>';
+        const svgDown = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 10l5 5 5-5"/></svg>';
+
+        document.querySelectorAll(".sectionHeader[data-toggle]").forEach(h => {
+          const id = h.getAttribute("data-toggle");
+          const sec = document.getElementById(id);
+
+          // ensure icon matches initial open state
+          const icon = h.querySelector('.chev .chevIcon');
+          if (icon && sec) {
+            icon.style.opacity = '1';
+            icon.innerHTML = (sec.dataset.open !== "false") ? svgUp : svgDown;
+          }
+
+          h.addEventListener("click", () => {
+            const id = h.getAttribute("data-toggle");
+            const sec = document.getElementById(id);
+            const open = sec.dataset.open !== "false";
+            sec.dataset.open = open ? "false" : "true";
+
+            // fade icon out, swap SVG, fade in
+            const icon = h.querySelector('.chev .chevIcon');
+            if (icon) {
+              icon.style.opacity = '0';
+              window.setTimeout(() => {
+                icon.innerHTML = (sec.dataset.open !== "false") ? svgUp : svgDown;
+                icon.style.opacity = '1';
+              }, 120);
+            }
+            updateIssuesBoxHeight();
+            scheduleIssuesResize();
+            scheduleResizeToFit(280);
+          });
+        });
+      }
+
+      function setupFilters(){
+        $("filterAll").onclick = () => {
+          state.activeFilter = "all";
+          setFiltersActive();
+          renderList();
+          scheduleResizeToFit(80);
+        };
+        $("filterDetached").onclick = () => {
+          state.activeFilter = "DETACHED_INSTANCE";
+          setFiltersActive();
+          renderList();
+          scheduleResizeToFit(80);
+        };
+        $("filterText").onclick = () => {
+          state.activeFilter = "UNSTYLED_TEXT";
+          setFiltersActive();
+          renderList();
+          scheduleResizeToFit(80);
+        };
+        $("filterFills").onclick = () => {
+          state.activeFilter = "ROGUE_FILL";
+          setFiltersActive();
+          renderList();
+          scheduleResizeToFit(80);
+        };
+        $("filterStrokes").onclick = () => {
+          state.activeFilter = "ROGUE_STROKE";
+          setFiltersActive();
+          renderList();
+          scheduleResizeToFit(80);
+        };
+      }
+
+      function setupOptionCards(){
+        // Make whole optCard clickable and toggle the associated input
+        document.querySelectorAll('.optCard').forEach(card => {
+          card.addEventListener('click', (e) => {
+            const input = card.querySelector('input[type="checkbox"]');
+            if (!input) return;
+
+          // If the click is on the switch/label or the input itself, let the native label toggle happen.
+            // This avoids toggling twice (label toggles + our handler toggles).
+            if (e.target === input) return;
+            if (e.target && e.target.closest && e.target.closest('.switch')) return;
+
+            input.checked = !input.checked;
+            input.dispatchEvent(new Event('change', { bubbles: true }));
+          });
+        });
+      }
+
+      ["includeChildren","detachedInstances","textWithoutStyle","rogueFills","rogueStrokes"].forEach(id => {
+        $(id).addEventListener("change", () => {
+          updateSwitchUI();
+        });
+      });
+
+        $("scanBtn").onclick = () => {
+          const options = getOptions();
+
+          setStatusTitle("Status: scanning selection…");
+          setScanButtonLoading(true);
+          setDataLoading(true);
+          resetAutofixState();
+          hideNoSelection();
+          showResults(true);
+          updateScanDisabled();
+
+        // Send request to plugin host if available (normal behavior)
+        try {
+          if (window.parent && window.parent !== window) {
+            parent.postMessage({ pluginMessage: { type: "run-audit", options } }, "*");
+          }
+        } catch (e) {
+          // ignore
+        }
+
+        // Simulate an audit result after a short delay so the UI shows results
+        // during local testing. If a real audit-result arrives first, the
+        // timer is cleared in the onmessage handler.
+        if (SIMULATE_AUDIT) {
+          if (window._simAuditTimer) clearTimeout(window._simAuditTimer);
+          window._simAuditTimer = setTimeout(() => {
+            const fakeIssues = [
+              { id: '1', name: 'Button without style', path: 'UI / Header / Button', type: 'UNSTYLED_TEXT' },
+              { id: '2', name: 'Detached icon', path: 'UI / Sidebar / Icon', type: 'DETACHED_INSTANCE' },
+              { id: '3', name: 'Rectangle fill', path: 'UI / Card / Background', type: 'ROGUE_FILL' }
+            ];
+            const summary = { total: 3, detached: 1, unstyledText: 1, rogueFills: 1, scannedElements: 10, elementsWithIssues: 2 };
+
+            // Post to window so existing onmessage handler processes it the same
+            // way a real plugin message would be handled.
+            window.postMessage({ pluginMessage: { type: 'audit-result', issues: fakeIssues, summary } }, '*');
+            window._simAuditTimer = null;
+          }, 700);
+        }
+      };
+
+      $("resetBtn").onclick = resetAll;
+
+      window.onmessage = (event) => {
+        // If we started a simulated audit, cancel the fallback timer when any
+        // message arrives (real response will follow through below).
+        if (SIMULATE_AUDIT && window._simAuditTimer) { clearTimeout(window._simAuditTimer); window._simAuditTimer = null; }
+
+        const msg = event.data.pluginMessage;
+        if (!msg) return;
+
+        if (msg.type === "audit:progress") {
+          const processed = Number(msg.processed || 0);
+          const total = Number(msg.total || 0);
+          const name = String(msg.name || "");
+          const sub = document.querySelector(".loadingSub");
+          if (sub) {
+            const pct = total > 0 ? Math.round((processed / total) * 100) : 0;
+            sub.textContent = `Auditing ${processed}/${total} (${pct}%)${name ? ` — ${name}` : ""}`;
+          }
+          return;
+        }
+
+        if (msg.type === "pro:verify:state") {
+          if (msg.state === "verifying") {
+            proState.verifying = true;
+            setVerifyUI("verifying", "Verifying…");
+          }
+          return;
+        }
+
+        if (msg.type === "pro:entitlements") {
+          const isPro = !!(msg.entitlements && msg.entitlements.pro) || !!msg.isPro;
+          proState.entitlements = msg.entitlements || {};
+          proState.verified = isPro;
+          proState.verifying = false;
+          if (typeof msg.licenseKey === "string" && msg.licenseKey) {
+            proState.licenseKey = msg.licenseKey;
+          }
+          if (typeof msg.licenseKeyLast4 === "string" && msg.licenseKeyLast4) {
+            proState.licenseKeyLast4 = msg.licenseKeyLast4;
+          }
+          setVerifyUI(isPro ? "verified" : "idle", isPro ? "License key verified" : "Not verified");
+          setProLockedUI(isPro);
+          setProDebugToggle(isPro);
+          setProKeyDisplay(proState.licenseKey, proState.licenseKeyLast4);
+          if (!isPro) {
+            resetAutofixState();
+          }
+          renderList();
+          return;
+        }
+
+          if (msg.type === "pro:verify:result") {
+            const isPro = !!(msg.entitlements && msg.entitlements.pro) || !!msg.isPro;
+            const errorText = typeof msg.error === "string" ? msg.error : null;
+            const statusText = typeof msg.status === "string" ? msg.status : null;
+            proState.verifying = false;
+            if (msg.ok && isPro) {
+              proState.verified = true;
+            const inputFallback = document.getElementById("proKeyInput");
+            const inputValue = inputFallback && inputFallback.value ? String(inputFallback.value).trim() : "";
+            if (!proState.pendingLicenseKey && inputValue) {
+              proState.pendingLicenseKey = inputValue;
+            }
+            proState.licenseKey = typeof msg.licenseKey === "string"
+              ? msg.licenseKey
+              : (proState.pendingLicenseKey || proState.licenseKey);
+            proState.licenseKeyLast4 = typeof msg.licenseKeyLast4 === "string" ? msg.licenseKeyLast4 : proState.licenseKeyLast4;
+              setVerifyUI("verified", "License key verified");
+              setProLockedUI(true);
+            setProKeyDisplay(proState.licenseKey, proState.licenseKeyLast4);
+            } else {
+            proState.verified = false;
+            setVerifyUI("error", errorText || statusText || "Could not verify license. Please try again.");
+            setProLockedUI(false);
+            setProKeyDisplay("", "");
+          }
+          proState.pendingLicenseKey = "";
+          if (!proState.verified) {
+            resetAutofixState();
+          }
+          renderList();
+          return;
+        }
+
+        if (msg.type === "pro:autofix:candidates") {
+          const key = String(msg.key || "");
+          if (!key) return;
+          if (!proState.verified) {
+            markCandidateDone(key);
+            return;
+          }
+          if (autofixState.pendingTimers[key]) {
+            clearTimeout(autofixState.pendingTimers[key]);
+            delete autofixState.pendingTimers[key];
+          }
+          autofixQueue.inFlight.delete(key);
+          const candidates = Array.isArray(msg.candidates) ? msg.candidates : [];
+          if ((!candidates || candidates.length === 0) && msg.debug) {
+            try {
+              console.info("[Systemic][autofix:candidates] no matches", { key, debug: msg.debug });
+            } catch {}
+            const libCollections = Number(msg.debug.libraryCollections || 0);
+            const libCount = Number(msg.debug.libraryVariables || 0);
+            const libImporting = !!msg.debug.libraryImporting;
+            if (libImporting) {
+              const dropdown = document.querySelector(`.fixDropdown[data-issue-key="${key}"]`);
+              const trigger = dropdown ? dropdown.querySelector(".fixTrigger") : null;
+              const menu = dropdown ? dropdown.querySelector(".fixMenu") : null;
+              const fixBtn = document.querySelector(`.fixBtn[data-issue-key="${key}"]`);
+              if (dropdown && trigger && menu && fixBtn) {
+                setAutofixLoading(key, dropdown, trigger, menu, fixBtn);
+              }
+              scheduleCandidateRetry(key, 1200);
+              if (autofixState.preloadingAll) {
+                autofixState.preloadInFlight = Math.max(0, autofixState.preloadInFlight - 1);
+                processAutofixPreloadQueue();
+              }
+              return;
+            }
+            if (libCollections > 0 && libCount === 0) {
+              // Libraries enabled but variables still importing; keep loading state.
+              const dropdown = document.querySelector(`.fixDropdown[data-issue-key="${key}"]`);
+              const trigger = dropdown ? dropdown.querySelector(".fixTrigger") : null;
+              const menu = dropdown ? dropdown.querySelector(".fixMenu") : null;
+              const fixBtn = document.querySelector(`.fixBtn[data-issue-key="${key}"]`);
+              if (dropdown && trigger && menu && fixBtn) {
+                setAutofixLoading(key, dropdown, trigger, menu, fixBtn);
+              }
+              scheduleCandidateRetry(key, 1200);
+              if (autofixState.preloadingAll) {
+                autofixState.preloadInFlight = Math.max(0, autofixState.preloadInFlight - 1);
+                processAutofixPreloadQueue();
+              }
+              return;
+            }
+            autofixState.candidatesByKey[key] = candidates;
+            autofixState.recommendedByKey[key] = String(msg.recommendedId || "");
+            if (msg.mixed) {
+              const id = key.split(":")[0];
+              const row = document.querySelector(`.row[data-issue-id="${id}"]`);
+              if (row && !row.querySelector(".fixWarning")) {
+                const warn = document.createElement("div");
+                warn.className = "fixWarning";
+                warn.textContent = "Mixed styles detected. Applying a style will reset local formatting.";
+                row.appendChild(warn);
+              }
+            }
+            markCandidateDone(key);
+            const trigger = document.querySelector(`.fixTrigger[data-issue-key="${key}"]`);
+            const dropdown = document.querySelector(`.fixDropdown[data-issue-key="${key}"]`);
+            const fixBtn = document.querySelector(`.fixBtn[data-issue-key="${key}"]`);
+            if (trigger) {
+              const valueEl = trigger.querySelector(".fixValue");
+              if (valueEl) {
+                if (libCollections === 0) {
+                  valueEl.textContent = "Enable variable libraries to match";
+                } else if (libCount === 0) {
+                  valueEl.textContent = "Library variables unavailable";
+                } else {
+                  valueEl.textContent = "No matching variables";
+                }
+              }
+              trigger.disabled = true;
+            }
+            if (dropdown) dropdown.dataset.value = "";
+            if (fixBtn) fixBtn.disabled = true;
+            return;
+          }
+          autofixState.candidatesByKey[key] = candidates;
+          autofixState.recommendedByKey[key] = String(msg.recommendedId || "");
+          if (msg.mixed) {
+            const id = key.split(":")[0];
+            const row = document.querySelector(`.row[data-issue-id="${id}"]`);
+            if (row && !row.querySelector(".fixWarning")) {
+              const warn = document.createElement("div");
+              warn.className = "fixWarning";
+              warn.textContent = "Mixed styles detected. Applying a style will reset local formatting.";
+              row.appendChild(warn);
+            }
+          }
+          markCandidateDone(key);
+          updateAutofixRow(key);
+          if (autofixState.preloadingAll && autofixState.preloadRemaining.has(key)) {
+            autofixState.preloadRemaining.delete(key);
+            autofixState.preloadInFlight = Math.max(0, autofixState.preloadInFlight - 1);
+            autofixState.preloadDone = (autofixState.preloadTotal - autofixState.preloadRemaining.size);
+            updatePreloadProgress();
+            processAutofixPreloadQueue();
+          }
+          scheduleAutofixQueue();
+          return;
+        }
+
+        if (msg.type === "pro:autofix:result") {
+          const id = String(msg.id || "");
+          const issueType = String(msg.issueType || "");
+          const ok = !!msg.ok;
+          const row = document.querySelector(`.row[data-issue-id="${id}"]`);
+          const fixBtn = document.querySelector(`.fixBtn[data-issue-id="${id}"]`);
+          const trigger = document.querySelector(`.fixTrigger[data-issue-id="${id}"]`);
+          if (fixBtn) {
+            if (issueType === "DETACHED_INSTANCE") {
+              fixBtn.textContent = ok ? "Relinked" : "Relink";
+            } else {
+              fixBtn.textContent = ok ? "Fixed" : "Fix";
+            }
+            fixBtn.disabled = ok ? true : false;
+            if (ok) {
+              fixBtn.dataset.state = "done";
+            } else {
+              fixBtn.dataset.state = "";
+            }
+          }
+          if (trigger && ok) trigger.disabled = true;
+          if (row && ok) row.dataset.fixed = "true";
+          if (ok) {
+            const idx = state.issues.findIndex((issue) => issue.id === id && (!issueType || issue.type === issueType));
+            if (idx !== -1) state.issues.splice(idx, 1);
+            state.summary = recalcSummaryFromIssues(state.issues, state.summary);
+            setStats(state.summary);
+            renderList();
+          }
+          return;
+        }
+
+        if (msg.type === "pro:autofix:progress") {
+          if (!autofixState.allActive) return;
+          const total = Number(msg.total || 0);
+          const processed = Number(msg.processed || 0);
+          const resolved = Number(msg.resolved || 0);
+          const phase = String(msg.phase || "");
+          setAutofixProgressUI(false, "", 0);
+          if (state.lastStatusSub) {
+            $("statusSub").textContent = state.lastStatusSub;
+          }
+          if (autofixState.baseSummary) {
+            const baseScore = typeof autofixState.baseScore === "number" ? autofixState.baseScore : computeHealthScore(autofixState.baseSummary);
+            const progressTotal = total > 0 ? total : 0;
+            if (progressTotal > 0) {
+              const ratio = Math.max(0, Math.min(1, processed / progressTotal));
+              const score = Math.round(baseScore + (100 - baseScore) * ratio);
+              updateGauge(score, `${score}%`, false, true);
+            } else {
+              const remaining = Math.max(0, Number(autofixState.baseSummary.total || 0) - resolved);
+              const tempSummary = { ...autofixState.baseSummary, total: remaining };
+              const score = computeHealthScore(tempSummary, true);
+              updateGauge(score, `${score}%`, false, true);
+            }
+          }
+          if (phase === "start") {
+            setStatusTitle("Auto-fix: preparing fixes…");
+            setAutofixInline(true, "Auditing for high-confidence fixes...", 0);
+          } else {
+            const pct = total > 0 ? Math.round((processed / total) * 100) : 0;
+            setStatusTitle("Auto-fix: running");
+            setAutofixInline(true, `Fixing ${processed}/${total} inconsistencies...`, pct);
+          }
+          return;
+        }
+
+        if (msg.type === "pro:autofix:done") {
+          autofixState.allActive = false;
+          autofixState.canceling = false;
+          const total = Number(msg.total || 0);
+          const resolved = Number(msg.resolved || 0);
+          const failed = Number(msg.failed || 0);
+          const skipped = msg.skipped || {};
+          const resolvedItems = Array.isArray(msg.resolvedItems) ? msg.resolvedItems : [];
+          if (resolvedItems.length) {
+            const resolvedIds = new Set(resolvedItems.map((item) => item.id));
+            state.issues = state.issues.filter((issue) => {
+              return !resolvedIds.has(issue.id);
+            });
+            state.summary = recalcSummaryFromIssues(state.issues, state.summary);
+            setStats(state.summary);
+            renderList();
+          }
+          const manual = Number(skipped.lowConfidence || 0) + Number(skipped.mixedText || 0) + Number(skipped.noCandidate || 0) + Number(skipped.conflicts || 0);
+          if (state.scanComplete) {
+            setStatusTitle(msg.canceled ? "Auto-fix: canceled" : "Scan status: completed");
+          } else {
+            setStatusTitle(msg.canceled ? "Auto-fix: canceled" : "Status: idle");
+          }
+          clearAutofixUI();
+          // Ask host to prune any stale items or fixes already resolved.
+          const items = state.issues.map((issue) => ({ id: issue.id, issueType: issue.type }));
+          parent.postMessage({ pluginMessage: { type: "issues:validate", items } }, "*");
+          setStats(state.summary);
+          return;
+        }
+
+        if (msg.type === "issues:resolved") {
+          const resolvedIds = Array.isArray(msg.resolvedIds) ? msg.resolvedIds.map(String) : [];
+          if (!resolvedIds.length) return;
+          const resolvedSet = new Set(resolvedIds);
+          const before = state.issues.length;
+          state.issues = state.issues.filter((issue) => !resolvedSet.has(String(issue.id)));
+          if (state.issues.length !== before) {
+            state.summary = recalcSummaryFromIssues(state.issues, state.summary);
+            setStats(state.summary);
+            renderList();
+          }
+          return;
+        }
+
+        if (msg.type === "no-selection") {
+          setScanButtonLoading(false);
+          state.scanComplete = false;
+          showNoSelection();
+          // Clear any previous scan data (even though it’s hidden)
+          state.issues = [];
+          state.summary = { total: 0, detached: 0, unstyledText: 0, rogueFills: 0, rogueStrokes: 0 };
+          state.activeFilter = "all";
+          setStats(state.summary);
+          renderList();
+          setStatusTitle("Status: idle");
+          return;
+        }
+
+        if (msg.type === "locate-status") {
+          // Do not overwrite the scan status title with locate/focus messages.
+          // (Selection still happens; we just keep the status copy stable.)
+          if (msg.status === "error" && msg.id) {
+            const id = String(msg.id);
+            const before = state.issues.length;
+            state.issues = state.issues.filter((issue) => issue.id !== id);
+            if (state.issues.length !== before) {
+              state.summary = recalcSummaryFromIssues(state.issues, state.summary);
+              setStats(state.summary);
+              renderList();
+            }
+          }
+          return;
+        }
+
+        if (msg.type === "audit-result") {
+          setScanButtonLoading(false);
+          setDataLoading(false);
+
+          state.scanComplete = true;
+          state.activeFilter = "all";
+          state.issues = msg.issues || [];
+
+          const s = msg.summary || { total: 0, detached: 0, unstyledText: 0, rogueFills: 0, rogueStrokes: 0 };
+          // Preserve any additional summary fields coming from code.ts
+          const scannedElements = Number(
+            (s.scannedElements ?? s.auditedElements ?? s.totalElements ?? s.elementsAudited ?? msg.scannedElements) || 0
+          );
+          const elementsWithIssues = Number(
+            (s.elementsWithIssues ?? s.auditedElementsWithIssues ?? s.elementsWithFindings ?? msg.elementsWithIssues) || 0
+          );
+
+          state.summary = {
+            total: Number(s.total || 0),
+            detached: Number(s.detached || 0),
+            unstyledText: Number(s.unstyledText || 0),
+            rogueFills: Number(s.rogueFills || 0),
+            rogueStrokes: Number(s.rogueStrokes || 0),
+            scannedElements,
+            elementsWithIssues,
+          };
+
+          hideNoSelection();
+          showResults(true);
+
+          // Update stats, then render list, then resize after layout settles
+          requestAnimationFrame(() => {
+            setStats(state.summary);
+            renderList();
+            requestAnimationFrame(() => scheduleResizeToFit(80));
+          });
+
+          setFiltersActive();
+          setStatusTitle(`Scan status: completed`);
+          if (!autofixState.allActive) {
+            clearAutofixUI();
+          }
+          setDataLoading(false);
+        }
+      };
+
+      // Resize handles (all edges + corners)
+      const resizeHandles = document.querySelectorAll(".resize-handle");
+      let isDragging = false;
+      let startX = 0;
+      let startY = 0;
+      let startW = 0;
+      let startH = 0;
+      let dragDir = "se";
+
+      const MIN_W = 360;
+      const MIN_H = 520;
+
+      resizeHandles.forEach((handle) => {
+        handle.addEventListener("pointerdown", (e) => {
+          const dir = handle.getAttribute("data-dir") || "se";
+          dragDir = dir;
+          isDragging = true;
+          startX = e.clientX;
+          startY = e.clientY;
+          startW = document.documentElement.clientWidth;
+          startH = document.documentElement.clientHeight;
+          handle.setPointerCapture(e.pointerId);
+        });
+
+        handle.addEventListener("pointermove", (e) => {
+          if (!isDragging) return;
+          const dx = e.clientX - startX;
+          const dy = e.clientY - startY;
+          let nextW = startW;
+          let nextH = startH;
+          if (dragDir.includes("e")) nextW = startW + dx;
+          if (dragDir.includes("w")) nextW = startW - dx;
+          if (dragDir.includes("s")) nextH = startH + dy;
+          if (dragDir.includes("n")) nextH = startH - dy;
+          nextW = Math.max(MIN_W, Math.round(nextW));
+          nextH = Math.max(MIN_H, Math.round(nextH));
+          parent.postMessage({ pluginMessage: { type: "resize", width: nextW, height: nextH } }, "*");
+        });
+
+        handle.addEventListener("pointerup", () => {
+          isDragging = false;
+        });
+        handle.addEventListener("pointercancel", () => {
+          isDragging = false;
+        });
+      });
+
+      setupCollapsibles();
+      setupFilters();
+      setupOptionCards();
+      bindProModalUI();
+      bindProDebugToggle();
+      bindFixDropdownClose();
+      bindAutofixQueueScroll();
+      updateSwitchUI();
+      setFiltersActive();
+      resetAll();
+      parent.postMessage({ pluginMessage: { type: "pro:get-entitlements" } }, "*");
+
+      const cancelBtn = document.getElementById("autofixInlineCancel");
+      if (cancelBtn && !cancelBtn.dataset.bound) {
+        cancelBtn.addEventListener("click", (e) => {
+          e.preventDefault();
+          if (autofixState.canceling) return;
+          autofixState.canceling = true;
+          cancelBtn.textContent = "Canceling...";
+          cancelBtn.disabled = true;
+          parent.postMessage({ pluginMessage: { type: "pro:autofix:cancel" } }, "*");
+        });
+        cancelBtn.dataset.bound = "true";
+      }
+
+      window.addEventListener("resize", () => {
+        updateIssuesBoxHeight();
+      });
+    </script>
+  </body>
+</html>
