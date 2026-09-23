@@ -1,7 +1,7 @@
 const DEFAULT_W = 440;
 const DEFAULT_H = 540;
 const MIN_W = 360;
-const MIN_H = 540;
+const MIN_H = 360; // the condensed empty/no-selection state fits well under this
 
 // Show the plugin window
 figma.showUI(__html__, { width: DEFAULT_W, height: DEFAULT_H, title: "Systemic Auditor" });
@@ -20,7 +20,7 @@ figma.showUI(__html__, { width: DEFAULT_W, height: DEFAULT_H, title: "Systemic A
 // PRO / LICENSE GATING
 // =======================
 
-type ProFeature = "autofix" | "export" | "rules" | "themes" | "reports";
+type ProFeature = "autofix" | "export";
 
 type Entitlements = {
   pro: boolean;
@@ -34,6 +34,7 @@ const ENTITLEMENTS_STORAGE_KEY = "systemic_entitlements_v1";
 const LICENSE_KEY_STORAGE_KEY = "systemic_license_key_v1";
 const INSTANCE_ID_STORAGE_KEY = "systemic_instance_id";
 const DEBUG_PRO_STORAGE_KEY = "systemic_debug_pro_override";
+const SCANNER_OPTIONS_STORAGE_KEY = "systemic_scanner_options_v1";
 
 // ✅ DEV OVERRIDE (set true locally when testing Pro features)
 const DEV_PRO = false;
@@ -49,7 +50,7 @@ const WORKER_ACTIVATE_URL = `${LICENSE_WORKER_BASE}/activate`;
 // NOTE: This is still visible in the plugin bundle; later we can harden this.
 const SYSTEMIC_TOKEN = "rK8pVt_3Qm7nZx2Lh6YbW9cD1sF4aJ0uN5gHkP2eT8vXqM3iR7wS1yU6oC9lB4d";
 
-const ALL_PRO_FEATURES: ProFeature[] = ["autofix", "export", "rules", "themes", "reports"];
+const ALL_PRO_FEATURES: ProFeature[] = ["autofix", "export"];
 
 function stringifyMessage(value: unknown): string {
   if (typeof value === "string") return value;
@@ -76,9 +77,6 @@ function makeDefaultEntitlements(): Entitlements {
     features: {
       autofix: false,
       export: false,
-      rules: false,
-      themes: false,
-      reports: false,
     },
   };
 }
@@ -116,11 +114,6 @@ async function loadEntitlements(): Promise<Entitlements> {
   return makeDefaultEntitlements();
 }
 
-async function saveEntitlements(ent: Entitlements): Promise<void> {
-  // Intentionally no-op: Pro status is kept in-memory only per session.
-  void ent;
-}
-
 function hasFeature(ent: Entitlements, feature: ProFeature): boolean {
   return !!ent.pro && !!ent.features?.[feature] && !isExpired(ent);
 }
@@ -132,6 +125,8 @@ async function loadLibraryVariables(varsApi: any, force = false): Promise<Variab
   if (!varsApi || typeof varsApi.importVariableByKeyAsync !== "function") {
     return [];
   }
+  // A load is already running: share it instead of importing the same variables twice.
+  if (libraryLoadPromise) return libraryLoadPromise;
   const now = Date.now();
   if (!force && libraryVariablesLoaded) {
     return Array.from(libraryVariableCache.values());
@@ -140,6 +135,17 @@ async function loadLibraryVariables(varsApi: any, force = false): Promise<Variab
     return [];
   }
   libraryVariablesLastAttempt = now;
+  libraryLoadPromise = (async () => {
+    try {
+      return await importLibraryVariables(varsApi);
+    } finally {
+      libraryLoadPromise = null;
+    }
+  })();
+  return libraryLoadPromise;
+}
+
+async function importLibraryVariables(varsApi: any): Promise<Variable[]> {
   libraryVariablesLoading = true;
   try {
     const collections = await figma.teamLibrary.getAvailableLibraryVariableCollectionsAsync();
@@ -178,13 +184,94 @@ async function loadLibraryVariables(varsApi: any, force = false): Promise<Variab
 
 let entitlements: Entitlements = makeDefaultEntitlements();
 let autofixCancelRequested = false;
+let scanCancelRequested = false;
+
+// Ignore-list: stored on each node itself (travels with the file, visible to teammates),
+// not in clientStorage (which is per-device). Keyed "<ISSUE_TYPE>", one pluginData entry per type.
+function ignoreDataKey(issueType: IssueType): string {
+  return `systemic:ignore:${issueType}`;
+}
+function isIssueIgnored(node: SceneNode, issueType: IssueType): boolean {
+  try {
+    return node.getPluginData(ignoreDataKey(issueType)) === "1";
+  } catch {
+    return false;
+  }
+}
 const libraryVariableCache = new Map<string, Variable>();
 let libraryVariablesLoaded = false;
 let libraryVariablesLastAttempt = 0;
 let libraryCollectionsCount = 0;
 let libraryImportErrors = 0;
 let libraryVariablesLoading = false;
+let libraryLoadPromise: Promise<Variable[]> | null = null;
+// Variable id + mode id -> resolved color. Cleared at the start of every scan.
+const variableColorCache = new Map<string, RGBA | null>();
+// Local variable collections + color variables are identical across every candidate-matching
+// request in a batch (nothing changes the document while the user watches the spinner), but
+// findColorCandidates() re-fetched them from Figma on every single call — the dominant cost under
+// a heavy scan (many rogue-fill/-stroke issues fire one candidate request each). Cache them for a
+// few seconds so a batch of requests shares one fetch instead of re-fetching per issue.
+let localColorVariablesCache: { collections: VariableCollection[]; vars: Variable[]; ts: number } | null = null;
+let localColorVariablesLoadPromise: Promise<{ collections: VariableCollection[]; vars: Variable[] }> | null = null;
+const LOCAL_COLOR_VARS_CACHE_TTL_MS = 5000;
 let storedLicenseKey = "";
+let autofixRunning = false;
+
+// Last license answer from the Worker. Kept in memory so every "pro:entitlements"
+// reply carries the same status/valid/daysLeft fields.
+type LicenseInfo = { status: string | null; valid?: boolean; daysLeft?: number; offline?: boolean };
+let licenseInfo: LicenseInfo = { status: null };
+
+const LAST_VERIFIED_STORAGE_KEY = "systemic_last_verified_v1";
+const OFFLINE_GRACE_MS = 7 * 24 * 60 * 60 * 1000;
+
+function buildEntitlementsMessage(extra: Record<string, unknown> = {}) {
+  const isPro = !!entitlements.pro && !isExpired(entitlements);
+  return {
+    type: "pro:entitlements",
+    isPro,
+    entitlements: { pro: isPro },
+    source: entitlements.source,
+    expiresAt: entitlements.expiresAt,
+    licenseKeyLast4: entitlements.licenseKeyLast4,
+    licenseKey: storedLicenseKey,
+    status: licenseInfo.status,
+    valid: licenseInfo.valid,
+    daysLeft: licenseInfo.daysLeft,
+    offline: licenseInfo.offline,
+    ...extra,
+  };
+}
+
+async function rememberSuccessfulVerify(status: string | null): Promise<void> {
+  try {
+    await figma.clientStorage.setAsync(LAST_VERIFIED_STORAGE_KEY, { at: Date.now(), status });
+  } catch {
+    /* ignore storage failures */
+  }
+}
+
+async function forgetLastVerified(): Promise<void> {
+  try {
+    await figma.clientStorage.deleteAsync(LAST_VERIFIED_STORAGE_KEY);
+  } catch {
+    /* ignore storage failures */
+  }
+}
+
+// Returns true when a previous non-trial verification is recent enough to keep Pro offline.
+async function withinOfflineGrace(): Promise<{ ok: boolean; status: string | null }> {
+  try {
+    const saved = await figma.clientStorage.getAsync(LAST_VERIFIED_STORAGE_KEY);
+    if (!saved || typeof saved.at !== "number") return { ok: false, status: null };
+    const status = typeof saved.status === "string" ? saved.status : null;
+    if (status === "trial") return { ok: false, status };
+    return { ok: Date.now() - saved.at < OFFLINE_GRACE_MS, status };
+  } catch {
+    return { ok: false, status: null };
+  }
+}
 
 async function loadStoredLicenseKey(): Promise<string> {
   const key = await figma.clientStorage.getAsync(LICENSE_KEY_STORAGE_KEY);
@@ -217,63 +304,48 @@ async function clearStoredLicenseKey(): Promise<void> {
 
   if (storedLicenseKey) {
     figma.ui.postMessage({ type: "pro:verify:state", state: "verifying", source: "startup" });
+    // Network failures and 5xx answers are "transient": a paying user who is offline keeps Pro
+    // for OFFLINE_GRACE_MS after their last successful (non-trial) verification. An explicit
+    // denial from the Worker downgrades immediately.
+    let result: LicenseResult | null = null;
+    let failure = "";
     try {
       const instanceId = await getOrCreateInstanceId();
-      const result = await verifyLicenseWithWorker(storedLicenseKey, instanceId);
+      result = await verifyLicenseWithWorker(storedLicenseKey, instanceId);
+    } catch (e) {
+      failure = stringifyMessage(e) || "Verify failed.";
+    }
+
+    if (result && !result.transient) {
       const isPro = !!result.entitlements?.pro && !!result.ok;
-
-      if (isPro) {
-        entitlements = {
-          ...makeDefaultEntitlements(),
-          pro: true,
-          source: "license",
-          features: makeProFeaturesAllEnabled(),
-          expiresAt: undefined,
-          licenseKeyLast4: storedLicenseKey.slice(-4),
-        };
-      } else {
-        entitlements = makeDefaultEntitlements();
-      }
-
-      figma.ui.postMessage({
-        type: "pro:entitlements",
-        isPro,
-        entitlements: { pro: isPro },
-        source: entitlements.source,
-        expiresAt: entitlements.expiresAt,
-        licenseKeyLast4: entitlements.licenseKeyLast4,
-        licenseKey: storedLicenseKey,
+      licenseInfo = {
         status: result.status ?? null,
         valid: typeof result.valid === "boolean" ? result.valid : undefined,
         daysLeft: typeof result.daysLeft === "number" ? result.daysLeft : undefined,
-        error: result.error,
-      });
-    } catch (e) {
-      entitlements = makeDefaultEntitlements();
-      figma.ui.postMessage({
-        type: "pro:entitlements",
-        isPro: false,
-        entitlements: { pro: false },
-        source: entitlements.source,
-        expiresAt: entitlements.expiresAt,
-        licenseKeyLast4: entitlements.licenseKeyLast4,
-        licenseKey: storedLicenseKey,
-        error: stringifyMessage(e) || "Verify failed.",
-      });
+      };
+      if (isPro) {
+        entitlements = makeLicenseEntitlements(storedLicenseKey);
+        if (licenseInfo.status !== "trial") await rememberSuccessfulVerify(licenseInfo.status);
+      } else {
+        entitlements = makeDefaultEntitlements();
+        await forgetLastVerified();
+      }
+      figma.ui.postMessage(buildEntitlementsMessage({ error: result.error }));
+    } else {
+      // Could not reach the Worker (fetch threw, or HTTP 5xx/429).
+      const grace = await withinOfflineGrace();
+      const error = (result && result.error) || failure || "Verify failed.";
+      if (grace.ok) {
+        entitlements = makeLicenseEntitlements(storedLicenseKey);
+        licenseInfo = { status: grace.status, offline: true };
+      } else {
+        entitlements = makeDefaultEntitlements();
+        licenseInfo = { status: null };
+      }
+      figma.ui.postMessage(buildEntitlementsMessage({ error }));
     }
   } else {
-    figma.ui.postMessage({
-      type: "pro:entitlements",
-      isPro: false,
-      entitlements: { pro: false },
-      source: entitlements.source,
-      expiresAt: entitlements.expiresAt,
-      licenseKeyLast4: entitlements.licenseKeyLast4,
-      licenseKey: storedLicenseKey,
-      status: null,
-      valid: false,
-      daysLeft: 0,
-    });
+    figma.ui.postMessage(buildEntitlementsMessage());
   }
 })();
 
@@ -465,9 +537,70 @@ type InstanceOverride = {
   paddingTop?: number;
   paddingBottom?: number;
   layoutWrap?: FrameNode["layoutWrap"];
+  fills?: readonly Paint[];
+  strokes?: readonly Paint[];
+  effects?: readonly Effect[];
+  visible?: boolean;
+  opacity?: number;
+  cornerRadius?: number;
+  topLeftRadius?: number;
+  topRightRadius?: number;
+  bottomLeftRadius?: number;
+  bottomRightRadius?: number;
+  // Only set for a nested INSTANCE inside the detached subtree (not the detached root itself).
+  mainComponentId?: string;
 };
 
-function collectInstanceOverrides(root: SceneNode): Map<string, InstanceOverride> {
+// Fills/strokes/effects/corner-radius/visible/opacity: shared between the root node and every
+// descendant, so a detached relink also restores an instance's own paint/effect/radius tweaks,
+// not just its layout and text. All synchronous — no font loading or async API involved.
+function captureVisualOverride(node: SceneNode, override: InstanceOverride): void {
+  if ("fills" in node) override.fills = (node as any).fills;
+  if ("strokes" in node) override.strokes = (node as any).strokes;
+  if ("effects" in node) override.effects = (node as any).effects;
+  if ("visible" in node) override.visible = (node as any).visible;
+  if ("opacity" in node) override.opacity = (node as any).opacity;
+  if ("cornerRadius" in node && !isMixed((node as any).cornerRadius)) override.cornerRadius = (node as any).cornerRadius;
+  if ("topLeftRadius" in node) override.topLeftRadius = (node as any).topLeftRadius;
+  if ("topRightRadius" in node) override.topRightRadius = (node as any).topRightRadius;
+  if ("bottomLeftRadius" in node) override.bottomLeftRadius = (node as any).bottomLeftRadius;
+  if ("bottomRightRadius" in node) override.bottomRightRadius = (node as any).bottomRightRadius;
+}
+
+function applyVisualOverride(node: SceneNode, override: InstanceOverride): void {
+  if ("fills" in node && override.fills) {
+    try { (node as any).fills = override.fills.slice(); } catch { /* ignore */ }
+  }
+  if ("strokes" in node && override.strokes) {
+    try { (node as any).strokes = override.strokes.slice(); } catch { /* ignore */ }
+  }
+  if ("effects" in node && override.effects) {
+    try { (node as any).effects = override.effects.slice(); } catch { /* ignore */ }
+  }
+  if ("visible" in node && typeof override.visible === "boolean") {
+    try { (node as any).visible = override.visible; } catch { /* ignore */ }
+  }
+  if ("opacity" in node && typeof override.opacity === "number") {
+    try { (node as any).opacity = override.opacity; } catch { /* ignore */ }
+  }
+  if ("cornerRadius" in node && typeof override.cornerRadius === "number") {
+    try { (node as any).cornerRadius = override.cornerRadius; } catch { /* ignore */ }
+  }
+  if ("topLeftRadius" in node && typeof override.topLeftRadius === "number") {
+    try { (node as any).topLeftRadius = override.topLeftRadius; } catch { /* ignore */ }
+  }
+  if ("topRightRadius" in node && typeof override.topRightRadius === "number") {
+    try { (node as any).topRightRadius = override.topRightRadius; } catch { /* ignore */ }
+  }
+  if ("bottomLeftRadius" in node && typeof override.bottomLeftRadius === "number") {
+    try { (node as any).bottomLeftRadius = override.bottomLeftRadius; } catch { /* ignore */ }
+  }
+  if ("bottomRightRadius" in node && typeof override.bottomRightRadius === "number") {
+    try { (node as any).bottomRightRadius = override.bottomRightRadius; } catch { /* ignore */ }
+  }
+}
+
+async function collectInstanceOverrides(root: SceneNode): Promise<Map<string, InstanceOverride>> {
   const map = new Map<string, InstanceOverride>();
   const rootOverride: InstanceOverride = {};
   if ("layoutAlign" in root) rootOverride.layoutAlign = (root as any).layoutAlign;
@@ -488,6 +621,7 @@ function collectInstanceOverrides(root: SceneNode): Map<string, InstanceOverride
   if ("paddingTop" in root) rootOverride.paddingTop = (root as any).paddingTop;
   if ("paddingBottom" in root) rootOverride.paddingBottom = (root as any).paddingBottom;
   if ("layoutWrap" in root) rootOverride.layoutWrap = (root as any).layoutWrap;
+  captureVisualOverride(root, rootOverride);
   if (Object.keys(rootOverride).length > 0) {
     map.set("__root__", rootOverride);
   }
@@ -505,6 +639,16 @@ function collectInstanceOverrides(root: SceneNode): Map<string, InstanceOverride
       override.textAlignVertical = textNode.textAlignVertical;
       override.textAutoResize = textNode.textAutoResize;
     }
+    if (node.type === "INSTANCE") {
+      // Best-effort: a nested instance (unrelated to the outer detach) may have been swapped to
+      // a different component. mainComponent is write-only under dynamic-page — read via the async getter.
+      try {
+        const main = await (node as InstanceNode).getMainComponentAsync();
+        if (main) override.mainComponentId = main.id;
+      } catch {
+        /* ignore */
+      }
+    }
     if ("layoutAlign" in node) override.layoutAlign = (node as any).layoutAlign;
     if ("layoutGrow" in node) override.layoutGrow = (node as any).layoutGrow;
     if ("layoutSizingHorizontal" in node) override.layoutSizingHorizontal = (node as any).layoutSizingHorizontal;
@@ -521,6 +665,7 @@ function collectInstanceOverrides(root: SceneNode): Map<string, InstanceOverride
     if ("paddingTop" in node) override.paddingTop = (node as any).paddingTop;
     if ("paddingBottom" in node) override.paddingBottom = (node as any).paddingBottom;
     if ("layoutWrap" in node) override.layoutWrap = (node as any).layoutWrap;
+    captureVisualOverride(node, override);
     if (Object.keys(override).length > 0) {
       map.set(path, override);
     }
@@ -548,19 +693,19 @@ async function applyInstanceOverridesToInstance(instance: InstanceNode, override
   const rootOverride = overrides.get("__root__");
   if (rootOverride) {
     if ("layoutAlign" in instance && rootOverride.layoutAlign) {
-      try { (instance as any).layoutAlign = rootOverride.layoutAlign; } catch {}
+      try { (instance as any).layoutAlign = rootOverride.layoutAlign; } catch { /* ignore */ }
     }
     if ("layoutGrow" in instance && typeof rootOverride.layoutGrow === "number") {
-      try { (instance as any).layoutGrow = rootOverride.layoutGrow; } catch {}
+      try { (instance as any).layoutGrow = rootOverride.layoutGrow; } catch { /* ignore */ }
     }
     if ("layoutSizingHorizontal" in instance && rootOverride.layoutSizingHorizontal) {
-      try { (instance as any).layoutSizingHorizontal = rootOverride.layoutSizingHorizontal; } catch {}
+      try { (instance as any).layoutSizingHorizontal = rootOverride.layoutSizingHorizontal; } catch { /* ignore */ }
     }
     if ("layoutSizingVertical" in instance && rootOverride.layoutSizingVertical) {
-      try { (instance as any).layoutSizingVertical = rootOverride.layoutSizingVertical; } catch {}
+      try { (instance as any).layoutSizingVertical = rootOverride.layoutSizingVertical; } catch { /* ignore */ }
     }
     if ("constraints" in instance && rootOverride.constraints) {
-      try { (instance as any).constraints = rootOverride.constraints; } catch {}
+      try { (instance as any).constraints = rootOverride.constraints; } catch { /* ignore */ }
     }
     if (typeof rootOverride.width === "number" && typeof rootOverride.height === "number") {
       try {
@@ -574,38 +719,39 @@ async function applyInstanceOverridesToInstance(instance: InstanceNode, override
       }
     }
     if ("layoutMode" in instance && rootOverride.layoutMode) {
-      try { (instance as any).layoutMode = rootOverride.layoutMode; } catch {}
+      try { (instance as any).layoutMode = rootOverride.layoutMode; } catch { /* ignore */ }
     }
     if ("primaryAxisAlignItems" in instance && rootOverride.primaryAxisAlignItems) {
-      try { (instance as any).primaryAxisAlignItems = rootOverride.primaryAxisAlignItems; } catch {}
+      try { (instance as any).primaryAxisAlignItems = rootOverride.primaryAxisAlignItems; } catch { /* ignore */ }
     }
     if ("counterAxisAlignItems" in instance && rootOverride.counterAxisAlignItems) {
-      try { (instance as any).counterAxisAlignItems = rootOverride.counterAxisAlignItems; } catch {}
+      try { (instance as any).counterAxisAlignItems = rootOverride.counterAxisAlignItems; } catch { /* ignore */ }
     }
     if ("primaryAxisSizingMode" in instance && rootOverride.primaryAxisSizingMode) {
-      try { (instance as any).primaryAxisSizingMode = rootOverride.primaryAxisSizingMode; } catch {}
+      try { (instance as any).primaryAxisSizingMode = rootOverride.primaryAxisSizingMode; } catch { /* ignore */ }
     }
     if ("counterAxisSizingMode" in instance && rootOverride.counterAxisSizingMode) {
-      try { (instance as any).counterAxisSizingMode = rootOverride.counterAxisSizingMode; } catch {}
+      try { (instance as any).counterAxisSizingMode = rootOverride.counterAxisSizingMode; } catch { /* ignore */ }
     }
     if ("itemSpacing" in instance && typeof rootOverride.itemSpacing === "number") {
-      try { (instance as any).itemSpacing = rootOverride.itemSpacing; } catch {}
+      try { (instance as any).itemSpacing = rootOverride.itemSpacing; } catch { /* ignore */ }
     }
     if ("paddingLeft" in instance && typeof rootOverride.paddingLeft === "number") {
-      try { (instance as any).paddingLeft = rootOverride.paddingLeft; } catch {}
+      try { (instance as any).paddingLeft = rootOverride.paddingLeft; } catch { /* ignore */ }
     }
     if ("paddingRight" in instance && typeof rootOverride.paddingRight === "number") {
-      try { (instance as any).paddingRight = rootOverride.paddingRight; } catch {}
+      try { (instance as any).paddingRight = rootOverride.paddingRight; } catch { /* ignore */ }
     }
     if ("paddingTop" in instance && typeof rootOverride.paddingTop === "number") {
-      try { (instance as any).paddingTop = rootOverride.paddingTop; } catch {}
+      try { (instance as any).paddingTop = rootOverride.paddingTop; } catch { /* ignore */ }
     }
     if ("paddingBottom" in instance && typeof rootOverride.paddingBottom === "number") {
-      try { (instance as any).paddingBottom = rootOverride.paddingBottom; } catch {}
+      try { (instance as any).paddingBottom = rootOverride.paddingBottom; } catch { /* ignore */ }
     }
     if ("layoutWrap" in instance && rootOverride.layoutWrap) {
-      try { (instance as any).layoutWrap = rootOverride.layoutWrap; } catch {}
+      try { (instance as any).layoutWrap = rootOverride.layoutWrap; } catch { /* ignore */ }
     }
+    applyVisualOverride(instance, rootOverride);
   }
   const nodes = typeof (instance as any).findAll === "function"
     ? ((instance as any).findAll(() => true) as SceneNode[])
@@ -626,62 +772,79 @@ async function applyInstanceOverridesToInstance(instance: InstanceNode, override
         }
       }
       if (override.textAlignHorizontal) {
-        try { textNode.textAlignHorizontal = override.textAlignHorizontal; } catch {}
+        try { textNode.textAlignHorizontal = override.textAlignHorizontal; } catch { /* ignore */ }
       }
       if (override.textAlignVertical) {
-        try { textNode.textAlignVertical = override.textAlignVertical; } catch {}
+        try { textNode.textAlignVertical = override.textAlignVertical; } catch { /* ignore */ }
       }
       if (override.textAutoResize) {
-        try { textNode.textAutoResize = override.textAutoResize; } catch {}
+        try { textNode.textAutoResize = override.textAutoResize; } catch { /* ignore */ }
       }
     }
     if ("layoutAlign" in node && override.layoutAlign) {
-      try { (node as any).layoutAlign = override.layoutAlign; } catch {}
+      try { (node as any).layoutAlign = override.layoutAlign; } catch { /* ignore */ }
     }
     if ("layoutGrow" in node && typeof override.layoutGrow === "number") {
-      try { (node as any).layoutGrow = override.layoutGrow; } catch {}
+      try { (node as any).layoutGrow = override.layoutGrow; } catch { /* ignore */ }
     }
     if ("layoutSizingHorizontal" in node && override.layoutSizingHorizontal) {
-      try { (node as any).layoutSizingHorizontal = override.layoutSizingHorizontal; } catch {}
+      try { (node as any).layoutSizingHorizontal = override.layoutSizingHorizontal; } catch { /* ignore */ }
     }
     if ("layoutSizingVertical" in node && override.layoutSizingVertical) {
-      try { (node as any).layoutSizingVertical = override.layoutSizingVertical; } catch {}
+      try { (node as any).layoutSizingVertical = override.layoutSizingVertical; } catch { /* ignore */ }
     }
     if ("constraints" in node && override.constraints) {
-      try { (node as any).constraints = override.constraints; } catch {}
+      try { (node as any).constraints = override.constraints; } catch { /* ignore */ }
     }
     if ("layoutMode" in node && override.layoutMode) {
-      try { (node as any).layoutMode = override.layoutMode; } catch {}
+      try { (node as any).layoutMode = override.layoutMode; } catch { /* ignore */ }
     }
     if ("primaryAxisAlignItems" in node && override.primaryAxisAlignItems) {
-      try { (node as any).primaryAxisAlignItems = override.primaryAxisAlignItems; } catch {}
+      try { (node as any).primaryAxisAlignItems = override.primaryAxisAlignItems; } catch { /* ignore */ }
     }
     if ("counterAxisAlignItems" in node && override.counterAxisAlignItems) {
-      try { (node as any).counterAxisAlignItems = override.counterAxisAlignItems; } catch {}
+      try { (node as any).counterAxisAlignItems = override.counterAxisAlignItems; } catch { /* ignore */ }
     }
     if ("primaryAxisSizingMode" in node && override.primaryAxisSizingMode) {
-      try { (node as any).primaryAxisSizingMode = override.primaryAxisSizingMode; } catch {}
+      try { (node as any).primaryAxisSizingMode = override.primaryAxisSizingMode; } catch { /* ignore */ }
     }
     if ("counterAxisSizingMode" in node && override.counterAxisSizingMode) {
-      try { (node as any).counterAxisSizingMode = override.counterAxisSizingMode; } catch {}
+      try { (node as any).counterAxisSizingMode = override.counterAxisSizingMode; } catch { /* ignore */ }
     }
     if ("itemSpacing" in node && typeof override.itemSpacing === "number") {
-      try { (node as any).itemSpacing = override.itemSpacing; } catch {}
+      try { (node as any).itemSpacing = override.itemSpacing; } catch { /* ignore */ }
     }
     if ("paddingLeft" in node && typeof override.paddingLeft === "number") {
-      try { (node as any).paddingLeft = override.paddingLeft; } catch {}
+      try { (node as any).paddingLeft = override.paddingLeft; } catch { /* ignore */ }
     }
     if ("paddingRight" in node && typeof override.paddingRight === "number") {
-      try { (node as any).paddingRight = override.paddingRight; } catch {}
+      try { (node as any).paddingRight = override.paddingRight; } catch { /* ignore */ }
     }
     if ("paddingTop" in node && typeof override.paddingTop === "number") {
-      try { (node as any).paddingTop = override.paddingTop; } catch {}
+      try { (node as any).paddingTop = override.paddingTop; } catch { /* ignore */ }
     }
     if ("paddingBottom" in node && typeof override.paddingBottom === "number") {
-      try { (node as any).paddingBottom = override.paddingBottom; } catch {}
+      try { (node as any).paddingBottom = override.paddingBottom; } catch { /* ignore */ }
     }
     if ("layoutWrap" in node && override.layoutWrap) {
-      try { (node as any).layoutWrap = override.layoutWrap; } catch {}
+      try { (node as any).layoutWrap = override.layoutWrap; } catch { /* ignore */ }
+    }
+    applyVisualOverride(node, override);
+    if (node.type === "INSTANCE" && override.mainComponentId) {
+      // Best-effort nested instance-swap replay: only touch it if the fresh instance's
+      // corresponding node actually resolved to a different component than before.
+      try {
+        const inst = node as InstanceNode;
+        const current = await inst.getMainComponentAsync();
+        if (!current || current.id !== override.mainComponentId) {
+          const target = await figma.getNodeByIdAsync(override.mainComponentId);
+          if (target && target.type === "COMPONENT") {
+            inst.swapComponent(target as ComponentNode);
+          }
+        }
+      } catch {
+        /* ignore — not critical, layout/text/paint overrides above already applied */
+      }
     }
   }
 }
@@ -696,29 +859,39 @@ async function applyAutofixItem(item: AutofixAllItem): Promise<{ ok: boolean; er
   if (item.issueType === "DETACHED_INSTANCE" || item.kind === "detached") {
     const info = (node as any).detachedInfo as DetachedInfo | null;
     if (!info) return { ok: false, error: "Node is not detached." };
-    const overrides = collectInstanceOverrides(node as SceneNode);
+    const overrides = await collectInstanceOverrides(node as SceneNode);
     const instance = await createInstanceFromDetachedInfo(info);
     if (!instance) return { ok: false, error: "Component not found or unavailable." };
-    const parent = (node as SceneNode).parent;
-    if (parent && "insertChild" in parent) {
-      const idx = parent.children.indexOf(node as SceneNode);
-      parent.insertChild(Math.max(0, idx), instance);
-    } else {
-      figma.currentPage.appendChild(instance);
+    try {
+      const parent = (node as SceneNode).parent;
+      if (parent && "insertChild" in parent) {
+        const idx = parent.children.indexOf(node as SceneNode);
+        parent.insertChild(Math.max(0, idx), instance);
+      } else {
+        figma.currentPage.appendChild(instance);
+      }
+      instance.name = (node as SceneNode).name;
+      instance.x = (node as SceneNode).x;
+      instance.y = (node as SceneNode).y;
+      if ("rotation" in instance) instance.rotation = (node as any).rotation || 0;
+      if ("opacity" in instance) instance.opacity = (node as any).opacity ?? 1;
+      if ("visible" in instance) instance.visible = (node as any).visible ?? true;
+      if ("locked" in instance) instance.locked = (node as any).locked ?? false;
+      if ("resizeWithoutConstraints" in instance && "width" in node && "height" in node) {
+        (instance as any).resizeWithoutConstraints((node as any).width, (node as any).height);
+      } else if ("resize" in instance && "width" in node && "height" in node) {
+        (instance as any).resize((node as any).width, (node as any).height);
+      }
+      await applyInstanceOverridesToInstance(instance, overrides);
+    } catch (e) {
+      // Roll back: never leave a second instance next to the untouched original.
+      try {
+        instance.remove();
+      } catch {
+        /* already removed */
+      }
+      return { ok: false, error: stringifyMessage(e) || "Relink failed." };
     }
-    instance.name = (node as SceneNode).name;
-    instance.x = (node as SceneNode).x;
-    instance.y = (node as SceneNode).y;
-    if ("rotation" in instance) instance.rotation = (node as any).rotation || 0;
-    if ("opacity" in instance) instance.opacity = (node as any).opacity ?? 1;
-    if ("visible" in instance) instance.visible = (node as any).visible ?? true;
-    if ("locked" in instance) instance.locked = (node as any).locked ?? false;
-    if ("resizeWithoutConstraints" in instance && "width" in node && "height" in node) {
-      (instance as any).resizeWithoutConstraints((node as any).width, (node as any).height);
-    } else if ("resize" in instance && "width" in node && "height" in node) {
-      (instance as any).resize((node as any).width, (node as any).height);
-    }
-    await applyInstanceOverridesToInstance(instance, overrides);
     (node as SceneNode).remove();
     return { ok: true };
   }
@@ -730,8 +903,9 @@ async function applyAutofixItem(item: AutofixAllItem): Promise<{ ok: boolean; er
       if (isMixedTextProps(node as TextNode)) {
         return { ok: false, error: "Mixed text styles." };
       }
-      const { candidates, recommendedId } = await findTextCandidates(node as TextNode);
-      candidateId = recommendedId || (candidates[0]?.id || "");
+      const { recommendedId } = await findTextCandidates(node as TextNode);
+      candidateId = recommendedId || "";
+      if (!candidateId) return { ok: false, error: "No high-confidence match." };
     }
     if (!candidateId || !candidateId.startsWith("textstyle:")) {
       return { ok: false, error: "Text style not found." };
@@ -750,18 +924,19 @@ async function applyAutofixItem(item: AutofixAllItem): Promise<{ ok: boolean; er
   if (!candidateId) {
     const color = getSolidPaintColor(node as SceneNode, kind);
     if (!color) return { ok: false, error: "No paint to match." };
-    const { candidates, recommendedId } = await findColorCandidates(color, node as SceneNode, kind);
-    candidateId = recommendedId || (candidates[0]?.id || "");
+    const { recommendedId } = await findColorCandidates(color, node as SceneNode, kind);
+    candidateId = recommendedId || "";
   }
 
-  if (!candidateId) return { ok: false, error: "Missing candidate." };
+  if (!candidateId) return { ok: false, error: "No high-confidence match." };
 
   if (candidateId.startsWith("style:")) {
     const styleId = candidateId.replace("style:", "");
-    if (kind === "fills" && "fillStyleId" in node) {
-      (node as any).fillStyleId = styleId;
-    } else if (kind === "strokes" && "strokeStyleId" in node) {
-      (node as any).strokeStyleId = styleId;
+    // documentAccess is "dynamic-page": the sync fillStyleId/strokeStyleId setters throw.
+    if (kind === "fills" && "setFillStyleIdAsync" in node) {
+      await (node as any).setFillStyleIdAsync(styleId);
+    } else if (kind === "strokes" && "setStrokeStyleIdAsync" in node) {
+      await (node as any).setStrokeStyleIdAsync(styleId);
     } else {
       return { ok: false, error: "Unsupported node." };
     }
@@ -1137,7 +1312,11 @@ async function findTextCandidates(node: TextNode): Promise<{
     });
   }
 
+  // Match quality first: a variable-bound partial match must never outrank a perfect one.
+  const levelRank = (c: AutofixCandidate) => (c.matchLevel === "perfect" ? 3 : c.matchLevel === "near" ? 2 : 1);
   const sorted = candidates.sort((a, b) => {
+    const dl = levelRank(b) - levelRank(a);
+    if (dl !== 0) return dl;
     const ds = (b.score || 0) - (a.score || 0);
     if (ds !== 0) return ds;
     return (a.displayName || a.name).localeCompare(b.displayName || b.name);
@@ -1332,7 +1511,8 @@ function paintToRgba(paint: Paint): RGBA | null {
 function getSolidPaintColor(node: SceneNode, kind: "fills" | "strokes"): RGBA | null {
   const paints = (node as any)[kind] as ReadonlyArray<Paint> | typeof figma.mixed | undefined;
   if (!paints || paints === figma.mixed || !Array.isArray(paints)) return null;
-  const paint = paints.find((p) => p && (p as any).visible !== false) || paints[0];
+  // Same paint the bind step targets: the first visible SOLID paint.
+  const paint = paints.find((p) => p && p.type === "SOLID" && (p as any).visible !== false);
   if (!paint) return null;
   return paintToRgba(paint);
 }
@@ -1378,6 +1558,28 @@ async function resolveVariableColor(variable: any, modeId: string, seen: Set<str
   return null;
 }
 
+async function getLocalColorVariablesCached(): Promise<{ collections: VariableCollection[]; vars: Variable[] }> {
+  const now = Date.now();
+  if (localColorVariablesCache && now - localColorVariablesCache.ts < LOCAL_COLOR_VARS_CACHE_TTL_MS) {
+    return { collections: localColorVariablesCache.collections, vars: localColorVariablesCache.vars };
+  }
+  // A fetch is already in flight: share it instead of racing several concurrent candidate
+  // requests (maxConcurrent=3 on the UI side) into duplicate Figma API calls before the first
+  // one has a chance to populate the cache above.
+  if (localColorVariablesLoadPromise) return localColorVariablesLoadPromise;
+  localColorVariablesLoadPromise = (async () => {
+    try {
+      const collections = await figma.variables.getLocalVariableCollectionsAsync();
+      const vars = await figma.variables.getLocalVariablesAsync("COLOR");
+      localColorVariablesCache = { collections, vars, ts: Date.now() };
+      return { collections, vars };
+    } finally {
+      localColorVariablesLoadPromise = null;
+    }
+  })();
+  return localColorVariablesLoadPromise;
+}
+
 async function findColorCandidates(target: RGBA, consumer: SceneNode, kind: "fills" | "strokes"): Promise<{
   candidates: AutofixCandidate[];
   recommendedId: string | null;
@@ -1396,16 +1598,9 @@ async function findColorCandidates(target: RGBA, consumer: SceneNode, kind: "fil
   const targetKey = rgbaToKey(target);
 
   const varsApi = figma.variables as any;
-  const collections = await (typeof varsApi.getVariableCollectionsAsync === "function"
-    ? varsApi.getVariableCollectionsAsync()
-    : varsApi.getLocalVariableCollectionsAsync());
-  const localVars = await (typeof varsApi.getVariablesAsync === "function"
-    ? varsApi.getVariablesAsync()
-    : varsApi.getLocalVariablesAsync());
-  let libraryVars = await loadLibraryVariables(varsApi);
-  if (libraryVars.length === 0 && libraryVariableCache.size === 0) {
-    libraryVars = await loadLibraryVariables(varsApi, true);
-  }
+  const { collections, vars: localVars } = await getLocalColorVariablesCached();
+  // Throttled (5s) when nothing is cached yet, so an empty or failing library isn't re-imported per row.
+  const libraryVars = await loadLibraryVariables(varsApi);
   const variableMap = new Map<string, Variable>();
   for (const v of localVars) variableMap.set(v.id, v);
   for (const v of libraryVars) variableMap.set(v.id, v);
@@ -1441,10 +1636,12 @@ async function findColorCandidates(target: RGBA, consumer: SceneNode, kind: "fil
     let resolvedColor: RGBA | null = null;
     let deltaE: number | null = null;
     let layerScore = 0;
+    let resolvedForConsumer = false;
     const keywords = layerKeywordsForNode(consumer, kind);
     try {
       const resolved = (variable as Variable).resolveForConsumer(consumer);
       if (resolved && resolved.resolvedType === "COLOR" && typeof resolved.value === "object" && resolved.value) {
+        resolvedForConsumer = true;
         const v = resolved.value as RGBA;
         resolvedColor = {
           r: v.r,
@@ -1466,10 +1663,19 @@ async function findColorCandidates(target: RGBA, consumer: SceneNode, kind: "fil
     } catch (_e) {
       // fallback below
     }
+    // resolveForConsumer already gave a definitive color: a miss is a miss, no async re-resolution.
+    if (!matched && resolvedForConsumer) continue;
     if (!matched) {
       const rawValue = modeId ? valuesByMode[modeId] : null;
       if (rawValue && isVariableAlias(rawValue)) aliasHit = true;
-      const resolved = await resolveVariableColor(variable, modeId || "", new Set<string>());
+      const cacheKey = `${variable.id}|${modeId || ""}`;
+      let resolved: RGBA | null;
+      if (variableColorCache.has(cacheKey)) {
+        resolved = variableColorCache.get(cacheKey) ?? null;
+      } else {
+        resolved = await resolveVariableColor(variable, modeId || "", new Set<string>());
+        variableColorCache.set(cacheKey, resolved);
+      }
       if (!resolved) continue;
       if (!alphaDiffOk(target, resolved)) continue;
       const d = deltaE2000(rgbToLab(target), rgbToLab(resolved));
@@ -1502,7 +1708,7 @@ async function findColorCandidates(target: RGBA, consumer: SceneNode, kind: "fil
   }
 
   if (candidates.length === 0) {
-    const styles = figma.getLocalPaintStyles();
+    const styles = await figma.getLocalPaintStylesAsync();
     for (const style of styles) {
       const paints = style.paints || [];
       const paint = paints.find((p) => p && (p as any).visible !== false) || paints[0];
@@ -1516,6 +1722,8 @@ async function findColorCandidates(target: RGBA, consumer: SceneNode, kind: "fil
         source: "style",
         score: 0,
         color: rgbaToCss(color),
+        // Styles are only offered on an exact color match, so they count as a perfect (recommendable) match.
+        deltaE: 0,
       });
     }
   }
@@ -1575,11 +1783,18 @@ function makeProFeaturesAllEnabled(): Record<ProFeature, boolean> {
   }, {} as Record<ProFeature, boolean>);
 }
 
-async function callLicenseEndpoint(
-  url: string,
-  licenseKey: string,
-  instanceId: string
-): Promise<{
+function makeLicenseEntitlements(licenseKey: string): Entitlements {
+  return {
+    ...makeDefaultEntitlements(),
+    pro: true,
+    source: "license",
+    features: makeProFeaturesAllEnabled(),
+    expiresAt: undefined,
+    licenseKeyLast4: licenseKey.slice(-4),
+  };
+}
+
+type LicenseResult = {
   ok: boolean;
   valid?: boolean;
   status?: string | null;
@@ -1587,7 +1802,17 @@ async function callLicenseEndpoint(
   activated?: boolean;
   entitlements: { pro: boolean };
   error?: string;
-}> {
+  // True when the Worker could not be reached or answered 5xx/429, as opposed to an explicit denial.
+  transient?: boolean;
+};
+
+const MAX_SERVER_MESSAGE_LENGTH = 200;
+
+async function callLicenseEndpoint(
+  url: string,
+  licenseKey: string,
+  instanceId: string
+): Promise<LicenseResult> {
   if (DEV_FORCE_LICENSE_STATUS) {
     if (DEV_FORCE_LICENSE_STATUS === "trial") {
       return {
@@ -1616,14 +1841,24 @@ async function callLicenseEndpoint(
   }
   // Worker response example:
   // { ok:true, valid:true, status:"active", entitlements:{pro:true} }
-  const res = await fetch(url, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "X-Systemic-Token": SYSTEMIC_TOKEN,
-    },
-    body: JSON.stringify({ licenseKey, installationId: instanceId }),
-  });
+  let res: Awaited<ReturnType<typeof fetch>>;
+  try {
+    res = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Systemic-Token": SYSTEMIC_TOKEN,
+      },
+      body: JSON.stringify({ licenseKey, installationId: instanceId }),
+    });
+  } catch (e) {
+    return {
+      ok: false,
+      entitlements: { pro: false },
+      transient: true,
+      error: `Could not reach the license server: ${stringifyMessage(e) || "network error"}`,
+    };
+  }
 
   const rawText = await res.text();
   let data: any = null;
@@ -1633,16 +1868,20 @@ async function callLicenseEndpoint(
     data = null;
   }
 
-  // Provide a readable message for UI
-  const serverMessage =
+  // Provide a readable message for UI (a proxy error page must not flood the toast)
+  let serverMessage =
     stringifyMessage(data && (data.error || data.message)) ||
     (typeof rawText === "string" && rawText.trim() ? rawText.trim() : null) ||
     `HTTP ${res.status}`;
+  if (serverMessage.length > MAX_SERVER_MESSAGE_LENGTH) {
+    serverMessage = serverMessage.slice(0, MAX_SERVER_MESSAGE_LENGTH) + "…";
+  }
 
   if (!res.ok) {
     return {
       ok: false,
       entitlements: { pro: false },
+      transient: res.status >= 500 || res.status === 429,
       error: `Verify failed (${res.status}): ${serverMessage}`,
     };
   }
@@ -1666,33 +1905,11 @@ async function callLicenseEndpoint(
   };
 }
 
-async function verifyLicenseWithWorker(
-  licenseKey: string,
-  instanceId: string
-): Promise<{
-  ok: boolean;
-  valid?: boolean;
-  status?: string | null;
-  daysLeft?: number;
-  activated?: boolean;
-  entitlements: { pro: boolean };
-  error?: string;
-}> {
+async function verifyLicenseWithWorker(licenseKey: string, instanceId: string): Promise<LicenseResult> {
   return callLicenseEndpoint(WORKER_VERIFY_URL, licenseKey, instanceId);
 }
 
-async function activateLicenseWithWorker(
-  licenseKey: string,
-  instanceId: string
-): Promise<{
-  ok: boolean;
-  valid?: boolean;
-  status?: string | null;
-  daysLeft?: number;
-  activated?: boolean;
-  entitlements: { pro: boolean };
-  error?: string;
-}> {
+async function activateLicenseWithWorker(licenseKey: string, instanceId: string): Promise<LicenseResult> {
   return callLicenseEndpoint(WORKER_ACTIVATE_URL, licenseKey, instanceId);
 }
 
@@ -1702,6 +1919,7 @@ async function runAudit(selection: readonly SceneNode[], options: AuditOptions) 
   const totalNodes = nodes.length;
   let processed = 0;
   let lastProgress = 0;
+  let canceled = false;
   const YIELD_EVERY = 200;
 
   const auditedElementIds = new Set<string>();
@@ -1717,28 +1935,31 @@ async function runAudit(selection: readonly SceneNode[], options: AuditOptions) 
   let rogueStrokes = 0;
   let unstyledText = 0;
   let detached = 0;
+  let ignored = 0;
 
-  const addIssue = (node: SceneNode, type: IssueType) => {
-    issues.push({ id: node.id, name: node.name, type, path: getNodePath(node) });
+  const addIssue = (node: SceneNode, type: IssueType, extra: Partial<Issue> = {}) => {
+    if (isIssueIgnored(node, type)) {
+      ignored++;
+      return;
+    }
+    issues.push({ id: node.id, name: node.name, type, path: getNodePath(node), ...extra });
     elementsWithIssuesSet.add(node.id);
   };
 
   for (const node of nodes) {
+    if (scanCancelRequested) {
+      canceled = true;
+      break;
+    }
     try {
       if (options.checkDetached && canCheckDetachedInfo(node)) {
         markAudited(node);
         if (isDetachedInstanceLike(node)) {
           const info = (node as any).detachedInfo as DetachedInfo | null;
           const label = info ? await getDetachedComponentName(info) : undefined;
-          issues.push({
-            id: node.id,
-            name: node.name,
-            type: "DETACHED_INSTANCE",
-            path: getNodePath(node),
-            detachedComponentName: label,
-          });
-          elementsWithIssuesSet.add(node.id);
-          detached++;
+          const before = issues.length;
+          addIssue(node, "DETACHED_INSTANCE", { detachedComponentName: label });
+          if (issues.length > before) detached++;
         }
       }
 
@@ -1746,30 +1967,27 @@ async function runAudit(selection: readonly SceneNode[], options: AuditOptions) 
         markAudited(node);
         if (hasUnstyledText(node)) {
           const mixedText = isMixedTextProps(node as TextNode);
-          issues.push({
-            id: node.id,
-            name: node.name,
-            type: "UNSTYLED_TEXT",
-            path: getNodePath(node),
-            mixedText,
-          });
-          unstyledText++;
+          const before = issues.length;
+          addIssue(node, "UNSTYLED_TEXT", { mixedText });
+          if (issues.length > before) unstyledText++;
         }
       }
 
       if (options.checkRogueFills && ("fills" in node)) {
         markAudited(node);
         if (hasRogueFill(node)) {
+          const before = issues.length;
           addIssue(node, "ROGUE_FILL");
-          rogueFills++;
+          if (issues.length > before) rogueFills++;
         }
       }
 
       if (options.checkRogueStrokes && ("strokes" in node)) {
         markAudited(node);
         if (hasRogueStroke(node)) {
+          const before = issues.length;
           addIssue(node, "ROGUE_STROKE");
-          rogueStrokes++;
+          if (issues.length > before) rogueStrokes++;
         }
       }
     } catch {
@@ -1802,92 +2020,133 @@ async function runAudit(selection: readonly SceneNode[], options: AuditOptions) 
     rogueStrokes,
     unstyledText,
     detached,
+    ignored,
     scannedElements,
     elementsWithIssues,
   };
 
-  return { issues, summary };
+  return { issues, summary, canceled };
 }
 
+// Nodes the last scan covered, so a re-audit keeps its scope even if the user has since
+// clicked a row (which selects that single layer). Falls back to the current selection.
+async function resolveAuditTargets(): Promise<SceneNode[]> {
+  const restored: SceneNode[] = [];
+  for (const id of lastAuditSelectionIds) {
+    const node = await figma.getNodeByIdAsync(id);
+    if (!node || !("id" in node)) continue;
+    if (node.type === "PAGE" || node.type === "DOCUMENT") continue;
+    if (!("x" in node)) continue;
+    restored.push(node as SceneNode);
+  }
+  if (restored.length > 0) return restored;
+  return Array.from(figma.currentPage.selection);
+}
+
+let resizeSaveTimer: ReturnType<typeof setTimeout> | null = null;
+let optionsSaveTimer: ReturnType<typeof setTimeout> | null = null;
+
 figma.ui.onmessage = async (msg) => {
+  try {
+    await handleMessage(msg);
+  } catch (e) {
+    figma.notify("Something went wrong: " + (stringifyMessage(e) || "unknown error"));
+  }
+};
+
+async function handleMessage(msg: any): Promise<void> {
+  if (!msg || typeof msg !== "object") return;
+
   if (msg.type === "resize") {
     const w = Math.max(MIN_W, Math.round(Number(msg.width) || DEFAULT_W));
     const h = Math.max(MIN_H, Math.round(Number(msg.height) || DEFAULT_H));
 
     figma.ui.resize(w, h);
-    await figma.clientStorage.setAsync("uiSize", { width: w, height: h });
+    // Dragging the window edge sends a resize per pointer move: persist only the final size.
+    if (resizeSaveTimer) clearTimeout(resizeSaveTimer);
+    resizeSaveTimer = setTimeout(() => {
+      resizeSaveTimer = null;
+      figma.clientStorage.setAsync("uiSize", { width: w, height: h }).catch(() => {
+        /* ignore storage failures */
+      });
+    }, 300);
+    return;
+  }
+
+  if (msg.type === "options:save") {
+    const options = msg.options;
+    if (options && typeof options === "object") {
+      if (optionsSaveTimer) clearTimeout(optionsSaveTimer);
+      optionsSaveTimer = setTimeout(() => {
+        optionsSaveTimer = null;
+        figma.clientStorage.setAsync(SCANNER_OPTIONS_STORAGE_KEY, {
+          scanChildren: !!options.scanChildren,
+          checkRogueFills: !!options.checkRogueFills,
+          checkRogueStrokes: !!options.checkRogueStrokes,
+          checkDetached: !!options.checkDetached,
+          checkTextStyles: !!options.checkTextStyles,
+        }).catch(() => {
+          /* ignore storage failures */
+        });
+      }, 300);
+    }
+    return;
+  }
+
+  if (msg.type === "get-saved-options") {
+    const saved = await figma.clientStorage.getAsync(SCANNER_OPTIONS_STORAGE_KEY);
+    figma.ui.postMessage({ type: "saved-options", options: saved && typeof saved === "object" ? saved : null });
     return;
   }
 
   // -----------------------
   // PRO / LICENSE messages
   // -----------------------
-  if (msg?.type === "pro:get-entitlements") {
-    const isPro = !!entitlements.pro && !isExpired(entitlements);
-    figma.ui.postMessage({
-      type: "pro:entitlements",
-      isPro,
-      entitlements: { pro: isPro },
-      source: entitlements.source,
-      expiresAt: entitlements.expiresAt,
-      licenseKeyLast4: entitlements.licenseKeyLast4,
-    });
+  if (msg.type === "pro:get-entitlements") {
+    figma.ui.postMessage(buildEntitlementsMessage());
     return;
   }
 
-  if (msg?.type === "pro:clearLicense") {
+  if (msg.type === "pro:clearLicense") {
     entitlements = makeDefaultEntitlements();
+    licenseInfo = { status: null };
     await figma.clientStorage.deleteAsync(ENTITLEMENTS_STORAGE_KEY);
     await figma.clientStorage.deleteAsync(DEBUG_PRO_STORAGE_KEY);
+    await forgetLastVerified();
     await clearStoredLicenseKey();
-    const isPro = !!entitlements.pro && !isExpired(entitlements);
-    figma.ui.postMessage({
-      type: "pro:entitlements",
-      isPro,
-      entitlements: { pro: isPro },
-      source: entitlements.source,
-      expiresAt: entitlements.expiresAt,
-      licenseKeyLast4: entitlements.licenseKeyLast4,
-      licenseKey: storedLicenseKey,
-    });
+    figma.ui.postMessage(buildEntitlementsMessage());
     return;
   }
 
-  if (msg?.type === "pro:debug:set") {
+  if (msg.type === "pro:debug:set") {
     if (!DEV_PRO) return;
     const isPro = !!msg.isPro;
     await figma.clientStorage.setAsync(DEBUG_PRO_STORAGE_KEY, isPro);
     entitlements = makeDebugEntitlements(isPro);
-    const proFlag = !!entitlements.pro && !isExpired(entitlements);
-    figma.ui.postMessage({
-      type: "pro:entitlements",
-      isPro: proFlag,
-      entitlements: { pro: proFlag },
-      source: entitlements.source,
-      expiresAt: entitlements.expiresAt,
-      licenseKeyLast4: entitlements.licenseKeyLast4,
-      licenseKey: storedLicenseKey,
-    });
+    figma.ui.postMessage(buildEntitlementsMessage());
     return;
   }
 
-  if (msg?.type === "pro:autofix") {
+  if (msg.type === "pro:autofix") {
     // Pro-only feature: UI sends this when Pro is verified.
-    // For now we just confirm whether the user has the entitlement.
     const allowed = hasFeature(entitlements, "autofix");
+    const skipped = msg.skipped || {};
+    if (autofixRunning) return;
     autofixCancelRequested = false;
 
     if (!allowed) {
       figma.notify("Auto-fix is a Pro feature. Please activate Systemic Pro.");
+      // Tell the UI so it leaves its "fixing" state instead of waiting forever.
+      figma.ui.postMessage({ type: "pro:autofix:done", total: 0, resolved: 0, failed: 0, skipped, resolvedItems: [] });
       return;
     }
 
     const items = Array.isArray(msg.items) ? msg.items as AutofixAllItem[] : [];
-    const skipped = msg.skipped || {};
     if (!items.length) {
       figma.ui.postMessage({ type: "pro:autofix:done", total: 0, resolved: 0, failed: 0, skipped, resolvedItems: [] });
       return;
     }
+    autofixRunning = true;
 
     const ordered = items.slice().sort((a, b) => {
       const rank = (i: AutofixAllItem) => (i.issueType === "DETACHED_INSTANCE" || i.kind === "detached") ? 2 : 1;
@@ -1946,19 +2205,9 @@ figma.ui.onmessage = async (msg) => {
         figma.notify("Auto-fix canceled. Press Cmd+Z to undo any changes.");
       }
       autofixCancelRequested = false;
-      const selection = figma.currentPage.selection;
-      let auditTargets: readonly SceneNode[] = selection;
-      if ((!auditTargets || auditTargets.length === 0) && lastAuditSelectionIds.length > 0) {
-        const restored: SceneNode[] = [];
-        for (const id of lastAuditSelectionIds) {
-          const node = await figma.getNodeByIdAsync(id);
-          if (!node || !("id" in node)) continue;
-          if (node.type === "PAGE" || node.type === "DOCUMENT") continue;
-          if (!("x" in node)) continue;
-          restored.push(node as SceneNode);
-        }
-        auditTargets = restored;
-      }
+      autofixRunning = false;
+      // Re-audit the area the user originally scanned, not whatever "locate" last selected.
+      const auditTargets = await resolveAuditTargets();
       if (lastAuditOptions && auditTargets.length > 0) {
         const { issues, summary } = await runAudit(auditTargets, lastAuditOptions);
         figma.ui.postMessage({ type: "audit-result", issues, summary });
@@ -1981,186 +2230,103 @@ figma.ui.onmessage = async (msg) => {
     return;
   }
 
-  if (msg?.type === "pro:autofix:cancel") {
+  if (msg.type === "pro:autofix:cancel") {
     autofixCancelRequested = true;
     return;
   }
 
-  if (msg?.type === "pro:autofix:candidates") {
+  if (msg.type === "run-audit:cancel") {
+    scanCancelRequested = true;
+    return;
+  }
+
+  if (msg.type === "pro:autofix:candidates") {
+    // Computing candidates is read-only (nothing is mutated), so free users get them too —
+    // as a preview of what Pro would do. Only the actual apply (below) stays gated.
     const allowed = hasFeature(entitlements, "autofix");
     const id = String(msg.id || "");
     const kind = msg.kind === "stroke" ? "strokes" : (msg.kind === "text" ? "text" : "fills");
     const key = String(msg.key || "");
-    if (!allowed || !id) {
-      figma.ui.postMessage({ type: "pro:autofix:candidates", key, candidates: [], recommendedId: null });
+    const reply = (extra: Record<string, unknown>) =>
+      figma.ui.postMessage({ type: "pro:autofix:candidates", key, locked: !allowed, ...extra });
+
+    if (!id) {
+      reply({ candidates: [], recommendedId: null });
       return;
     }
 
     try {
       const varsApi = figma.variables as any;
       if (!varsApi || (typeof varsApi.getVariablesAsync !== "function" && typeof varsApi.getLocalVariablesAsync !== "function")) {
-        figma.ui.postMessage({ type: "pro:autofix:candidates", key, candidates: [], recommendedId: null });
+        reply({ candidates: [], recommendedId: null });
         return;
       }
 
       const node = await figma.getNodeByIdAsync(id);
       if (!node || !("id" in node)) {
-        figma.ui.postMessage({ type: "pro:autofix:candidates", key, candidates: [], recommendedId: null });
+        reply({ candidates: [], recommendedId: null });
         return;
       }
 
       if (kind === "text") {
         if (node.type !== "TEXT") {
-          figma.ui.postMessage({ type: "pro:autofix:candidates", key, candidates: [], recommendedId: null });
+          reply({ candidates: [], recommendedId: null });
           return;
         }
         const { candidates, recommendedId, mixed } = await findTextCandidates(node as TextNode);
-        figma.ui.postMessage({ type: "pro:autofix:candidates", key, candidates, recommendedId, mixed });
+        reply({ candidates, recommendedId, mixed });
         return;
       }
 
       const color = getSolidPaintColor(node as SceneNode, kind as "fills" | "strokes");
       if (!color) {
-        figma.ui.postMessage({ type: "pro:autofix:candidates", key, candidates: [], recommendedId: null });
+        reply({ candidates: [], recommendedId: null });
         return;
       }
 
       const { candidates, recommendedId, debug } = await findColorCandidates(color, node as SceneNode, kind as "fills" | "strokes");
-      figma.ui.postMessage({ type: "pro:autofix:candidates", key, candidates, recommendedId, debug });
+      reply({ candidates, recommendedId, debug });
     } catch (e) {
-      figma.ui.postMessage({ type: "pro:autofix:candidates", key, candidates: [], recommendedId: null });
+      reply({ candidates: [], recommendedId: null });
     }
     return;
   }
 
-  if (msg?.type === "pro:autofix:apply") {
+  if (msg.type === "pro:autofix:apply") {
     const allowed = hasFeature(entitlements, "autofix");
     const id = String(msg.id || "");
-    const kind = msg.kind === "stroke" ? "strokes" : (msg.kind === "text" ? "text" : "fills");
+    const kind = ["fill", "stroke", "text", "detached"].indexOf(msg.kind) >= 0 ? msg.kind : "fill";
     const candidateId = String(msg.candidateId || "");
     const issueType = String(msg.issueType || "");
+    const reply = (ok: boolean, error?: string) =>
+      figma.ui.postMessage({ type: "pro:autofix:result", id, issueType, kind, ok, error });
+
     if (!allowed || !id || (!candidateId && issueType !== "DETACHED_INSTANCE")) {
-      figma.ui.postMessage({ type: "pro:autofix:result", id, issueType, ok: false, error: "Auto-fix is not available." });
+      reply(false, "Auto-fix is not available.");
       return;
     }
 
+    // Same code path as "Fix all", so a single fix also restores detached-instance overrides.
     try {
-      const node = await figma.getNodeByIdAsync(id);
-      if (!node || !("id" in node)) {
-        figma.ui.postMessage({ type: "pro:autofix:result", id, issueType, ok: false, error: "Node not found." });
-        return;
-      }
-
-      if (issueType === "DETACHED_INSTANCE") {
-        const info = (node as any).detachedInfo as DetachedInfo | null;
-        if (!info) {
-          figma.ui.postMessage({ type: "pro:autofix:result", id, issueType, ok: false, error: "Node is not detached." });
-          return;
-        }
-
-        const instance = await createInstanceFromDetachedInfo(info);
-        if (!instance) {
-          figma.ui.postMessage({
-            type: "pro:autofix:result",
-            id,
-            issueType,
-            ok: false,
-            error: "Component not found or unavailable.",
-          });
-          return;
-        }
-
-        const parent = (node as SceneNode).parent;
-        if (parent && "insertChild" in parent) {
-          const idx = parent.children.indexOf(node as SceneNode);
-          parent.insertChild(Math.max(0, idx), instance);
-        } else {
-          figma.currentPage.appendChild(instance);
-        }
-
-        instance.name = (node as SceneNode).name;
-        instance.x = (node as SceneNode).x;
-        instance.y = (node as SceneNode).y;
-        if ("rotation" in instance) instance.rotation = (node as any).rotation || 0;
-        if ("opacity" in instance) instance.opacity = (node as any).opacity ?? 1;
-        if ("visible" in instance) instance.visible = (node as any).visible ?? true;
-        if ("locked" in instance) instance.locked = (node as any).locked ?? false;
-        if ("resizeWithoutConstraints" in instance && "width" in node && "height" in node) {
-          (instance as any).resizeWithoutConstraints((node as any).width, (node as any).height);
-        } else if ("resize" in instance && "width" in node && "height" in node) {
-          (instance as any).resize((node as any).width, (node as any).height);
-        }
-
-        (node as SceneNode).remove();
-
-        figma.ui.postMessage({ type: "pro:autofix:result", id, issueType, ok: true });
-        return;
-      }
-
-      if (issueType === "UNSTYLED_TEXT" || kind === "text") {
-        if (node.type !== "TEXT") {
-          figma.ui.postMessage({ type: "pro:autofix:result", id, issueType, ok: false, error: "Unsupported node." });
-          return;
-        }
-        if (!candidateId.startsWith("textstyle:")) {
-          figma.ui.postMessage({ type: "pro:autofix:result", id, issueType, ok: false, error: "Text style not found." });
-          return;
-        }
-        const styleId = candidateId.replace("textstyle:", "");
-        const style = await figma.getStyleByIdAsync(styleId);
-        if (!style || style.type !== "TEXT") {
-          figma.ui.postMessage({ type: "pro:autofix:result", id, issueType, ok: false, error: "Text style not found." });
-          return;
-        }
-        await figma.loadFontAsync((style as TextStyle).fontName);
-        await (node as TextNode).setTextStyleIdAsync(styleId);
-        figma.ui.postMessage({ type: "pro:autofix:result", id, issueType, ok: true });
-        return;
-      }
-
-      if (candidateId.startsWith("style:")) {
-        const styleId = candidateId.replace("style:", "");
-        if (kind === "fills" && "fillStyleId" in node) {
-          (node as any).fillStyleId = styleId;
-        } else if (kind === "strokes" && "strokeStyleId" in node) {
-          (node as any).strokeStyleId = styleId;
-        } else {
-          figma.ui.postMessage({ type: "pro:autofix:result", id, issueType, ok: false, error: "Unsupported node." });
-          return;
-        }
-      } else {
-        const variable = await figma.variables.getVariableByIdAsync(candidateId);
-        if (!variable) {
-          figma.ui.postMessage({ type: "pro:autofix:result", id, issueType, ok: false, error: "Variable not found." });
-          return;
-        }
-        const paints = (node as any)[kind] as ReadonlyArray<Paint> | typeof figma.mixed | undefined;
-        if (!paints || paints === figma.mixed || !Array.isArray(paints) || paints.length === 0) {
-          figma.ui.postMessage({ type: "pro:autofix:result", id, issueType, ok: false, error: "No paint to bind." });
-          return;
-        }
-        const next = paints.slice();
-        const idx = next.findIndex((p) => p && (p as any).type === "SOLID" && (p as any).visible !== false);
-        const paintIndex = idx >= 0 ? idx : 0;
-        const paint = next[paintIndex] as SolidPaint;
-        if (!paint || paint.type !== "SOLID") {
-          figma.ui.postMessage({ type: "pro:autofix:result", id, issueType, ok: false, error: "Unsupported paint type." });
-          return;
-        }
-        next[paintIndex] = figma.variables.setBoundVariableForPaint(paint, "color", variable);
-        (node as any)[kind] = next;
-      }
-
-      figma.ui.postMessage({ type: "pro:autofix:result", id, issueType, ok: true });
+      const result = await applyAutofixItem({
+        id,
+        issueType: issueType as IssueType,
+        kind: kind as AutofixAllItem["kind"],
+        candidateId,
+      });
+      reply(result.ok, result.error);
     } catch (e) {
-      const message = stringifyMessage(e) || "Auto-fix failed.";
-      figma.ui.postMessage({ type: "pro:autofix:result", id, issueType, ok: false, error: message });
+      reply(false, stringifyMessage(e) || "Auto-fix failed.");
     }
     return;
   }
 
-  if (msg?.type === "pro:verify") {
-    const licenseKey = String((msg as any).key || "").trim();
+  if (msg.type === "pro:verify" || msg.type === "pro:activate") {
+    const activating = msg.type === "pro:activate";
+    const licenseKey = String(msg.key || "").trim();
+    const failText = activating
+      ? "Could not activate license. Please try again."
+      : "Could not verify license. Please try again.";
 
     if (!licenseKey) {
       figma.ui.postMessage({
@@ -2177,10 +2343,13 @@ figma.ui.onmessage = async (msg) => {
 
     try {
       const instanceId = await getOrCreateInstanceId();
-      const result = await verifyLicenseWithWorker(licenseKey, instanceId);
-      const isPro = !!result.entitlements?.pro;
+      const result = activating
+        ? await activateLicenseWithWorker(licenseKey, instanceId)
+        : await verifyLicenseWithWorker(licenseKey, instanceId);
+      const isPro = !!result.entitlements?.pro && !!result.ok && result.activated !== false;
 
-      if (!result.ok || !isPro) {
+      if (!isPro) {
+        // A failed attempt must not change what the plugin already granted (e.g. a running trial).
         figma.ui.postMessage({
           type: "pro:verify:result",
           ok: false,
@@ -2188,42 +2357,29 @@ figma.ui.onmessage = async (msg) => {
           status: result.status ?? null,
           valid: typeof result.valid === "boolean" ? result.valid : undefined,
           daysLeft: typeof result.daysLeft === "number" ? result.daysLeft : undefined,
-          error: result.error || "Could not verify license. Please try again.",
+          error: result.error || failText,
         });
         return;
       }
 
-      const base = makeDefaultEntitlements();
-      entitlements = {
-        ...base,
-        pro: true,
-        source: "license",
-        features: makeProFeaturesAllEnabled(),
-        expiresAt: undefined,
-        licenseKeyLast4: licenseKey.slice(-4),
-      };
-      await saveStoredLicenseKey(licenseKey);
-      figma.ui.postMessage({
-        type: "pro:entitlements",
-        isPro: true,
-        entitlements: { pro: true },
-        source: entitlements.source,
-        expiresAt: entitlements.expiresAt,
-        licenseKeyLast4: entitlements.licenseKeyLast4,
-        licenseKey: storedLicenseKey,
+      entitlements = makeLicenseEntitlements(licenseKey);
+      licenseInfo = {
         status: result.status ?? null,
         valid: typeof result.valid === "boolean" ? result.valid : undefined,
         daysLeft: typeof result.daysLeft === "number" ? result.daysLeft : undefined,
-      });
+      };
+      await saveStoredLicenseKey(licenseKey);
+      if (licenseInfo.status !== "trial") await rememberSuccessfulVerify(licenseInfo.status);
 
+      figma.ui.postMessage(buildEntitlementsMessage());
       figma.ui.postMessage({
         type: "pro:verify:result",
         ok: true,
         isPro: true,
         entitlements: { pro: true },
-        status: result.status ?? null,
-        valid: typeof result.valid === "boolean" ? result.valid : undefined,
-        daysLeft: typeof result.daysLeft === "number" ? result.daysLeft : undefined,
+        status: licenseInfo.status,
+        valid: licenseInfo.valid,
+        daysLeft: licenseInfo.daysLeft,
         licenseKey: storedLicenseKey,
       });
     } catch (e) {
@@ -2232,88 +2388,7 @@ figma.ui.onmessage = async (msg) => {
         type: "pro:verify:result",
         ok: false,
         entitlements: { pro: false },
-        error: message && message.trim() ? message : "Could not verify license. Please try again.",
-      });
-    }
-
-    return;
-  }
-
-  if (msg?.type === "pro:activate") {
-    const licenseKey = String((msg as any).key || "").trim();
-
-    if (!licenseKey) {
-      figma.ui.postMessage({
-        type: "pro:verify:result",
-        ok: false,
-        entitlements: { pro: false },
-        error: "Please enter a license key.",
-      });
-      return;
-    }
-
-    figma.ui.postMessage({ type: "pro:verify:state", state: "verifying" });
-
-    try {
-      const instanceId = await getOrCreateInstanceId();
-      const result = await activateLicenseWithWorker(licenseKey, instanceId);
-      const isPro = !!result.entitlements?.pro || result.activated === true;
-
-      if (!result.ok || result.activated === false || !isPro) {
-      figma.ui.postMessage({
-        type: "pro:verify:result",
-        ok: false,
-        entitlements: { pro: false },
-        status: result.status ?? null,
-        valid: typeof result.valid === "boolean" ? result.valid : undefined,
-        daysLeft: typeof result.daysLeft === "number" ? result.daysLeft : undefined,
-        error: result.error || "Could not activate license. Please try again.",
-      });
-      return;
-      }
-
-      const base = makeDefaultEntitlements();
-      entitlements = {
-        ...base,
-        pro: true,
-        source: "license",
-        features: makeProFeaturesAllEnabled(),
-        expiresAt: undefined,
-        licenseKeyLast4: licenseKey.slice(-4),
-      };
-      await figma.clientStorage.setAsync(INSTANCE_ID_STORAGE_KEY, instanceId);
-      await saveStoredLicenseKey(licenseKey);
-
-      figma.ui.postMessage({
-        type: "pro:entitlements",
-        isPro: true,
-        entitlements: { pro: true },
-        source: entitlements.source,
-        expiresAt: entitlements.expiresAt,
-        licenseKeyLast4: entitlements.licenseKeyLast4,
-        licenseKey: storedLicenseKey,
-        status: result.status ?? null,
-        valid: typeof result.valid === "boolean" ? result.valid : undefined,
-        daysLeft: typeof result.daysLeft === "number" ? result.daysLeft : undefined,
-      });
-
-      figma.ui.postMessage({
-        type: "pro:verify:result",
-        ok: true,
-        isPro: true,
-        entitlements: { pro: true },
-        status: result.status ?? null,
-        valid: typeof result.valid === "boolean" ? result.valid : undefined,
-        daysLeft: typeof result.daysLeft === "number" ? result.daysLeft : undefined,
-        licenseKey: storedLicenseKey,
-      });
-    } catch (e) {
-      const message = stringifyMessage(e);
-      figma.ui.postMessage({
-        type: "pro:verify:result",
-        ok: false,
-        entitlements: { pro: false },
-        error: message && message.trim() ? message : "Could not activate license. Please try again.",
+        error: message && message.trim() ? message : failText,
       });
     }
 
@@ -2321,10 +2396,20 @@ figma.ui.onmessage = async (msg) => {
   }
 
   if (msg.type === "run-audit") {
+    if (autofixRunning) {
+      figma.ui.postMessage({ type: "audit-error", message: "Auto-fix is still running." });
+      figma.notify("Auto-fix is still running. Try again when it finishes.");
+      return;
+    }
     textStyleCache = null;
+    variableColorCache.clear();
+    localColorVariablesCache = null;
     const varsApi = figma.variables as any;
     if (varsApi && typeof varsApi.importVariableByKeyAsync === "function") {
-      loadLibraryVariables(varsApi, true);
+      // Fire and forget: candidates are matched lazily, and a failure here must not surface as an unhandled rejection.
+      loadLibraryVariables(varsApi, true).catch(() => {
+        /* library variables are optional */
+      });
     }
     const selection = figma.currentPage.selection;
 
@@ -2343,11 +2428,25 @@ figma.ui.onmessage = async (msg) => {
     };
     lastAuditOptions = options;
     lastAuditSelectionIds = selection.map((node) => node.id);
+    // Reset here, not inside runAudit itself — runAudit is also called from the autofix
+    // finally block to re-run the last audit, and that re-audit must never inherit a
+    // cancellation meant for this user-initiated scan.
+    scanCancelRequested = false;
 
-    const { issues, summary } = await runAudit(selection, options);
-
-    figma.ui.postMessage({ type: "audit-result", issues, summary });
-    figma.notify(`Audit complete: ${summary.total} issue(s) found.`);
+    try {
+      const { issues, summary, canceled } = await runAudit(selection, options);
+      figma.ui.postMessage({ type: "audit-result", issues, summary, canceled });
+      if (canceled) {
+        figma.notify("Scan canceled.");
+      } else {
+        figma.notify(`Audit complete: ${summary.total} issue${summary.total === 1 ? "" : "s"} found.`);
+      }
+    } catch (e) {
+      // Without this the UI would sit on "Scanning..." forever.
+      const message = stringifyMessage(e) || "Scan failed.";
+      figma.ui.postMessage({ type: "audit-error", message });
+      figma.notify("Scan failed: " + message);
+    }
     return;
   }
 
@@ -2404,6 +2503,55 @@ figma.ui.onmessage = async (msg) => {
     return;
   }
 
+  if (msg.type === "select-nodes") {
+    const ids = Array.isArray(msg.ids) ? msg.ids.map((v: unknown) => String(v)).filter(Boolean) : [];
+    if (!ids.length) {
+      figma.ui.postMessage({ type: "select-nodes:status", status: "error", count: 0, message: "No node ids received" });
+      return;
+    }
+
+    try {
+      // A single scan is always scoped to one selection, so every node should share a page.
+      // Resolve nodes and their page in one pass; the first node found decides the target page,
+      // and anything on a different page (shouldn't normally happen) is skipped.
+      const found: SceneNode[] = [];
+      let targetPageId: string | null = null;
+      for (const id of ids) {
+        const node = await figma.getNodeByIdAsync(id);
+        if (!node || !("x" in (node as any))) continue;
+        let p: BaseNode | null = node;
+        while (p && p.type !== "PAGE" && p.type !== "DOCUMENT") p = p.parent;
+        const pageId = p && p.type === "PAGE" ? p.id : null;
+        if (targetPageId === null) targetPageId = pageId;
+        else if (pageId !== targetPageId) continue;
+        found.push(node as SceneNode);
+      }
+      if (!found.length) {
+        figma.notify("Couldn’t find any of those layers (they may have been deleted).");
+        figma.ui.postMessage({ type: "select-nodes:status", status: "error", count: 0, message: "No nodes found" });
+        return;
+      }
+
+      if (targetPageId) {
+        const targetPage = await figma.getNodeByIdAsync(targetPageId);
+        if (targetPage && targetPage.type === "PAGE") {
+          await figma.setCurrentPageAsync(targetPage as PageNode);
+        }
+      }
+
+      figma.currentPage.selection = found;
+      figma.viewport.scrollAndZoomIntoView(found);
+
+      figma.ui.postMessage({ type: "select-nodes:status", status: "done", count: found.length });
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e);
+      figma.notify("Select failed: " + message);
+      figma.ui.postMessage({ type: "select-nodes:status", status: "error", count: 0, message });
+    }
+
+    return;
+  }
+
   if (msg.type === "issues:validate") {
     const items = Array.isArray(msg.items) ? msg.items : [];
     const resolvedIds: string[] = [];
@@ -2442,6 +2590,47 @@ figma.ui.onmessage = async (msg) => {
     return;
   }
 
+  if (msg.type === "issue:ignore") {
+    const id = String(msg.id || "");
+    const issueType = String(msg.issueType || "") as IssueType;
+    if (!id || !issueType) return;
+    try {
+      const node = await figma.getNodeByIdAsync(id);
+      if (node && "setPluginData" in node) {
+        (node as SceneNode).setPluginData(ignoreDataKey(issueType), "1");
+      }
+    } catch {
+      // ignore — worst case the issue just isn't marked and reappears next scan
+    }
+    // Reuse the UI's existing issues:resolved handling to drop the row without a full re-scan.
+    figma.ui.postMessage({ type: "issues:resolved", resolvedIds: [id], ignoredDelta: 1 });
+    return;
+  }
+
+  if (msg.type === "issue:unignoreAll") {
+    try {
+      const targets = await resolveAuditTargets();
+      const nodes = collectNodes(targets, true);
+      const types: IssueType[] = ["ROGUE_FILL", "ROGUE_STROKE", "UNSTYLED_TEXT", "DETACHED_INSTANCE"];
+      for (const node of nodes) {
+        for (const type of types) {
+          try {
+            node.setPluginData(ignoreDataKey(type), "");
+          } catch {
+            /* ignore */
+          }
+        }
+      }
+      if (lastAuditOptions && targets.length > 0) {
+        const { issues, summary, canceled } = await runAudit(targets, lastAuditOptions);
+        figma.ui.postMessage({ type: "audit-result", issues, summary, canceled });
+      }
+    } catch (e) {
+      figma.notify("Couldn't clear ignored issues: " + (stringifyMessage(e) || "unknown error"));
+    }
+    return;
+  }
+
   if (msg.type === "open-external") {
     const url = String(msg.url || "").trim();
 
@@ -2468,4 +2657,4 @@ figma.ui.onmessage = async (msg) => {
   if (msg.type === "close") {
     figma.closePlugin();
   }
-};
+}

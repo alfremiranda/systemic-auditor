@@ -7,29 +7,27 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" />
-    <!-- Material Symbols (Google) for iconography -->
-    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0" rel="stylesheet" />
     <style>
 
       :root {
         --font-sans: Manrope, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Inter, Arial;
         --bg: #05080a;
         --panel: #0b0f14;
-        --panel-2: rgba(255, 255, 255, 0.04);
         --stroke: rgba(255, 255, 255, 0.10);
         --stroke-2: rgba(255, 255, 255, 0.16);
         --text: rgba(255, 255, 255, 0.94);
         --muted: rgba(255, 255, 255, 0.62);
-        --muted-2: rgba(255, 255, 255, 0.40);
-        --issue-row-min-h: 58px;
-        --issues-tease-h: 76px;
-        --issues-bottom-gap: 20px;
+        --muted-2: rgba(255, 255, 255, 0.50);
+        --issue-row-min-h: 48px;
+        --issues-tease-h: 60px;
+        --issues-bottom-gap: 14px;
 
         --orange: #f59e0b;
         --cyan: #22d3ee;
         --red: #f87171;
         --violet: #a78bfa;
         --lime: #A3E635;
+        --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
       }
 
       /* Celebration (A-grade) */
@@ -116,7 +114,6 @@
       }
 
       :root {
-        --radius: 8px;
         --ease: cubic-bezier(.2,.8,.2,1);
         --dur-fast: 140ms;
         --dur: 180ms;
@@ -162,10 +159,11 @@
       .shell{ position: relative; z-index: 1; }
 
       .content {
-        padding: 20px 20px 24px; /* tighter bottom padding */
+        margin-right: 4px; /* keeps the east resize handle off the scrollbar */
+        padding: 14px 16px 16px; /* condensed for small-screen use */
         display: flex;
         flex-direction: column;
-        gap: 20px;
+        gap: 14px;
         min-height: 0;
         flex: 1 1 auto;
         overflow-y: auto;
@@ -204,28 +202,28 @@
         margin: 0;
         color: #F8FAFC;
         font-family: "Funnel Display", var(--font-sans);
-        font-size: 22px;
+        font-size: 19px;
         font-style: normal;
         font-weight: 700;
-        line-height: 24px;
+        line-height: 22px;
         letter-spacing: 0;
       }
       .header p {
         margin: 0;
-        font-size: 14px;
-        line-height: 20px;
+        font-size: 13px;
+        line-height: 18px;
         color: var(--muted);
       }
       .headerBar{
         display: flex;
         align-items: center;
         justify-content: space-between;
-        padding-bottom: 8px;
+        padding-bottom: 6px;
         gap: 12px;
       }
       .trialBanner{
-        margin-top: 10px;
-        padding: 8px 12px;
+        margin-top: 8px;
+        padding: 6px 10px;
         border-radius: 10px;
         border: 1px solid rgba(163,230,53,.25);
         background: rgba(24,34,14,.6);
@@ -313,7 +311,7 @@
         align-items: center;
         justify-content: center;
         padding: 16px;
-        z-index: 10;
+        z-index: 100; /* above the resize handles (40) */
         opacity: 0;
         pointer-events: none;
         transition: opacity 180ms var(--ease);
@@ -352,7 +350,7 @@
         padding: 0;
         display: flex;
         flex-direction: column;
-        gap: 12px;
+        gap: 10px;
         box-shadow: none;
         position: relative;
       }
@@ -383,7 +381,7 @@
         border: 1px solid rgba(163,230,53,.35);
         color: rgba(163,230,53,.95);
         background: rgba(163,230,53,.08);
-        font-weight: 900;
+        font-weight: 800;
         font-size: 10px;
         letter-spacing: 0.6px;
         display: inline-flex;
@@ -436,7 +434,7 @@
         font-size: 13px;
         outline: none;
       }
-      .proKeyInput::placeholder{ color: rgba(255,255,255,.35); font-weight: 600; }
+      .proKeyInput::placeholder{ color: rgba(255,255,255,.50); font-weight: 600; }
       .proKeyInput:focus{
         border-color: rgba(34,211,238,.22);
         box-shadow: 0 0 0 3px rgba(34,211,238,.12);
@@ -451,11 +449,6 @@
         flex-direction: column;
         gap: 4px;
         padding-bottom: 6px;
-      }
-      .proKeyInputSlot{
-        display: flex;
-        flex-direction: column;
-        gap: 6px;
       }
       #proPanel[data-state="verified"] .proFormRow{
         display: none;
@@ -675,11 +668,11 @@
       .actions {
         display: grid;
         grid-template-columns: 1fr 1fr;
-        gap: 12px;
+        gap: 10px;
       }
 
       .btn {
-        height: 48px;
+        height: 38px;
         border-radius: 8px;
         border: 1px solid var(--stroke);
         background: rgba(255,255,255,.04);
@@ -706,6 +699,19 @@
         display: inline-block;
         transform: translateY(0);
         transition: transform var(--dur-fast) var(--ease);
+      }
+      .btnIcon{
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 14px;
+        height: 14px;
+        flex-shrink: 0;
+      }
+      .btnIcon svg{
+        width: 100%;
+        height: 100%;
+        display: block;
       }
 
       /* Scan selection hover: subtle, smooth micro-interaction (no size jump) */
@@ -748,7 +754,6 @@
           #A3E635 78%,
           #65A30D 100%
         );
-        animation: scanLimeLoop 400ms linear infinite;
       }
 
       /* Optional soft sheen so the motion reads even on bright displays */
@@ -774,16 +779,29 @@
       .btn:hover { border-color: var(--stroke-2); }
       .btn:active { transform: translateY(1px); }
       .btn:disabled { opacity: .55; cursor: not-allowed; }
-      .btn:focus-visible{
-        outline: none;
-        box-shadow: 0 0 0 3px rgba(34,211,238,.18), 0 0 0 1px rgba(255,255,255,.18) inset;
-      }
-      .btnPrimary:focus-visible{
-        box-shadow: 0 0 0 3px rgba(173,70,255,.22), 0 0 0 1px rgba(15,23,42,.25) inset;
+      /* One visible keyboard focus style across the UI (lime on dark is 12:1) */
+      .btn:focus-visible,
+      .btnPrimary:focus-visible,
+      .fixBtn:focus-visible,
+      .fixTrigger:focus-visible,
+      .fixOption:focus-visible,
+      .proKeyDisplay:focus-visible,
+      .proKeyToggle:focus-visible,
+      .proKeyClear:focus-visible,
+      .proVerifyBtn:focus-visible,
+      .proUpsellCta:focus-visible,
+      .proClose:focus-visible,
+      .statCard:focus-visible,
+      .sectionHeader:focus-visible,
+      .row:focus-visible,
+      .switch:has(input:focus-visible){
+        outline: 2px solid var(--lime);
+        outline-offset: 2px;
       }
       /* Health Gauge (single source of truth — 120px) */
       .healthGaugeWrap{
         width: 120px;
+        padding: 6px 0;
         display: flex;
         align-items: center;
         justify-content: flex-end;
@@ -842,7 +860,7 @@
         line-height: 16px; /* 133.333% of 12px */
         letter-spacing: -0.2px;
         white-space: nowrap;
-        color: rgba(255,255,255,.42);
+        color: rgba(255,255,255,.50);
       }
 
       /* Gauge controls */
@@ -883,8 +901,10 @@
       #results.isVisible #secIssues{ animation: fadeUp var(--dur-slow) var(--ease) both; animation-delay: 70ms; }
       
      @media (prefers-reduced-motion: reduce){
+      .autofixInline.isVisible{ animation: none !important; }
+      body[data-fixing="true"] .healthGaugeGrade{ animation: none !important; }
+      .loadingRing{ animation: spin 0.8s linear infinite !important; } /* keep the spinner turning, drop the pulse */
       #results{ transition: none; }
-      .gValue{ transition: none; }
       .btn{ transition: none; }
       .sectionBody{ transition: none; }
       .statusCard, .statsGrid, #secIssues, .noSelectionCard, .row{ animation: none !important; }
@@ -929,11 +949,6 @@
         animation: spin 0.8s linear infinite;
       }
       @keyframes spin { to { transform: rotate(360deg); } }
-      @keyframes gaugeFillShift {
-        0%{ filter: brightness(0.98) saturate(1); }
-        50%{ filter: brightness(1.02) saturate(1.02); }
-        100%{ filter: brightness(0.98) saturate(1); }
-      }
       @keyframes gaugeBeat {
         0%{ opacity: .7; transform: scale(1); }
         18%{ opacity: 1; transform: scale(1.03); }
@@ -962,7 +977,7 @@
         display: flex;
         align-items: center;
         justify-content: space-between;
-        padding: 6px 2px;
+        padding: 4px 2px;
         cursor: pointer;
         user-select: none;
       }
@@ -979,16 +994,6 @@
         justify-content: center;
         opacity: .95;
         transition: opacity .12s ease, transform .18s ease;
-      }
-
-      /* Material Symbols sizing + defaults */
-      .material-symbols-outlined {
-        font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
-        font-family: 'Material Symbols Outlined';
-        font-size: 24px;
-        line-height: 1;
-        display: inline-block;
-        vertical-align: middle;
       }
 
       /* Inline SVG chevron used in plugin (preferred for environments
@@ -1020,13 +1025,6 @@
         border-radius: 6px;
         transition: transform .18s ease, opacity .12s ease;
       }
-      .section .chev .material-symbols-outlined{
-        color: #ffffff;
-        transition: transform .18s ease, opacity .12s ease, color .12s ease;
-        opacity: 1;
-        transform-origin: center;
-      }
-
       .sectionBody {
         overflow: hidden;
         max-height: 900px;
@@ -1045,23 +1043,25 @@
         max-height: 0;
         opacity: 0;
         transform: translateY(-2px);
+        visibility: hidden;
+        transition: max-height .22s ease, opacity var(--dur) var(--ease), transform var(--dur) var(--ease), visibility 0s linear .22s;
       }
 
       /* Options grid */
       .optionsGrid {
         display: grid;
         grid-template-columns: 1fr 1fr;
-        gap: 10px;
-        margin-top: 8px;
+        gap: 8px;
+        margin-top: 6px;
       }
 
       .optCard {
         border: 1px solid var(--stroke);
         background: rgba(255,255,255,.03);
         border-radius: 8px;
-        padding: 10px;
+        padding: 8px;
         display: flex;
-        gap: 10px;
+        gap: 8px;
         align-items: flex-start;
         font-family: var(--font-sans);
         -webkit-font-smoothing: antialiased;
@@ -1078,7 +1078,7 @@
         width: 22px;
         height: 22px;
         border-radius: 7px;
-        border: 2px solid rgba(255,255,255,.14);
+        border: 2px solid rgba(255,255,255,.36);
         background: transparent;
         position: relative;
         flex-shrink: 0;
@@ -1122,8 +1122,8 @@
       .divider {
         border-color: rgba(255, 255, 255, 0.4);
         display: flex;
-        height: 8px;
-        padding: 4px 0;
+        height: 6px;
+        padding: 3px 0;
         justify-content: center;
         align-items: center;
         align-self: stretch;
@@ -1133,8 +1133,8 @@
         border: 1px solid rgba(255,255,255,.10);
         background: rgba(255,255,255,.04);
         border-radius: 8px;
-        padding: 16px;
-        min-height: 140px;
+        padding: 14px;
+        min-height: 120px;
         display: flex;
         align-items: center;
         justify-content: center;
@@ -1171,13 +1171,13 @@
       border: 1px solid rgba(255,255,255,.10);
       background: linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,.02));
       border-radius: 8px;
-      padding: 12px; /* space/12 */
+      padding: 10px 12px; /* space/12 */
       display: flex;
       align-items: center;
       gap: 12px; /* space/12 */
       overflow: hidden;
       position: relative;
-      min-height: 106px;
+      min-height: 88px;
       box-shadow:
         0 1px 0 rgba(255,255,255,.06) inset,
         0 24px 60px rgba(0,0,0,.35);
@@ -1250,7 +1250,7 @@
         white-space: nowrap;
       }
       .statusSub {
-        font-size: 14px;
+        font-size: 13px;
         line-height: 1.25;
         color: #94a3b8;
         margin: 0;
@@ -1259,7 +1259,7 @@
         word-break: normal;
       }
       .autofixProgress{
-        margin-top: 10px;
+        margin-top: 8px;
         height: 8px;
         border-radius: 999px;
         background: rgba(148,163,184,.18);
@@ -1283,23 +1283,28 @@
       @media (max-width: 420px){
         .statusTitle{ white-space: normal; }
         .statusSub{ font-size: 12px; }
+        .statsGrid{ gap: 6px; }
+        .statCard{ padding: 6px; }
       }
 
+      /* Below this, two-up layouts get cramped: drop to one column and shrink the gauge. */
       @media (max-width: 380px){
-        .healthGaugeWrap{ width: 120px; }
-        .healthGauge{ width: 120px; height: 60px; }
-        .healthGaugeChart{ width: 120px; height: 60px; }
-        .healthGaugeGrade{ font-size: 24px; }
-        .healthGaugeLabel{ font-size: 12px; }
+        .healthGaugeWrap{ width: 100px; }
+        .healthGauge{ width: 100px; height: 52px; }
+        .healthGaugeChart{ width: 100px; height: 52px; }
+        .healthGaugeGrade{ font-size: 20px; }
+        .healthGaugeLabel{ font-size: 11px; }
         .statusSub{ font-size: 12px; }
-     
+        .statusLeft{ width: 168px; }
+        .optionsGrid{ grid-template-columns: 1fr; }
+        .actions{ grid-template-columns: 1fr; }
       }
 
       .statsGrid {
         display: grid;
         grid-template-columns: repeat(6, 1fr);
-        gap: 12px;
-        margin-top: 10px;
+        gap: 8px;
+        margin-top: 8px;
       }
 
       /* Grid placement to match Figma:
@@ -1321,7 +1326,7 @@
         border: 1px solid rgba(51,65,85,.12);
         background: rgba(51,65,85,.06);
         border-radius: 8px;
-        padding: 10px;
+        padding: 8px;
         cursor: pointer;
         position: relative;
         transition: border-color .12s ease, background .12s ease, transform .08s ease, box-shadow .12s ease;
@@ -1334,11 +1339,10 @@
         box-shadow: 0 6px 18px rgba(0,0,0,.35), 0 0 0 1px rgba(51,65,85,.12) inset;
       }
 
-      .statValue { font-size: 24px; line-height: 32
-        px; font-weight: 700; margin: 0; }
+      .statValue { font-size: 19px; line-height: 24px; font-weight: 700; margin: 0; }
       .statLabel {
-        margin-top: 6px;
-        font-size: 14px;
+        margin-top: 4px;
+        font-size: 12px;
         color: #94a3b8;
         display: flex;
         align-items: center;
@@ -1514,15 +1518,17 @@
       }
 
       .row {
-        padding: 12px;
+        padding: 10px;
         min-height: var(--issue-row-min-h);
         border-bottom: 1px solid rgba(255,255,255,.06);
         cursor: pointer;
         display: flex;
         flex-direction: column;
-        gap: 8px;
+        gap: 6px;
         animation: rowIn 220ms var(--ease) both;
-        animation-delay: calc(var(--i, 0) * 18ms);
+        /* Capped: uncapped, a large/filtered list (300+ rows) left most of it sitting at
+           opacity:0 for several seconds after every render — looked like the list hadn't updated. */
+        animation-delay: min(calc(var(--i, 0) * 18ms), 260ms);
         will-change: transform, opacity;
         align-items: stretch;
         position: relative;
@@ -1571,7 +1577,7 @@
       }
 
       .name {
-        font-size: 16px;
+        font-size: 15px;
         font-weight: 800;
         white-space: nowrap;
         overflow: hidden;
@@ -1604,15 +1610,6 @@
         flex-direction: column;
         gap: 4px;
       }
-      .path {
-        font-size: 13px;
-        color: var(--muted-2);
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        max-width: 100%;
-      }
-
       .rowActions {
         display: flex;
         align-items: center;
@@ -1694,7 +1691,7 @@
       }
       .fixTrigger{
         width: 100%;
-        height: 38px;
+        height: 30px;
         border-radius: 10px;
         border: 1px solid rgba(148,163,184,.25);
         background: rgba(15,23,42,.55);
@@ -1702,7 +1699,7 @@
         font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace);
         font-size: 12px;
         font-weight: 600;
-        padding: 0 10px 0 12px;
+        padding: 0 8px 0 10px;
         outline: none;
         display: flex;
         align-items: center;
@@ -1842,7 +1839,7 @@
         cursor: not-allowed;
       }
       .fixBtn{
-        height: 32px;
+        height: 28px;
         border-radius: 10px;
         border: 1px solid rgba(255,255,255,.12);
         background: rgba(51,65,85,.55);
@@ -1852,7 +1849,7 @@
         font-size: 12px;
         letter-spacing: 0.3px;
         cursor: pointer;
-        padding: 0 14px;
+        padding: 0 12px;
         transition: border-color .16s ease, background .16s ease, transform .08s ease, box-shadow .16s ease;
       }
       .fixBtn:hover{
@@ -1879,41 +1876,133 @@
         display: inline-flex;
       }
 
-      .pill {
+      .ignoreBtnWrap{
+        position: relative;
         display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        height: 28px;
-        padding: 6px 12px;
-        border-radius: 999px;
-        border: 1px solid rgba(148,163,184,.18);
-        color: #94a3b8;
-        background: transparent;
-        white-space: nowrap;
       }
-      .pill.detached { border-color: rgba(245,158,11,.35); color: rgba(245,158,11,.98); }
-      .pill.text { border-color: rgba(34,211,238,.35); color: rgba(34,211,238,.98); }
-      .pill.fill { border-color: rgba(248,113,113,.35); color: rgba(248,113,113,.98); }
-
-      .row .iconBtn { color: #94a3b8; }
-      .row:hover .iconBtn { color: #ffffff; border-color: rgba(255,255,255,.12); background: rgba(255,255,255,.03); }
-
-      .iconBtn {
+      .ignoreBtn{
         width: 28px;
         height: 28px;
+        border-radius: 10px;
+        border: 1px solid rgba(255,255,255,.12);
+        background: rgba(51,65,85,.35);
+        color: rgba(255,255,255,.7);
+        cursor: pointer;
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        border-radius: 10px;
-        border: 1px solid var(--stroke);
-        background: rgba(255,255,255,.02);
-        color: var(--text);
-        cursor: pointer;
-        padding: 0;
+        transition: border-color .16s ease, background .16s ease, color .16s ease;
       }
-      .iconBtn:hover { border-color: var(--stroke-2); background: rgba(255,255,255,.04); }
-      .iconBtn:active { transform: translateY(1px); }
-      .iconBtn svg { width: 14px; height: 14px; opacity: .9; }
+      .ignoreBtn:hover{
+        border-color: rgba(255,255,255,.22);
+        background: rgba(51,65,85,.55);
+        color: rgba(255,255,255,.95);
+      }
+      .ignoreBtn:active{ transform: translateY(1px); }
+      .ignoreBtn svg{ width: 15px; height: 15px; }
+
+      /* Issues toolbar: sort / select-all / export, above the issues list */
+      .issuesToolbar{
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        padding: 4px 2px 8px;
+        flex-wrap: wrap;
+      }
+      .issuesToolbarLeft{
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+      .toolbarBtnWrap{ position: relative; display: inline-flex; }
+      .toolbarBtnWrap:hover .tooltip,
+      .toolbarBtnWrap:focus-within .tooltip{
+        opacity: 1;
+        transform: translateX(-50%) translateY(-2px);
+      }
+      .toolbarBtn{
+        height: 28px;
+        padding: 0 10px;
+        border-radius: 8px;
+        border: 1px solid var(--stroke);
+        background: rgba(255,255,255,.03);
+        color: rgba(255,255,255,.85);
+        font-family: var(--font-sans);
+        font-size: 12px;
+        font-weight: 600;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+      }
+      .toolbarBtn:hover{ border-color: var(--stroke-2); color: #fff; }
+      .toolbarBtn svg{ width: 14px; height: 14px; flex-shrink: 0; }
+      #sortMenu{
+        position: absolute;
+        top: calc(100% + 6px);
+        left: 0;
+        width: 140px;
+      }
+      .ignoredLink{
+        border: none;
+        background: none;
+        color: var(--muted);
+        font-family: var(--font-sans);
+        font-size: 11px;
+        font-weight: 600;
+        cursor: pointer;
+        padding: 4px 2px;
+        text-decoration: underline;
+        text-underline-offset: 2px;
+      }
+      .ignoredLink:hover{ color: rgba(255,255,255,.9); }
+
+      .matchingIndicator{
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        color: rgba(255,255,255,.55);
+        font-family: var(--font-sans);
+        font-size: 11px;
+        font-weight: 600;
+      }
+      .matchingIndicator .spinner{
+        width: 12px;
+        height: 12px;
+        border-color: rgba(148,163,184,.25);
+        border-top-color: rgba(226,232,240,.9);
+      }
+
+      .healthLabelWrap{
+        position: relative;
+        display: inline-flex;
+        align-items: center;
+        gap: 3px;
+      }
+      .healthLabelWrap:hover .tooltip,
+      .healthLabelWrap:focus-within .tooltip{
+        opacity: 1;
+        transform: translateX(-50%) translateY(-2px);
+      }
+      .healthLabelWrap .tooltip{
+        left: 50%;
+        white-space: normal;
+        width: 170px;
+        text-align: left;
+      }
+      .healthInfoBtn{
+        border: none;
+        background: none;
+        padding: 0;
+        margin: 0;
+        color: rgba(255,255,255,.4);
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+      }
+      .healthInfoBtn:hover{ color: rgba(255,255,255,.8); }
+      .healthInfoBtn svg{ width: 12px; height: 12px; }
 
       .empty {
         padding: 16px 12px;
@@ -1951,7 +2040,7 @@
         top: 0;
         bottom: 0;
         right: 0;
-        width: 8px;
+        width: 4px;
         cursor: ew-resize;
       }
       .resize-handle[data-dir="w"]{
@@ -2004,7 +2093,7 @@
         </div>
 
         <div class="section" id="secOptions" data-open="false">
-          <div class="sectionHeader" data-toggle="secOptions">
+          <div class="sectionHeader" data-toggle="secOptions" role="button" tabindex="0" aria-expanded="false" aria-controls="secOptions">
             <h3>Scanner Options</h3>
             <div class="chev" aria-hidden="true"><span class="chevIcon" aria-hidden="true"></span></div>
           </div>
@@ -2012,7 +2101,7 @@
             <div class="optionsGrid">
               <div class="optCard">
                 <label class="switch" id="swChildren" data-on="true">
-                  <input type="checkbox" id="includeChildren" checked />
+                  <input type="checkbox" id="includeChildren" aria-label="Include children" checked />
                   <span class="knob"></span>
                 </label>
                 <div class="optText">
@@ -2023,7 +2112,7 @@
 
               <div class="optCard">
                 <label class="switch" id="swDetached" data-on="true">
-                  <input type="checkbox" id="detachedInstances" checked />
+                  <input type="checkbox" id="detachedInstances" aria-label="Detached instances" checked />
                   <span class="knob"></span>
                 </label>
                 <div class="optText">
@@ -2034,7 +2123,7 @@
 
               <div class="optCard">
                 <label class="switch" id="swText" data-on="true">
-                  <input type="checkbox" id="textWithoutStyle" checked />
+                  <input type="checkbox" id="textWithoutStyle" aria-label="Text without style" checked />
                   <span class="knob"></span>
                 </label>
                 <div class="optText">
@@ -2045,7 +2134,7 @@
 
               <div class="optCard">
                 <label class="switch" id="swFills" data-on="true">
-                  <input type="checkbox" id="rogueFills" checked />
+                  <input type="checkbox" id="rogueFills" aria-label="Rogue fills" checked />
                   <span class="knob"></span>
                 </label>
                 <div class="optText">
@@ -2056,7 +2145,7 @@
 
               <div class="optCard">
                 <label class="switch" id="swStrokes" data-on="true">
-                  <input type="checkbox" id="rogueStrokes" checked />
+                  <input type="checkbox" id="rogueStrokes" aria-label="Rogue strokes" checked />
                   <span class="knob"></span>
                 </label>
                 <div class="optText">
@@ -2084,8 +2173,8 @@
         <div class="statusCard">
             <div class="statusContent">
               <div class="statusLeft">
-                <p class="statusTitle" id="statusTitle">Scan status: completed</p>
-                <p class="statusSub" id="statusSub">Found 0 total issues in scan.</p>
+                <p class="statusTitle" id="statusTitle" role="status">Scan status: completed</p>
+                <p class="statusSub" id="statusSub">Found 0 issues in scan.</p>
                 <p class="celebrateMsg" id="celebrateMsg" style="display:none;">You’re all set — nothing to fix. ✨</p>
                 <div class="autofixProgress" id="autofixProgress">
                   <div class="autofixProgressBar" id="autofixProgressBar"></div>
@@ -2137,7 +2226,13 @@
                       <div class="healthGaugeGrade" data-role="grade">—</div>
                     </div>
 
-                    <div class="healthGaugeLabel" data-role="label">Health Score</div>
+                    <div class="healthLabelWrap" id="healthLabelWrap">
+                      <div class="healthGaugeLabel" data-role="label">Health Score</div>
+                      <button class="healthInfoBtn" id="healthInfoBtn" type="button" tabindex="0" aria-label="How Health Score is calculated">
+                        <svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="6.5" stroke="currentColor" stroke-width="1.4"/><path d="M8 7.2v4M8 5.2v.01" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+                      </button>
+                      <div class="tooltip">(audited elements − elements with issues) ÷ audited elements</div>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -2148,31 +2243,32 @@
               <span class="loadingRing" aria-hidden="true"></span>
               <div class="loadingTitle">Scan status:</div>
               <div class="loadingSub">Finding issues and matching variables/styles…</div>
+              <button class="autofixInlineCancel" id="scanCancelBtn" type="button">Cancel Scan</button>
             </div>
           </div>
 
           <div class="statsGrid">
-            <div class="statCard" id="filterAll" data-active="true">
+            <div class="statCard" id="filterAll" data-active="true" role="button" tabindex="0" aria-pressed="true">
               <span class="statSpinner" style="--spinner-color:#ffffff"></span>
               <p class="statValue" id="statTotal">0</p>
               <div class="statLabel"><span class="dot" style="background:#ffffff"></span>Total issues found</div>
             </div>
-            <div class="statCard" id="filterDetached" data-active="false">
+            <div class="statCard" id="filterDetached" data-active="false" role="button" tabindex="0" aria-pressed="false">
               <span class="statSpinner" style="--spinner-color:var(--violet)"></span>
               <p class="statValue" id="statDetached">0</p>
               <div class="statLabel"><span class="dot" style="background:var(--violet)"></span>Detached</div>
             </div>
-            <div class="statCard" id="filterText" data-active="false">
+            <div class="statCard" id="filterText" data-active="false" role="button" tabindex="0" aria-pressed="false">
               <span class="statSpinner" style="--spinner-color:var(--cyan)"></span>
               <p class="statValue" id="statText">0</p>
               <div class="statLabel"><span class="dot" style="background:var(--cyan)"></span>Text</div>
             </div>
-            <div class="statCard" id="filterFills" data-active="false">
+            <div class="statCard" id="filterFills" data-active="false" role="button" tabindex="0" aria-pressed="false">
               <span class="statSpinner" style="--spinner-color:var(--red)"></span>
               <p class="statValue" id="statFills">0</p>
               <div class="statLabel"><span class="dot" style="background:var(--red)"></span>Fills</div>
             </div>
-            <div class="statCard" id="filterStrokes" data-active="false">
+            <div class="statCard" id="filterStrokes" data-active="false" role="button" tabindex="0" aria-pressed="false">
               <span class="statSpinner" style="--spinner-color:var(--orange)"></span>
               <p class="statValue" id="statStrokes">0</p>
               <div class="statLabel"><span class="dot" style="background:var(--orange)"></span>Strokes</div>
@@ -2187,19 +2283,52 @@
           <div class="divider" id="issuesDivider" style="margin-top:14px;"></div>
 
           <div class="section" id="secIssues" data-open="true">
-            <div class="sectionHeader" data-toggle="secIssues">
+            <div class="sectionHeader" data-toggle="secIssues" role="button" tabindex="0" aria-expanded="true" aria-controls="secIssues">
               <h3>Issues found</h3>
               <div class="chev" aria-hidden="true"><span class="chevIcon" aria-hidden="true"></span></div>
             </div>
             <div class="sectionBody">
+              <div class="issuesToolbar" id="issuesToolbar">
+                <div class="issuesToolbarLeft">
+                  <div class="toolbarBtnWrap" id="sortBtnWrap">
+                    <button class="toolbarBtn" id="sortBtn" type="button" aria-haspopup="listbox" aria-expanded="false" aria-label="Sort issues">
+                      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M7 4v16M7 4l-3 3M7 4l3 3M17 20V4M17 20l-3-3M17 20l3-3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                      <span id="sortBtnLabel">Sort</span>
+                    </button>
+                    <div class="tooltip">Sort issues</div>
+                    <div class="fixMenu toolbarMenu" id="sortMenu" role="listbox" aria-label="Sort issues">
+                      <div class="fixOption" role="option" tabindex="0" data-sort="scan" data-selected="true">Scan order</div>
+                      <div class="fixOption" role="option" tabindex="0" data-sort="type">By type</div>
+                      <div class="fixOption" role="option" tabindex="0" data-sort="name">By name</div>
+                    </div>
+                  </div>
+                  <div class="toolbarBtnWrap">
+                    <button class="toolbarBtn" id="selectAllBtn" type="button" aria-label="Select all shown on canvas">
+                      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="3" stroke="currentColor" stroke-width="2"/><path d="M8 12l3 3 5-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    </button>
+                    <div class="tooltip">Select all shown on canvas</div>
+                  </div>
+                  <div class="toolbarBtnWrap" id="exportBtnWrap">
+                    <button class="toolbarBtn" id="exportBtn" type="button" aria-label="Export scan as CSV">
+                      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 3v12m0 0l-4-4m4 4l4-4M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    </button>
+                    <div class="tooltip">Export scan as CSV</div>
+                  </div>
+                  <div class="matchingIndicator" id="matchingIndicator" role="status" style="display:none;">
+                    <span class="spinner" aria-hidden="true"></span>
+                    <span id="matchingIndicatorText">Matching…</span>
+                  </div>
+                </div>
+                <button class="ignoredLink" id="ignoredLink" type="button" style="display:none;"></button>
+              </div>
               <div class="issuesBox" id="issuesBox">
                 <div class="issuesScroll scrollY" id="list" role="list">
                   <div class="empty">Run a scan to see issues here.</div>
                 </div>
-                <div class="autofixInline" id="autofixInline" aria-hidden="true">
-                  <div class="autofixInlineText" id="autofixInlineText">Auditing for high-confidence fixes...</div>
+                <div class="autofixInline" id="autofixInline">
+                  <div class="autofixInlineText" id="autofixInlineText" role="status">Auditing for high-confidence fixes...</div>
                 <div class="autofixInlineRow">
-                  <div class="autofixInlineProgress">
+                  <div class="autofixInlineProgress" id="autofixInlineProgress" role="progressbar" aria-label="Auto-fix progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
                     <div class="autofixInlineBar" id="autofixInlineBar"></div>
                   </div>
                   <div class="autofixInlinePercent" id="autofixInlinePercent">0%</div>
@@ -2208,7 +2337,7 @@
               </div>
                 <div class="proTease">
                   <div class="proBtnWrap">
-                    <button class="btn btnPrimary proBtn" type="button" aria-disabled="true" id="proAutofixBtn"><span class="btnLabel">✨ Auto-fix all 251 issues</span></button>
+                    <button class="btn btnPrimary proBtn" type="button" aria-disabled="true" id="proAutofixBtn"><span class="btnIcon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2L14.2 9.8L22 12L14.2 14.2L12 22L9.8 14.2L2 12L9.8 9.8Z"/></svg></span><span class="btnLabel">Auto-fix all issues</span></button>
                     <div class="tooltip">Unlock Auto-fix with Systemic Pro.</div>
                   </div>
                 </div>
@@ -2239,12 +2368,12 @@
                 <div class="proModalTitle">Systemic Auditor</div>
                 <div class="proPill" title="Pro">PRO</div>
               </div>
-              <div class="proModalSub" id="proPanelSub">Pro features are unlock.</div>
+              <div class="proModalSub" id="proPanelSub">Pro features are unlocked.</div>
             </div>
           </div>
 
           <div class="proKeyGroup">
-            <div class="proKeyLabel">License Key</div>
+            <label class="proKeyLabel" for="proKeyInput">License Key</label>
             <div class="proFormRow" id="proFormRow">
               <input
                 class="proKeyInput"
@@ -2263,6 +2392,7 @@
                 class="proKeyDisplay"
                 id="proKeyDisplay"
                 type="password"
+                aria-label="License key"
                 readonly
                 spellcheck="false"
               />
@@ -2273,7 +2403,8 @@
                 </svg>
               </button>
             </div>
-            <div class="proStateRow" id="proVerifyState" data-state="idle">
+            <button class="proKeyClear" id="proKeyClear" type="button">Remove license from this device</button>
+            <div class="proStateRow" id="proVerifyState" data-state="idle" role="status">
               <span class="proStateDot" aria-hidden="true"></span>
               <span class="proStateText" id="proStateText">Not verified</span>
             </div>
@@ -2299,6 +2430,31 @@
     <script>
       const $ = (id) => document.getElementById(id);
 
+      // Issue keys look like "<nodeId>:<kind>". Figma node ids contain a colon themselves ("12:34"),
+      // so the kind is always what follows the LAST colon.
+      function parseKey(key){
+        const str = String(key || "");
+        const i = str.lastIndexOf(":");
+        return i < 0 ? { id: str, kind: "" } : { id: str.slice(0, i), kind: str.slice(i + 1) };
+      }
+      // Div-based controls (stat cards, section headers, rows) act like buttons: Enter/Space activates them.
+      function bindKeyboardActivate(el, ignoreBubbled){
+        el.addEventListener("keydown", (e) => {
+          if (e.key !== "Enter" && e.key !== " ") return;
+          if (ignoreBubbled && e.target !== el) return; // keys pressed on a nested button belong to that button
+          e.preventDefault();
+          el.click();
+        });
+      }
+      const plural = (n, word) => `${Number(n)} ${word}${Number(n) === 1 ? "" : "s"}`;
+
+      // The Auto-fix button's sparkle icon only makes sense in its idle "Auto-fix all N issues" state —
+      // hide it whenever the label switches to a progress/confirm string (those already say what's happening).
+      function setAutofixBtnIcon(proBtn, show){
+        const icon = proBtn && proBtn.querySelector(".btnIcon");
+        if (icon) icon.style.display = show ? "inline-flex" : "none";
+      }
+
       const PRO_BUY_URL = "https://www.systemicauditor.com/";
       const PRO_CHECKOUT_URL = "https://shop.systemicauditor.com/checkout/buy/ed3ae526-aaf8-482d-a0de-d12852511261";
 
@@ -2321,6 +2477,9 @@
         requestedByKey: {},
         retryByKey: {},
         pendingTimers: {},
+        retryTimers: {},
+        confirmTotal: 0,
+        confirmTimer: null,
         selectedByKey: {},
         pendingKeys: {},
         pendingCount: 0,
@@ -2352,6 +2511,7 @@
         autofixState.selectedByKey = {};
         autofixState.pendingKeys = {};
         autofixState.pendingCount = 0;
+        updateMatchingIndicator();
         autofixState.baseSummary = null;
         autofixState.baseScore = null;
         autofixState.baseTotal = null;
@@ -2368,6 +2528,13 @@
           clearTimeout(autofixState.pendingTimers[key]);
         }
         autofixState.pendingTimers = {};
+        for (const key of Object.keys(autofixState.retryTimers)) {
+          clearTimeout(autofixState.retryTimers[key]);
+        }
+        autofixState.retryTimers = {};
+        if (autofixState.confirmTimer) clearTimeout(autofixState.confirmTimer);
+        autofixState.confirmTimer = null;
+        autofixState.confirmTotal = 0;
         autofixQueue.queue = [];
         autofixQueue.inFlight = new Set();
       }
@@ -2385,6 +2552,22 @@
         });
       }
 
+      // Small, non-disruptive "N matching…" indicator in the issues toolbar — distinct from
+      // setDataLoading()/body[data-loading], which hides the whole stat grid + issues list and is
+      // meant for the initial post-scan load, not for background per-row candidate fetching.
+      function updateMatchingIndicator(){
+        const el = document.getElementById("matchingIndicator");
+        const text = document.getElementById("matchingIndicatorText");
+        if (!el) return;
+        const n = autofixState.pendingCount;
+        if (n > 0) {
+          el.style.display = "inline-flex";
+          if (text) text.textContent = n === 1 ? "Matching…" : `Matching ${n}…`;
+        } else {
+          el.style.display = "none";
+        }
+      }
+
       function markCandidatePending(key){
         if (autofixState.pendingKeys[key]) return;
         autofixState.pendingKeys[key] = true;
@@ -2392,12 +2575,14 @@
         if (state.isScanning) {
           setDataLoading(true);
         }
+        updateMatchingIndicator();
       }
 
       function markCandidateDone(key){
         if (!autofixState.pendingKeys[key]) return;
         delete autofixState.pendingKeys[key];
         autofixState.pendingCount = Math.max(0, autofixState.pendingCount - 1);
+        updateMatchingIndicator();
         if (autofixState.pendingCount === 0 && state.scanComplete) {
           setDataLoading(false);
           setTimeout(refreshAutofixRows, 60);
@@ -2415,6 +2600,7 @@
           rogueStrokes: 0,
           scannedElements: Number(prevSummary?.scannedElements || 0),
           elementsWithIssues: 0,
+          ignored: Number(prevSummary?.ignored || 0),
         };
         const uniqueIds = new Set();
         for (const issue of issues) {
@@ -2444,9 +2630,15 @@
         parent.postMessage({ pluginMessage: { type: "open-external", url: target } }, "*");
       }
 
+      let _proModalOpener = null;
+
       function openProModal(){
         const modal = document.getElementById("proModal");
         if (!modal) return;
+        _proModalOpener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+        // Everything behind the dialog stops receiving focus/clicks while it is open (focus trap).
+        const shell = document.querySelector(".shell");
+        if (shell) shell.inert = true;
         modal.style.display = "flex";
         modal.setAttribute("aria-hidden", "false");
         requestAnimationFrame(() => {
@@ -2465,6 +2657,12 @@
         if (modal.getAttribute("aria-hidden") === "true" || modal.style.display === "none") return;
         modal.classList.remove("isOpen");
         modal.setAttribute("aria-hidden", "true");
+        const shell = document.querySelector(".shell");
+        if (shell) shell.inert = false;
+        if (_proModalOpener && document.contains(_proModalOpener)) {
+          try { _proModalOpener.focus(); } catch (e) {}
+        }
+        _proModalOpener = null;
         window.setTimeout(() => {
           if (!modal.classList.contains("isOpen")) {
             modal.style.display = "none";
@@ -2515,21 +2713,12 @@
 
         const prevScrollTop = wasOpen ? menu.scrollTop : 0;
         menu.innerHTML = "";
+        // Free users see the real recommendation, read-only — the trigger/Fix button just stay
+        // disabled (below) rather than hiding the candidate behind a generic "Unlock Pro" string.
         trigger.disabled = !proState.verified;
 
-        if (!proState.verified) {
-          if (valueEl) valueEl.textContent = "Unlock Pro to auto-fix";
-          if (swatchEl) {
-            swatchEl.style.background = "";
-            swatchEl.style.display = "none";
-          }
-          dropdown.dataset.value = "";
-          fixBtn.disabled = true;
-          return;
-        }
-
         if (!candidates.length) {
-          if (valueEl) valueEl.textContent = kind === "text" ? "No matching styles" : "No matching variables";
+          if (valueEl) valueEl.textContent = !proState.verified ? "Unlock Pro to auto-fix" : (kind === "text" ? "No matching styles" : "No matching variables");
           if (swatchEl) {
             swatchEl.style.background = "";
             swatchEl.style.display = "none";
@@ -2573,6 +2762,11 @@
           for (const c of items) {
             const opt = document.createElement("div");
             opt.className = "fixOption";
+            opt.setAttribute("role", "option");
+            opt.setAttribute("aria-selected", String(c.id === selectedId));
+            if (c.disabled) opt.setAttribute("aria-disabled", "true");
+            opt.tabIndex = c.disabled ? -1 : 0;
+            bindKeyboardActivate(opt, false);
             opt.dataset.value = c.id;
             opt.dataset.selected = String(c.id === selectedId);
             if (c.disabled) opt.dataset.disabled = "true";
@@ -2619,7 +2813,10 @@
               const rowEl = dropdown.closest(".row");
               if (rowEl) rowEl.classList.remove("isOpen");
               if (menu) menu.classList.remove("isOpen");
-              if (menu && menu.parentElement) menu.parentElement.removeChild(menu);
+              // Put the menu back inside its dropdown so later updateAutofixRow() calls still find it.
+              if (menu && menu.parentElement !== dropdown) dropdown.appendChild(menu);
+              const backTo = dropdown.querySelector(".fixTrigger");
+              if (backTo) backTo.focus();
             });
             menu.appendChild(opt);
           }
@@ -2634,7 +2831,7 @@
           swatchEl.style.background = color;
           swatchEl.style.display = color ? "inline-block" : "none";
         }
-        fixBtn.disabled = !selectedId;
+        fixBtn.disabled = !selectedId || !proState.verified;
         if (wasOpen) {
           dropdown.classList.add("isOpen");
           if (rowEl) rowEl.classList.add("isOpen");
@@ -2668,7 +2865,6 @@
         trigger.disabled = true;
         dropdown.dataset.value = "";
         fixBtn.disabled = true;
-        const rowId = dropdown.dataset.issueId || "";
         if (autofixState.pendingTimers[key]) {
           clearTimeout(autofixState.pendingTimers[key]);
         }
@@ -2709,10 +2905,14 @@
           el.classList.remove("isOpen");
         });
         document.querySelectorAll(".row.isOpen").forEach((el) => {
-          if (exceptKey && el.dataset.issueId === (exceptKey || "").split(":")[0]) return;
+          if (exceptKey && el.dataset.issueId === parseKey(exceptKey).id) return;
           el.classList.remove("isOpen");
         });
-        document.querySelectorAll(".fixMenu").forEach((menu) => {
+        // .toolbarMenu (e.g. #sortMenu) reuses .fixMenu's visual styling but is not a per-row
+        // candidate picker, has its own open/close wiring (setupIssuesToolbar), and lives outside
+        // any .fixDropdown by design — sweeping it here closed it on every window resize/scroll,
+        // including the app's own frequent figma.ui.resize() calls, right after it was opened.
+        document.querySelectorAll(".fixMenu:not(.toolbarMenu)").forEach((menu) => {
           const key = menu.dataset.issueKey;
           if (exceptKey && key === exceptKey) return;
           if (!menu.closest(".fixDropdown")) {
@@ -2784,20 +2984,54 @@
         });
       }
 
+      // Candidate lookup is read-only (nothing is applied), so free users get it too — as a
+      // preview of what Pro would fix. Only the "Fix"/"Auto-fix all" mutations stay Pro-gated.
       function scheduleAutofixQueue(){
-        if (!proState.verified) return;
         if (autofixQueue.timer) clearTimeout(autofixQueue.timer);
         autofixQueue.timer = window.setTimeout(rebuildAutofixQueue, 80);
       }
 
+      const MAX_CANDIDATE_RETRIES = 5;
+
+      // Returns false once the retry budget for this key is spent.
       function scheduleCandidateRetry(key, delay = 1200){
         const next = (Number(autofixState.retryByKey[key]) || 0) + 1;
-        if (next > 5) return;
+        if (next > MAX_CANDIDATE_RETRIES) return false;
         autofixState.retryByKey[key] = next;
-        window.setTimeout(() => {
+        if (autofixState.retryTimers[key]) clearTimeout(autofixState.retryTimers[key]);
+        autofixState.retryTimers[key] = window.setTimeout(() => {
+          delete autofixState.retryTimers[key];
           delete autofixState.requestedByKey[key];
+          // During "Fix all" the preload queue must ask again too, or the run never completes.
+          if (autofixState.preloadingAll && autofixState.preloadRemaining.has(key)) {
+            autofixState.preloadQueue.push(key);
+            processAutofixPreloadQueue();
+          }
           scheduleAutofixQueue();
         }, delay);
+        return true;
+      }
+
+      // A candidates reply frees one preload slot; a final reply also completes the key.
+      function releasePreloadSlot(key, done){
+        if (!autofixState.preloadingAll || !autofixState.preloadRemaining.has(key)) return;
+        autofixState.preloadInFlight = Math.max(0, autofixState.preloadInFlight - 1);
+        if (done) {
+          autofixState.preloadRemaining.delete(key);
+          autofixState.preloadDone = autofixState.preloadTotal - autofixState.preloadRemaining.size;
+          updatePreloadProgress();
+        }
+        processAutofixPreloadQueue();
+      }
+
+      function showMixedWarning(key){
+        const row = document.querySelector(`.row[data-issue-id="${parseKey(key).id}"]`);
+        if (row && !row.querySelector(".fixWarning")) {
+          const warn = document.createElement("div");
+          warn.className = "fixWarning";
+          warn.textContent = "Mixed styles detected. Applying a style will reset local formatting.";
+          row.appendChild(warn);
+        }
       }
 
       function updatePreloadProgress(){
@@ -2810,6 +3044,7 @@
         if (proBtn) {
           const label = proBtn.querySelector('.btnLabel');
           if (label) label.textContent = "⏳ Preparing fixes...";
+          setAutofixBtnIcon(proBtn, false);
           proBtn.disabled = true;
         }
       }
@@ -2869,9 +3104,7 @@
             continue;
           }
           if (autofixState.requestedByKey[key]) continue;
-          const parts = key.split(":");
-          const issueId = parts[0];
-          const kind = parts[1];
+          const { id: issueId, kind } = parseKey(key);
           const dropdown = document.querySelector(`.fixDropdown[data-issue-key="${key}"]`);
           const trigger = dropdown ? dropdown.querySelector(".fixTrigger") : null;
           const menu = dropdown ? dropdown.querySelector(".fixMenu") : null;
@@ -2892,7 +3125,6 @@
       }
 
       function rebuildAutofixQueue(){
-        if (!proState.verified) return;
         const list = document.getElementById("list");
         const listRect = list ? list.getBoundingClientRect() : null;
         const visible = [];
@@ -2908,7 +3140,11 @@
           if (kind === "detached") return;
           const row = dropdown.closest(".row");
           const rect = row ? row.getBoundingClientRect() : null;
-          const entry = { key, issueId, kind, dropdown, rectTop: rect ? rect.top : 0 };
+          // Keys already mid-retry (library still importing) sort behind untried keys, so a
+          // handful of slow-to-import rows can't keep re-winning the top queue slots on every
+          // rebuild and starving the rest of the list from ever being requested.
+          const retried = autofixState.retryByKey[key] ? 1 : 0;
+          const entry = { key, issueId, kind, dropdown, rectTop: rect ? rect.top : 0, retried };
           const isVisible = listRect && rect ? (rect.bottom > listRect.top && rect.top < listRect.bottom) : false;
           if (isVisible) {
             visible.push(entry);
@@ -2916,14 +3152,14 @@
             hidden.push(entry);
           }
         });
-        visible.sort((a, b) => a.rectTop - b.rectTop);
-        hidden.sort((a, b) => a.rectTop - b.rectTop);
+        const byRetryThenPosition = (a, b) => (a.retried - b.retried) || (a.rectTop - b.rectTop);
+        visible.sort(byRetryThenPosition);
+        hidden.sort(byRetryThenPosition);
         autofixQueue.queue = [...visible, ...hidden];
         processAutofixQueue();
       }
 
       function processAutofixQueue(){
-        if (!proState.verified) return;
         while (autofixQueue.inFlight.size < autofixQueue.maxConcurrent && autofixQueue.queue.length > 0) {
           const next = autofixQueue.queue.shift();
           if (!next) break;
@@ -3044,7 +3280,7 @@
         if (text && isTrial) {
           const days = typeof proState.daysLeft === "number" ? proState.daysLeft : 0;
           const unit = days === 1 ? "day" : "days";
-          text.textContent = `Trial Active: ${days} ${unit} remaining.`;
+          text.textContent = `Trial active: ${days} ${unit} remaining.`;
         }
       }
 
@@ -3054,7 +3290,7 @@
         if (proState.status === "trial") {
           sub.textContent = "Your free trial is active.";
         } else if (proState.verified) {
-          sub.textContent = "Pro features are unlock.";
+          sub.textContent = "Pro features are unlocked.";
         } else {
           sub.textContent = "Activate a license key to unlock Pro features.";
         }
@@ -3068,18 +3304,13 @@
         const inputValue = inputFallback && inputFallback.value ? String(inputFallback.value).trim() : "";
         const fallback = proState && proState.pendingLicenseKey ? String(proState.pendingLicenseKey) : inputValue;
         const value = key ? String(key) : fallback;
-        const tail = value ? value.slice(-12) : "";
-        const masked = tail ? `XXXXXXXX-XXXX-XXXX-XXXX-${tail}` : "";
         const hasKey = !!value;
         if (row) row.dataset.hasKey = String(hasKey);
         if (input) {
-          input.value = value || masked;
-          input.dataset.full = value || "";
-          if (!value && masked) {
-            input.value = masked;
-          }
+          input.value = value;
+          input.dataset.full = value;
           input.placeholder = value ? "" : "License key unavailable";
-          input.type = "text";
+          input.type = "password"; // stays masked until the eye button is used
         }
         if (toggle) {
           toggle.dataset.visible = "false";
@@ -3119,8 +3350,6 @@
         }
 
         proState.pendingLicenseKey = key;
-        proState.licenseKey = key;
-        proState.licenseKeyLast4 = key.slice(-4);
         proState.verifying = true;
         proState.error = null;
         if (btn) btn.disabled = true;
@@ -3203,13 +3432,8 @@
             if (!keyDisplay) return;
             const isVisible = keyToggle.dataset.visible === "true";
             const nextVisible = !isVisible;
-            if (nextVisible) {
-              keyDisplay.value = keyDisplay.dataset.full || keyDisplay.value;
-            } else {
-              const full = keyDisplay.dataset.full || "";
-              const tail = full ? full.slice(-12) : "";
-              keyDisplay.value = tail ? `XXXXXXXX-XXXX-XXXX-XXXX-${tail}` : keyDisplay.value;
-            }
+            keyDisplay.value = keyDisplay.dataset.full || keyDisplay.value;
+            keyDisplay.type = nextVisible ? "text" : "password";
             keyToggle.dataset.visible = String(nextVisible);
             keyToggle.setAttribute("aria-pressed", String(nextVisible));
             keyToggle.setAttribute("aria-label", nextVisible ? "Hide license key" : "Show license key");
@@ -3264,85 +3488,57 @@
       // --- Auto-resize UI window to fit visible content ---
       let _fitTimer = null;
       let _lastResize = { width: 0, height: 0 };
-      let _resizeInFlight = false;
       let _lastResizeAt = 0;
-
-      function measureVisibleContentHeight(container){
-        if (!container) return Math.ceil(document.body.scrollHeight || 0);
-
-        const cr = container.getBoundingClientRect();
-        const cs = getComputedStyle(container);
-        const padBottom = parseFloat(cs.paddingBottom || "0") || 0;
-        const padTop = parseFloat(cs.paddingTop || "0") || 0;
-
-        let maxBottom = 0;
-        // Measure the bottom edge of the lowest *visible* direct child.
-        // This avoids using scrollHeight/clientHeight, which can get stuck at the
-        // current window height (and causes incremental whitespace on Reset).
-        for (const child of Array.from(container.children)) {
-          if (!child || child.hidden) continue;
-          const ccs = getComputedStyle(child);
-          if (ccs.display === "none") continue;
-          const r = child.getBoundingClientRect();
-          maxBottom = Math.max(maxBottom, r.bottom - cr.top);
-        }
-
-        // If nothing is visible, fall back to padding height.
-        const contentH = Math.max(padTop + padBottom, maxBottom + padBottom);
-        return Math.ceil(contentH);
-      }
 
       function clamp(n, min, max){
         return Math.min(Math.max(n, min), max);
       }
 
-      function getHostHeightConstraint(){
-        // Best-effort attempt to read the host (Figma) viewport height.
-        // In some environments this is blocked by cross-origin rules.
+      // Keep in sync with MIN_W / MIN_H in code.ts (the host clamps to these).
+      const UI_MIN_W = 360;
+      const UI_MIN_H = 360;
+
+      // Height the window needs to show everything without scrolling. The shell is normally stretched to
+      // the window (100vh) and the issues box stretches with it, so neither can be measured as they are:
+      // that would just report the current window height back and grow it on every pass. Instead, briefly
+      // let both take their natural size, read the shell height, and restore. No paint happens in between.
+      function measureNaturalHeight(){
+        const shell = document.querySelector(".shell");
+        const box = document.getElementById("issuesBox");
+        if (!shell) return 0;
+        const prevShell = shell.style.height;
+        const prevBox = box ? { h: box.style.height, max: box.style.maxHeight } : null;
         try {
-          const h = window.parent && window.parent.innerHeight;
-          if (typeof h === "number" && isFinite(h) && h > 0) return Math.floor(h);
-        } catch (e) {}
-        return null;
+          shell.style.height = "auto";
+          if (box) {
+            box.style.height = "";
+            box.style.maxHeight = "";
+          }
+          return Math.ceil(shell.getBoundingClientRect().height);
+        } finally {
+          shell.style.height = prevShell;
+          if (box && prevBox) {
+            box.style.height = prevBox.h;
+            box.style.maxHeight = prevBox.max;
+          }
+        }
       }
 
       function requestResizeToFit(){
         try {
           const width = Math.round(document.documentElement.clientWidth);
-          const bodyPadY = 16 * 2; // body has 16px padding top+bottom
-          const topGlow = document.querySelector('.topGlow');
-          const shell = document.querySelector('.shell');
-          const content = document.querySelector('.content');
-          const topGlowH = topGlow ? Math.ceil(topGlow.getBoundingClientRect().height) : 0;
+          const height = clamp(measureNaturalHeight() + 2, UI_MIN_H, 1800);
 
-          let contentH = measureVisibleContentHeight(content);
-          const resultsEl = document.getElementById("results");
-          const resultsVisible = !!(resultsEl && resultsEl.style.display !== "none");
-          if (content && resultsVisible) {
-            const scrollH = Math.ceil(content.scrollHeight || 0);
-            if (scrollH > contentH + 8) contentH = scrollH;
-          }
-
-          // shell border (1px top + 1px bottom)
-          const borderY = 2;
-          const safetyY = 32; // buffer to prevent bottom clipping
-          const desired = Math.max(360, topGlowH + contentH + bodyPadY + borderY + safetyY);
-
-          // Let the window hug content; keep only a simple guardrail.
-          const minH = 360;
-          const maxH = 1800;
-          const height = clamp(desired, minH, maxH);
-
-          const now = Date.now();
-          if (_resizeInFlight && now - _lastResizeAt < 180) return;
           if (Math.abs(_lastResize.width - width) < 2 && Math.abs(_lastResize.height - height) < 2) return;
+          const now = Date.now();
+          if (now - _lastResizeAt < 180) {
+            // Too soon after the previous resize: retry once it has settled instead of dropping the request.
+            scheduleResizeToFit(200);
+            return;
+          }
           _lastResize = { width, height };
-          _resizeInFlight = true;
           _lastResizeAt = now;
           parent.postMessage({ pluginMessage: { type: "resize", width, height } }, "*");
-          window.setTimeout(() => {
-            _resizeInFlight = false;
-          }, 180);
         } catch (e) {
           // ignore
         }
@@ -3359,9 +3555,13 @@
       const state = {
         isScanning: false,
         scanComplete: false,
-        activeFilter: "all", // all | DETACHED_INSTANCE | UNSTYLED_TEXT | ROGUE_FILL | ROGUE_STROKE
+        // Set of active type filters (DETACHED_INSTANCE | UNSTYLED_TEXT | ROGUE_FILL | ROGUE_STROKE).
+        // Empty set == "all" — several can be active together (e.g. Fills + Strokes).
+        activeFilter: new Set(),
+        sortMode: "scan", // scan | type | name
+        scanCanceled: false,
         issues: [],
-        summary: { total: 0, detached: 0, unstyledText: 0, rogueFills: 0, rogueStrokes: 0 },
+        summary: { total: 0, detached: 0, unstyledText: 0, rogueFills: 0, rogueStrokes: 0, ignored: 0 },
         lastStatusSub: ""
       };
 
@@ -3434,19 +3634,22 @@
       }
 
       function setFiltersActive(){
-        $("filterAll").dataset.active = String(state.activeFilter === "all");
-        $("filterDetached").dataset.active = String(state.activeFilter === "DETACHED_INSTANCE");
-        $("filterText").dataset.active = String(state.activeFilter === "UNSTYLED_TEXT");
-        $("filterFills").dataset.active = String(state.activeFilter === "ROGUE_FILL");
-        $("filterStrokes").dataset.active = String(state.activeFilter === "ROGUE_STROKE");
+        $("filterAll").dataset.active = String(state.activeFilter.size === 0);
+        $("filterDetached").dataset.active = String(state.activeFilter.has("DETACHED_INSTANCE"));
+        $("filterText").dataset.active = String(state.activeFilter.has("UNSTYLED_TEXT"));
+        $("filterFills").dataset.active = String(state.activeFilter.has("ROGUE_FILL"));
+        $("filterStrokes").dataset.active = String(state.activeFilter.has("ROGUE_STROKE"));
+        ["filterAll","filterDetached","filterText","filterFills","filterStrokes"].forEach((id) => {
+          $(id).setAttribute("aria-pressed", $(id).dataset.active);
+        });
       }
 
-      function typeToPill(type){
-        if (type === "DETACHED_INSTANCE") return { text: "Detached", cls: "detached", color: '#f59e0b', border: 'rgba(245,158,11,0.4)' };
-        if (type === "UNSTYLED_TEXT") return { text: "Text", cls: "text", color: '#22d3ee', border: 'rgba(34,211,238,0.4)' };
-        if (type === "ROGUE_FILL") return { text: "Fill", cls: "fill", color: '#f87171', border: 'rgba(248,113,113,0.4)' };
-        if (type === "ROGUE_STROKE") return { text: "Stroke", cls: "stroke", color: 'var(--violet)', border: 'rgba(167,139,250,0.35)' };
-        return { text: type, cls: "", color: '#94a3b8', border: 'rgba(148,163,184,0.18)' };
+      function typeToLabel(type){
+        if (type === "DETACHED_INSTANCE") return "Detached";
+        if (type === "UNSTYLED_TEXT") return "Text";
+        if (type === "ROGUE_FILL") return "Fill";
+        if (type === "ROGUE_STROKE") return "Stroke";
+        return type;
       }
 
       function getIssueIconSvg(type, uniqueId){
@@ -3499,16 +3702,33 @@
       }
 
       function filteredIssues(){
-        if (state.activeFilter === "all") return state.issues;
-        return state.issues.filter(i => i.type === state.activeFilter);
+        if (state.activeFilter.size === 0) return state.issues;
+        return state.issues.filter(i => state.activeFilter.has(i.type));
       }
 
-      function renderList(){
+      const TYPE_SORT_ORDER = ["DETACHED_INSTANCE", "UNSTYLED_TEXT", "ROGUE_FILL", "ROGUE_STROKE"];
+
+      // Purely client-side; composes with filteredIssues() and doesn't touch the backend.
+      function sortIssues(issues){
+        if (state.sortMode === "name") {
+          return issues.slice().sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+        }
+        if (state.sortMode === "type") {
+          return issues.slice().sort((a, b) => TYPE_SORT_ORDER.indexOf(a.type) - TYPE_SORT_ORDER.indexOf(b.type));
+        }
+        return issues; // "scan": scan-traversal order, as found
+      }
+
+      // keepScroll: re-render after a single row changed, without jumping back to the top.
+      function renderList(keepScroll = false){
         const list = $("list");
+        const prevScroll = keepScroll ? list.scrollTop : 0;
+        // Open fix menus are re-parented to <body>; wiping the list would orphan them.
+        document.querySelectorAll("body > .fixMenu").forEach((el) => el.remove());
         list.innerHTML = "";
         list.scrollTop = 0;
 
-        const issues = filteredIssues();
+        const issues = sortIssues(filteredIssues());
         if (!issues || issues.length === 0){
           const div = document.createElement("div");
           div.className = "empty";
@@ -3525,6 +3745,9 @@
           row.className = "row";
           row.dataset.issueId = issue.id || "";
           row.style.setProperty('--i', String(idx++));
+          row.setAttribute("role", "listitem");
+          row.tabIndex = 0;
+          bindKeyboardActivate(row, true);
           row.onclick = () => {
             // Keep scan status text stable; only request canvas focus.
             parent.postMessage({ pluginMessage: { type: "select-node", id: issue.id } }, "*");
@@ -3537,8 +3760,6 @@
           const leftGroup = document.createElement("div");
           leftGroup.className = "leftGroup";
 
-          const p = typeToPill(issue.type);
-
           const iconWrap = document.createElement("div");
           iconWrap.className = "issueIconWrap";
 
@@ -3548,7 +3769,7 @@
 
           const iconTip = document.createElement("div");
           iconTip.className = "tooltip";
-          iconTip.textContent = p.text;
+          iconTip.textContent = typeToLabel(issue.type);
 
           iconWrap.appendChild(icon);
           iconWrap.appendChild(iconTip);
@@ -3627,7 +3848,10 @@
             }, "*");
           });
 
-          const showAutofixUI = proState.verified;
+          // Build the dropdown/relink-pill for everyone now — free users see the real
+          // recommendation read-only (updateAutofixRow / the fixBtn Pro-gate below still block
+          // the actual mutation). Kept as a named flag since several checks below read it.
+          const showAutofixUI = true;
           const fixRow = document.createElement("div");
           fixRow.className = "fixRow";
           const loadingRow = document.createElement("div");
@@ -3678,6 +3902,8 @@
               document.body.appendChild(menu);
               menu.classList.add("isOpen");
               positionFixDropdown(dropdown, menu);
+              const firstOpt = menu.querySelector('.fixOption[data-selected="true"]') || menu.querySelector(".fixOption:not([data-disabled])");
+              if (firstOpt) firstOpt.focus();
             } else {
               menu.classList.remove("isOpen");
               if (!menu.parentElement || !menu.parentElement.classList.contains("fixDropdown")) {
@@ -3713,6 +3939,23 @@
 
             menu = document.createElement("div");
             menu.className = "fixMenu";
+            menu.setAttribute("role", "listbox");
+            menu.addEventListener("keydown", (e) => {
+              const opts = Array.from(menu.querySelectorAll(".fixOption:not([data-disabled])"));
+              const at = opts.indexOf(document.activeElement);
+              if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+                e.preventDefault();
+                const next = e.key === "ArrowDown" ? at + 1 : at - 1;
+                if (opts[next]) opts[next].focus();
+              } else if (e.key === "Escape") {
+                e.preventDefault();
+                dropdown.classList.remove("isOpen");
+                row.classList.remove("isOpen");
+                menu.classList.remove("isOpen");
+                if (menu.parentElement !== dropdown) dropdown.appendChild(menu);
+                trigger.focus();
+              }
+            });
             menu.dataset.issueId = issue.id;
             menu.dataset.issueKey = issueKey;
             menu.addEventListener("click", (e) => e.stopPropagation());
@@ -3728,13 +3971,9 @@
               trigger.disabled = true;
               dropdown.dataset.value = "";
               fixBtn.disabled = true;
-            } else if (!proState.verified) {
-              value.textContent = "Unlock Pro to auto-fix";
-              triggerSwatch.style.background = "";
-              trigger.disabled = true;
-              dropdown.dataset.value = "";
-              fixBtn.disabled = true;
             } else {
+              // Free and Pro both request/show the real candidate; updateAutofixRow() and the
+              // fixBtn gate above keep it read-only (disabled trigger, disabled Fix) when free.
               const cached = autofixState.candidatesByKey[issueKey];
               if (Array.isArray(cached)) {
                 updateAutofixRow(issueKey, dropdown, trigger, menu, fixBtn);
@@ -3765,6 +4004,29 @@
             fixWrap.addEventListener("mouseleave", () => hideFixTooltip(fixWrap, tip));
           }
           actions.appendChild(fixWrap);
+
+          const ignoreWrap = document.createElement("div");
+          ignoreWrap.className = "ignoreBtnWrap";
+          const ignoreBtn = document.createElement("button");
+          ignoreBtn.className = "ignoreBtn";
+          ignoreBtn.type = "button";
+          ignoreBtn.setAttribute("aria-label", "Ignore this issue");
+          ignoreBtn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2"/><path d="M9 9l6 6M15 9l-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>`;
+          const ignoreTip = document.createElement("div");
+          ignoreTip.className = "tooltip";
+          ignoreTip.textContent = "Ignore this issue";
+          ignoreWrap.appendChild(ignoreBtn);
+          ignoreWrap.appendChild(ignoreTip);
+          ignoreWrap.addEventListener("mouseenter", () => showFixTooltip(ignoreWrap, ignoreTip));
+          ignoreWrap.addEventListener("mouseleave", () => hideFixTooltip(ignoreWrap, ignoreTip));
+          ignoreBtn.addEventListener("click", (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            ignoreBtn.disabled = true;
+            parent.postMessage({ pluginMessage: { type: "issue:ignore", id: issue.id, issueType: issue.type } }, "*");
+          });
+          actions.appendChild(ignoreWrap);
+
           if (showAutofixUI && (fixRow.childElementCount > 0)) {
             if (state.isScanning) {
               fixRow.dataset.loading = "true";
@@ -3783,6 +4045,7 @@
           }
           list.appendChild(row);
         }
+        if (prevScroll) list.scrollTop = prevScroll;
         // After rendering, re-measure to prevent the list from being clipped
         updateIssuesBoxHeight();
         scheduleResizeToFit(80);
@@ -3793,23 +4056,6 @@
         if (!autofixState.allActive) {
           setAutofixInline(false, "", 0);
         }
-      }
-
-      function scoreToGrade(score){
-        const s = Math.max(0, Math.min(100, Math.round(Number(score || 0))));
-        if (s >= 97) return "A+";
-        if (s >= 93) return "A";
-        if (s >= 90) return "A-";
-        if (s >= 87) return "B+";
-        if (s >= 83) return "B";
-        if (s >= 80) return "B-";
-        if (s >= 77) return "C+";
-        if (s >= 73) return "C";
-        if (s >= 70) return "C-";
-        if (s >= 67) return "D+";
-        if (s >= 63) return "D";
-        if (s >= 60) return "D-";
-        return "F";
       }
 
       function computeHealthScore(summary, preferIssues = false){
@@ -3843,7 +4089,7 @@
           ? (withIssues === 0
               ? `${scanned} audited ${elWord(scanned)} without issues.`
               : `${withIssues} of ${scanned} audited ${elWord(scanned)} ${hasHave(withIssues)} issues.`)
-          : `Found ${totalIssues} total issues in scan.`;
+          : `Found ${plural(totalIssues, "issue")} in scan.`;
 
         // Health % is shown in the gauge; use this line to communicate audit coverage.
         $("statusSub").textContent = elementsLine;
@@ -3857,7 +4103,8 @@
           if (proBtn) {
             const n = Number(summary.total || 0);
             const label = proBtn.querySelector('.btnLabel');
-            if (label) label.textContent = `✨ Auto-fix all ${n} issues`;
+            if (label) label.textContent = `Auto-fix all ${plural(n, "issue")}`;
+            setAutofixBtnIcon(proBtn, true);
             proBtn.disabled = false;
           }
         }
@@ -3867,7 +4114,10 @@
         if (proBtn) {
           const n = Number(summary.total || 0);
           const label = proBtn.querySelector('.btnLabel');
-          if (label && !autofixState.allActive) label.textContent = `✨ Auto-fix all ${n} issues`;
+          if (!autofixState.allActive) {
+            if (label) label.textContent = `Auto-fix all ${plural(n, "issue")}`;
+            setAutofixBtnIcon(proBtn, true);
+          }
           if (autofixState.allActive) {
             proBtn.disabled = true;
           } else {
@@ -3890,11 +4140,10 @@
         }
 
         // Use percent as the gauge value; keep letter-grade only for celebration logic.
-        const grade = scoreToGrade(score);
         updateGauge(score, `${score}%`);
 
-        // Celebration for perfect scans (A-range + zero issues)
-        const isPerfect = (scanned > 0 ? withIssues === 0 : Number(summary.total || 0) === 0) && score >= 90;
+        // Celebration for perfect scans (A-range + zero issues) — never on a canceled/partial scan.
+        const isPerfect = !state.scanCanceled && Number(summary.total || 0) === 0 && (scanned > 0 ? withIssues === 0 : true) && score >= 90;
         // Hide the Issues section (and its divider) when the scan is perfect (100% health and no issues)
         const secIssues = document.getElementById('secIssues');
         const issuesDivider = document.getElementById('issuesDivider');
@@ -3928,41 +4177,72 @@
         }
       }
 
+      function restoreAutofixButton(){
+        const proBtn = document.getElementById('proAutofixBtn');
+        if (!proBtn) return;
+        const label = proBtn.querySelector('.btnLabel');
+        if (label) label.textContent = `Auto-fix all ${plural(Number(state.summary.total || 0), "issue")}`;
+        setAutofixBtnIcon(proBtn, true);
+        proBtn.disabled = false;
+      }
+
       async function handleAutofixAll(){
         if (!proState.verified) {
           openProPurchasePage(PRO_CHECKOUT_URL);
           return;
         }
         if (autofixState.preloadingAll) return;
+        // Second click of the >1000 layers confirmation: candidates are already loaded, don't refetch them.
+        const confirming = autofixState.confirmTotal > 0;
+        if (autofixState.confirmTimer) clearTimeout(autofixState.confirmTimer);
+        autofixState.confirmTimer = null;
         const proBtn = document.getElementById('proAutofixBtn');
         if (proBtn) {
           const label = proBtn.querySelector('.btnLabel');
           if (label) label.textContent = "⏳ Preparing fixes...";
+          setAutofixBtnIcon(proBtn, false);
           proBtn.disabled = true;
         }
         setAutofixInline(true, "Preparing fixes...", 0);
         setStatusTitle("Auto-fix: preparing fixes…");
-        await startAutofixPreload(true);
+        await startAutofixPreload(!confirming);
         const plan = buildAutofixAllPlan();
-        if (!plan.total) {
-          setAutofixProgressUI(true, "No high-confidence fixes found.", 0);
-          setTimeout(() => setAutofixProgressUI(false, "", 0), 1200);
+        const afterPreload = () => {
           autofixState.preloadingAll = false;
-          if (proBtn) {
-            const label = proBtn.querySelector('.btnLabel');
-            if (label) label.textContent = `✨ Auto-fix all ${Number(state.summary.total || 0)} issues`;
-            proBtn.disabled = false;
-          }
           setAutofixInline(false, "", 0);
+          setStatusTitle(state.scanComplete ? "Scan status: completed" : "Status: idle");
+          updateScanDisabled();
+        };
+        if (!plan.total) {
+          const review = plan.skipped.lowConfidence + plan.skipped.noCandidate + plan.skipped.mixedText;
+          setAutofixProgressUI(true, review > 0
+            ? `No high-confidence fixes found. ${review} need review.`
+            : "No high-confidence fixes found.", 0);
+          setTimeout(() => setAutofixProgressUI(false, "", 0), 2400);
+          afterPreload();
+          restoreAutofixButton();
           return;
         }
-        if (plan.total > 1000) {
-          const ok = window.confirm(`You are about to modify ${plan.total} layers. This may take a few moments. Continue?`);
-          if (!ok) return;
+        if (plan.total > 1000 && !(confirming && autofixState.confirmTotal === plan.total)) {
+          // window.confirm() is blocked inside the plugin iframe, so confirm inline with a second click.
+          autofixState.confirmTotal = plan.total;
+          afterPreload();
+          const label = proBtn && proBtn.querySelector('.btnLabel');
+          if (proBtn) proBtn.disabled = false;
+          if (label) label.textContent = `Click again to modify ${plural(plan.total, "layer")}`;
+          setAutofixBtnIcon(proBtn, false);
+          autofixState.confirmTimer = setTimeout(() => {
+            autofixState.confirmTimer = null;
+            autofixState.confirmTotal = 0;
+            if (!autofixState.allActive) restoreAutofixButton();
+          }, 6000);
+          return;
         }
+        autofixState.confirmTotal = 0;
         setAutofixProgressUI(false, "", 0);
         setAutofixInline(true, "Auditing for high-confidence fixes...", 0);
         autofixState.allActive = true;
+        updateScanDisabled();
         autofixState.baseSummary = { ...state.summary };
         autofixState.baseScore = computeHealthScore(state.summary);
         autofixState.baseTotal = Number(state.summary.total || 0);
@@ -3973,10 +4253,18 @@
         }
         if (proBtn) {
           const label = proBtn.querySelector('.btnLabel');
-          if (label) label.textContent = `⏳ Auto-fixing ${plan.total} issues...`;
+          if (label) label.textContent = `⏳ Auto-fixing ${plural(plan.total, "issue")}...`;
+          setAutofixBtnIcon(proBtn, false);
           proBtn.disabled = true;
         }
         parent.postMessage({ pluginMessage: { type: "pro:autofix", items: plan.items, skipped: plan.skipped } }, "*");
+      }
+
+      function pickAutofixCandidate(key){
+        const chosen = autofixState.selectedByKey[key] || autofixState.recommendedByKey[key];
+        if (chosen) return { id: chosen };
+        const candidates = autofixState.candidatesByKey[key] || [];
+        return { skip: candidates.length ? "lowConfidence" : "noCandidate" };
       }
 
       function buildAutofixAllPlan(){
@@ -3995,29 +4283,26 @@
             skipped.conflicts += 1;
             continue;
           }
+          let kind = "";
           if (issue.type === "UNSTYLED_TEXT") {
             if (issue.mixedText) {
               skipped.mixedText += 1;
               continue;
             }
-            const key = `${issue.id}:text`;
-            const recId = autofixState.recommendedByKey[key];
-            const selectedId = autofixState.selectedByKey[key];
-            const candidates = autofixState.candidatesByKey[key] || [];
-            const chosenId = selectedId || recId || (candidates[0] && candidates[0].id);
-            const candidate = candidates.find(c => c.id === chosenId);
-            items.push({ id: issue.id, issueType: issue.type, kind: "text", candidateId: chosenId });
+            kind = "text";
+          } else if (issue.type === "ROGUE_FILL") {
+            kind = "fill";
+          } else if (issue.type === "ROGUE_STROKE") {
+            kind = "stroke";
+          } else {
             continue;
           }
-          if (issue.type === "ROGUE_FILL" || issue.type === "ROGUE_STROKE") {
-            const kind = issue.type === "ROGUE_FILL" ? "fill" : "stroke";
-            const key = `${issue.id}:${kind}`;
-            const recId = autofixState.recommendedByKey[key];
-            const selectedId = autofixState.selectedByKey[key];
-            const candidates = autofixState.candidatesByKey[key] || [];
-            const chosenId = selectedId || recId || (candidates[0] && candidates[0].id);
-            items.push({ id: issue.id, issueType: issue.type, kind, candidateId: chosenId });
+          const pick = pickAutofixCandidate(`${issue.id}:${kind}`);
+          if (pick.skip) {
+            skipped[pick.skip] += 1;
+            continue;
           }
+          items.push({ id: issue.id, issueType: issue.type, kind, candidateId: pick.id });
         }
 
         return { items, total: items.length, skipped };
@@ -4049,6 +4334,8 @@
         if (inlineText) inlineText.textContent = text || "";
         const clamped = Math.max(0, Math.min(100, percent || 0));
         if (inlineBar) inlineBar.style.width = `${clamped}%`;
+        const inlineProgress = document.getElementById("autofixInlineProgress");
+        if (inlineProgress) inlineProgress.setAttribute("aria-valuenow", String(clamped));
         if (inlinePercent) inlinePercent.textContent = `${clamped}%`;
         const isAudit = /auditing|preparing/i.test(String(text || "").toLowerCase());
         if (inlineRow) inlineRow.style.display = isAudit ? "none" : "flex";
@@ -4058,6 +4345,7 @@
           if (autofixState.canceling) inlineCancel.textContent = "Canceling...";
           else inlineCancel.textContent = "Cancel Auto-fix";
         }
+        updateScanDisabled();
       }
 
       function clearAutofixUI(){
@@ -4073,11 +4361,13 @@
         if (proBtn) {
           const n = Number(state.summary.total || 0);
           const label = proBtn.querySelector('.btnLabel');
-          if (label) label.textContent = `✨ Auto-fix all ${n} issues`;
+          if (label) label.textContent = `Auto-fix all ${plural(n, "issue")}`;
+          setAutofixBtnIcon(proBtn, true);
           proBtn.disabled = false;
         }
       }
 
+      function initStatChrome(){
         // color stat values to match design
         try {
           $("statTotal").style.color = '#ffffff';
@@ -4091,6 +4381,8 @@
         if (!autofixState.allActive) {
           setAutofixInline(false, "", 0);
         }
+      }
+      initStatChrome();
       
 
       // --- HealthGauge.tsx logic (adapted): SVG mask animation ---
@@ -4098,7 +4390,6 @@
       let _currentGaugeScore = 0;
       let _gaugeTargetScore = 0;
       let _fixGaugeActive = false;
-      let _fixGaugeValue = 0;
       let _fixGaugeFrame = null;
 
       function gaugeColor(score){
@@ -4304,8 +4595,6 @@
       function setScanButtonLoading(loading){
         const btn = $("scanBtn");
         state.isScanning = loading;
-        btn.disabled = loading;
-        $("resetBtn").disabled = loading;
 
         if (loading){
           btn.innerHTML = `<span class="spinner"></span><span class="btnLabel"> Scanning…</span>`;
@@ -4313,18 +4602,27 @@
           btn.innerHTML = `<span class="btnLabel">Scan selection</span>`;
         }
 
+        const cancelBtn = $("scanCancelBtn");
+        if (cancelBtn) {
+          cancelBtn.disabled = false;
+          cancelBtn.textContent = "Cancel Scan";
+        }
+
         updateScanDisabled();
       }
 
+      // Scan and Reset stay off while a scan or an auto-fix run is in progress, so they can't interleave with it.
       function updateScanDisabled(){
-        $("scanBtn").disabled = !!state.isScanning;
+        const busy = !!state.isScanning || !!autofixState.allActive || !!autofixState.preloadingAll;
+        $("scanBtn").disabled = busy;
+        $("resetBtn").disabled = busy;
       }
 
       function resetAll(){
         state.scanComplete = false;
-        state.activeFilter = "all";
+        state.activeFilter.clear();
         state.issues = [];
-        state.summary = { total: 0, detached: 0, unstyledText: 0, rogueFills: 0, rogueStrokes: 0 };
+        state.summary = { total: 0, detached: 0, unstyledText: 0, rogueFills: 0, rogueStrokes: 0, ignored: 0 };
         setDataLoading(false);
         const isNoSelectionView = document.body.dataset.view === "no-selection";
 
@@ -4345,6 +4643,7 @@
         setStats(state.summary);
         updateGauge(0, "—", false);
         setFiltersActive();
+        updateIgnoredLink();
         renderList();
         setStatusTitle("Status: idle");
         updateScanDisabled();
@@ -4363,6 +4662,9 @@
           const id = h.getAttribute("data-toggle");
           const sec = document.getElementById(id);
 
+          bindKeyboardActivate(h, false);
+          if (sec) h.setAttribute("aria-expanded", String(sec.dataset.open !== "false"));
+
           // ensure icon matches initial open state
           const icon = h.querySelector('.chev .chevIcon');
           if (icon && sec) {
@@ -4375,6 +4677,7 @@
             const sec = document.getElementById(id);
             const open = sec.dataset.open !== "false";
             sec.dataset.open = open ? "false" : "true";
+            h.setAttribute("aria-expanded", String(!open));
 
             // fade icon out, swap SVG, fade in
             const icon = h.querySelector('.chev .chevIcon');
@@ -4393,36 +4696,141 @@
       }
 
       function setupFilters(){
+        document.querySelectorAll(".statCard[id^='filter']").forEach((el) => bindKeyboardActivate(el, false));
+        const applyFilter = () => {
+          setFiltersActive();
+          renderList();
+          scheduleResizeToFit(80);
+        };
+        const toggleType = (type) => {
+          if (state.activeFilter.has(type)) state.activeFilter.delete(type);
+          else state.activeFilter.add(type);
+          applyFilter();
+        };
         $("filterAll").onclick = () => {
-          state.activeFilter = "all";
-          setFiltersActive();
-          renderList();
-          scheduleResizeToFit(80);
+          state.activeFilter.clear();
+          applyFilter();
         };
-        $("filterDetached").onclick = () => {
-          state.activeFilter = "DETACHED_INSTANCE";
-          setFiltersActive();
-          renderList();
-          scheduleResizeToFit(80);
-        };
-        $("filterText").onclick = () => {
-          state.activeFilter = "UNSTYLED_TEXT";
-          setFiltersActive();
-          renderList();
-          scheduleResizeToFit(80);
-        };
-        $("filterFills").onclick = () => {
-          state.activeFilter = "ROGUE_FILL";
-          setFiltersActive();
-          renderList();
-          scheduleResizeToFit(80);
-        };
-        $("filterStrokes").onclick = () => {
-          state.activeFilter = "ROGUE_STROKE";
-          setFiltersActive();
-          renderList();
-          scheduleResizeToFit(80);
-        };
+        $("filterDetached").onclick = () => toggleType("DETACHED_INSTANCE");
+        $("filterText").onclick = () => toggleType("UNSTYLED_TEXT");
+        $("filterFills").onclick = () => toggleType("ROGUE_FILL");
+        $("filterStrokes").onclick = () => toggleType("ROGUE_STROKE");
+      }
+
+      const SORT_LABELS = { scan: "Sort", type: "Sort: type", name: "Sort: name" };
+
+      function closeSortMenu(){
+        const btn = $("sortBtn");
+        const menu = $("sortMenu");
+        if (!menu) return;
+        menu.classList.remove("isOpen");
+        if (btn) btn.setAttribute("aria-expanded", "false");
+      }
+
+      function setupIssuesToolbar(){
+        const sortBtn = $("sortBtn");
+        const sortMenu = $("sortMenu");
+        if (sortBtn && sortMenu) {
+          sortBtn.addEventListener("click", (e) => {
+            e.stopPropagation();
+            const opening = !sortMenu.classList.contains("isOpen");
+            closeSortMenu();
+            if (opening) {
+              sortMenu.classList.add("isOpen");
+              sortBtn.setAttribute("aria-expanded", "true");
+            }
+          });
+          sortMenu.querySelectorAll(".fixOption").forEach((opt) => {
+            opt.addEventListener("click", (e) => {
+              e.stopPropagation();
+              const mode = opt.dataset.sort;
+              state.sortMode = mode;
+              sortMenu.querySelectorAll(".fixOption").forEach((o) => o.dataset.selected = String(o === opt));
+              const label = $("sortBtnLabel");
+              if (label) label.textContent = SORT_LABELS[mode] || "Sort";
+              closeSortMenu();
+              renderList();
+            });
+          });
+          document.addEventListener("click", () => closeSortMenu());
+          sortMenu.addEventListener("keydown", (e) => {
+            if (e.key === "Escape") { e.preventDefault(); closeSortMenu(); sortBtn.focus(); }
+          });
+        }
+
+        const selectAllBtn = $("selectAllBtn");
+        if (selectAllBtn) {
+          selectAllBtn.addEventListener("click", (e) => {
+            e.preventDefault();
+            const ids = sortIssues(filteredIssues()).map((i) => i.id).filter(Boolean);
+            if (!ids.length) return;
+            parent.postMessage({ pluginMessage: { type: "select-nodes", ids } }, "*");
+          });
+        }
+
+        const exportBtn = $("exportBtn");
+        if (exportBtn) {
+          exportBtn.addEventListener("click", (e) => {
+            e.preventDefault();
+            if (!proState.verified) {
+              openProPurchasePage(PRO_CHECKOUT_URL);
+              return;
+            }
+            exportScanCsv();
+          });
+        }
+
+        const ignoredLink = $("ignoredLink");
+        if (ignoredLink) {
+          ignoredLink.addEventListener("click", (e) => {
+            e.preventDefault();
+            ignoredLink.disabled = true;
+            parent.postMessage({ pluginMessage: { type: "issue:unignoreAll" } }, "*");
+          });
+        }
+      }
+
+      function updateIgnoredLink(){
+        const link = $("ignoredLink");
+        if (!link) return;
+        const n = Number(state.summary.ignored || 0);
+        link.disabled = false;
+        if (n > 0) {
+          link.style.display = "";
+          link.textContent = `${plural(n, "issue")} ignored — show all`;
+        } else {
+          link.style.display = "none";
+        }
+      }
+
+      function csvField(value){
+        const s = value == null ? "" : String(value);
+        return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+      }
+
+      function exportScanCsv(){
+        const rows = [["id", "type", "name", "path", "detachedComponentName"]];
+        for (const issue of state.issues) {
+          rows.push([issue.id, issue.type, issue.name, issue.path, issue.detachedComponentName || ""]);
+        }
+        const csv = rows.map((r) => r.map(csvField).join(",")).join("\r\n");
+        try {
+          const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          const date = new Date().toISOString().slice(0, 10);
+          a.href = url;
+          a.download = `systemic-audit-${date}.csv`;
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+          setTimeout(() => URL.revokeObjectURL(url), 1000);
+        } catch (e) {
+          // If the plugin iframe blocks downloads, fall back to the clipboard.
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(csv).catch(() => {});
+          }
+        }
       }
 
       function setupOptionCards(){
@@ -4443,9 +4851,15 @@
         });
       }
 
+      let optionsSaveTimer = null;
       ["includeChildren","detachedInstances","textWithoutStyle","rogueFills","rogueStrokes"].forEach(id => {
         $(id).addEventListener("change", () => {
           updateSwitchUI();
+          if (optionsSaveTimer) clearTimeout(optionsSaveTimer);
+          optionsSaveTimer = setTimeout(() => {
+            optionsSaveTimer = null;
+            parent.postMessage({ pluginMessage: { type: "options:save", options: getOptions() } }, "*");
+          }, 300);
         });
       });
 
@@ -4500,6 +4914,23 @@
         const msg = event.data.pluginMessage;
         if (!msg) return;
 
+        if (msg.type === "saved-options") {
+          const o = msg.options;
+          if (o && typeof o === "object") {
+            const map = { scanChildren: "includeChildren", checkDetached: "detachedInstances", checkTextStyles: "textWithoutStyle", checkRogueFills: "rogueFills", checkRogueStrokes: "rogueStrokes" };
+            for (const [field, id] of Object.entries(map)) {
+              if (typeof o[field] === "boolean") $(id).checked = o[field];
+            }
+            updateSwitchUI();
+          }
+          return;
+        }
+
+        if (msg.type === "select-nodes:status") {
+          // Canvas selection already happened backend-side; nothing further needed client-side.
+          return;
+        }
+
         if (msg.type === "audit:progress") {
           const processed = Number(msg.processed || 0);
           const total = Number(msg.total || 0);
@@ -4542,9 +4973,16 @@
           if (typeof msg.licenseKeyLast4 === "string" && msg.licenseKeyLast4) {
             proState.licenseKeyLast4 = msg.licenseKeyLast4;
           }
-          const isExpired = status === "expired" || valid === false;
+          const isExpired = status === "expired";
+          const errorText = typeof msg.error === "string" && msg.error ? msg.error : "";
           if (isExpired) {
             setVerifyUI("error", "Your 7-day trial has ended. Upgrade to Pro to keep using the Auto-fix engine.");
+          } else if (!isPro && valid === false) {
+            setVerifyUI("error", errorText || "This license key isn't valid.");
+          } else if (!isPro && errorText) {
+            setVerifyUI("error", errorText);
+          } else if (isPro && msg.offline) {
+            setVerifyUI("verified", "License verified (offline)");
           } else if (status === "trial" && isPro) {
             const days = typeof daysLeft === "number" ? daysLeft : 0;
             const unit = days === 1 ? "day" : "days";
@@ -4618,16 +5056,21 @@
               setProKeyDisplay(proState.licenseKey, proState.licenseKeyLast4);
             }
             } else {
-            proState.verified = false;
-            const isExpired = status === "expired" || valid === false;
+            // A failed attempt only reports the error. What the plugin already granted (a running
+            // trial or an active license) stays as the backend left it.
+            const isExpired = status === "expired";
             if (isExpired) {
               setVerifyUI("error", "Your 7-day trial has ended. Upgrade to Pro to keep using the Auto-fix engine.");
+            } else if (valid === false && !errorText) {
+              setVerifyUI("error", "This license key isn't valid.");
             } else {
               setVerifyUI("error", errorText || statusText || "Could not verify license. Please try again.");
             }
-            setProLockedUI(false);
-            setProHeaderButton(false, false);
-            setProKeyDisplay("", "");
+            if (!proState.verified) {
+              setProLockedUI(false);
+              setProHeaderButton(false, false);
+              setProKeyDisplay("", "");
+            }
           }
           proState.pendingLicenseKey = "";
           updateTrialMessaging();
@@ -4635,31 +5078,32 @@
           if (!proState.verified) {
             resetAutofixState();
           }
-          renderList();
+          renderList(true);
           return;
         }
 
         if (msg.type === "pro:autofix:candidates") {
           const key = String(msg.key || "");
           if (!key) return;
-          if (!proState.verified) {
-            markCandidateDone(key);
-            return;
-          }
+          // "locked" (backend's word for it) or !proState.verified: still store the candidates so
+          // the row can show the real recommendation read-only — updateAutofixRow() below decides
+          // whether the trigger/fix button stay disabled.
           if (autofixState.pendingTimers[key]) {
             clearTimeout(autofixState.pendingTimers[key]);
             delete autofixState.pendingTimers[key];
           }
           autofixQueue.inFlight.delete(key);
           const candidates = Array.isArray(msg.candidates) ? msg.candidates : [];
-          if ((!candidates || candidates.length === 0) && msg.debug) {
+          const debug = msg.debug || null;
+          const libCollections = Number(debug && debug.libraryCollections || 0);
+          const libCount = Number(debug && debug.libraryVariables || 0);
+          if (candidates.length === 0 && debug) {
             try {
-              console.info("[Systemic][autofix:candidates] no matches", { key, debug: msg.debug });
+              console.info("[Systemic][autofix:candidates] no matches", { key, debug });
             } catch {}
-            const libCollections = Number(msg.debug.libraryCollections || 0);
-            const libCount = Number(msg.debug.libraryVariables || 0);
-            const libImporting = !!msg.debug.libraryImporting;
-            if (libImporting) {
+            // Libraries are enabled but their variables are still importing: ask again shortly.
+            const libNotReady = !!debug.libraryImporting || (libCollections > 0 && libCount === 0);
+            if (libNotReady && scheduleCandidateRetry(key, 1200)) {
               const dropdown = document.querySelector(`.fixDropdown[data-issue-key="${key}"]`);
               const trigger = dropdown ? dropdown.querySelector(".fixTrigger") : null;
               const menu = dropdown ? dropdown.querySelector(".fixMenu") : null;
@@ -4667,42 +5111,16 @@
               if (dropdown && trigger && menu && fixBtn) {
                 setAutofixLoading(key, dropdown, trigger, menu, fixBtn);
               }
-              scheduleCandidateRetry(key, 1200);
-              if (autofixState.preloadingAll) {
-                autofixState.preloadInFlight = Math.max(0, autofixState.preloadInFlight - 1);
-                processAutofixPreloadQueue();
-              }
+              releasePreloadSlot(key, false);
               return;
             }
-            if (libCollections > 0 && libCount === 0) {
-              // Libraries enabled but variables still importing; keep loading state.
-              const dropdown = document.querySelector(`.fixDropdown[data-issue-key="${key}"]`);
-              const trigger = dropdown ? dropdown.querySelector(".fixTrigger") : null;
-              const menu = dropdown ? dropdown.querySelector(".fixMenu") : null;
-              const fixBtn = document.querySelector(`.fixBtn[data-issue-key="${key}"]`);
-              if (dropdown && trigger && menu && fixBtn) {
-                setAutofixLoading(key, dropdown, trigger, menu, fixBtn);
-              }
-              scheduleCandidateRetry(key, 1200);
-              if (autofixState.preloadingAll) {
-                autofixState.preloadInFlight = Math.max(0, autofixState.preloadInFlight - 1);
-                processAutofixPreloadQueue();
-              }
-              return;
-            }
-            autofixState.candidatesByKey[key] = candidates;
-            autofixState.recommendedByKey[key] = String(msg.recommendedId || "");
-            if (msg.mixed) {
-              const id = key.split(":")[0];
-              const row = document.querySelector(`.row[data-issue-id="${id}"]`);
-              if (row && !row.querySelector(".fixWarning")) {
-                const warn = document.createElement("div");
-                warn.className = "fixWarning";
-                warn.textContent = "Mixed styles detected. Applying a style will reset local formatting.";
-                row.appendChild(warn);
-              }
-            }
-            markCandidateDone(key);
+          }
+          // Final answer (possibly "nothing matches"): record it so "Fix all" can finish.
+          autofixState.candidatesByKey[key] = candidates;
+          autofixState.recommendedByKey[key] = String(msg.recommendedId || "");
+          if (msg.mixed) showMixedWarning(key);
+          markCandidateDone(key);
+          if (candidates.length === 0 && debug) {
             const trigger = document.querySelector(`.fixTrigger[data-issue-key="${key}"]`);
             const dropdown = document.querySelector(`.fixDropdown[data-issue-key="${key}"]`);
             const fixBtn = document.querySelector(`.fixBtn[data-issue-key="${key}"]`);
@@ -4721,29 +5139,12 @@
             }
             if (dropdown) dropdown.dataset.value = "";
             if (fixBtn) fixBtn.disabled = true;
-            return;
+            const fixRow = dropdown ? dropdown.closest(".fixRow") : null;
+            if (fixRow) fixRow.dataset.loading = "false";
+          } else {
+            updateAutofixRow(key);
           }
-          autofixState.candidatesByKey[key] = candidates;
-          autofixState.recommendedByKey[key] = String(msg.recommendedId || "");
-          if (msg.mixed) {
-            const id = key.split(":")[0];
-            const row = document.querySelector(`.row[data-issue-id="${id}"]`);
-            if (row && !row.querySelector(".fixWarning")) {
-              const warn = document.createElement("div");
-              warn.className = "fixWarning";
-              warn.textContent = "Mixed styles detected. Applying a style will reset local formatting.";
-              row.appendChild(warn);
-            }
-          }
-          markCandidateDone(key);
-          updateAutofixRow(key);
-          if (autofixState.preloadingAll && autofixState.preloadRemaining.has(key)) {
-            autofixState.preloadRemaining.delete(key);
-            autofixState.preloadInFlight = Math.max(0, autofixState.preloadInFlight - 1);
-            autofixState.preloadDone = (autofixState.preloadTotal - autofixState.preloadRemaining.size);
-            updatePreloadProgress();
-            processAutofixPreloadQueue();
-          }
+          releasePreloadSlot(key, true);
           scheduleAutofixQueue();
           return;
         }
@@ -4751,10 +5152,13 @@
         if (msg.type === "pro:autofix:result") {
           const id = String(msg.id || "");
           const issueType = String(msg.issueType || "");
+          const kind = String(msg.kind || "");
           const ok = !!msg.ok;
-          const row = document.querySelector(`.row[data-issue-id="${id}"]`);
-          const fixBtn = document.querySelector(`.fixBtn[data-issue-id="${id}"]`);
-          const trigger = document.querySelector(`.fixTrigger[data-issue-id="${id}"]`);
+          // One node can carry several issues (fill + stroke + text): target the exact row via its key.
+          const key = `${id}:${kind}`;
+          const fixBtn = document.querySelector(`.fixBtn[data-issue-key="${key}"]`);
+          const trigger = document.querySelector(`.fixTrigger[data-issue-key="${key}"]`);
+          const row = fixBtn ? fixBtn.closest(".row") : null;
           if (fixBtn) {
             if (issueType === "DETACHED_INSTANCE") {
               fixBtn.textContent = ok ? "Relinked" : "Relink";
@@ -4775,7 +5179,7 @@
             if (idx !== -1) state.issues.splice(idx, 1);
             state.summary = recalcSummaryFromIssues(state.issues, state.summary);
             setStats(state.summary);
-            renderList();
+            renderList(true);
           }
           return;
         }
@@ -4824,13 +5228,13 @@
           const skipped = msg.skipped || {};
           const resolvedItems = Array.isArray(msg.resolvedItems) ? msg.resolvedItems : [];
           if (resolvedItems.length) {
-            const resolvedIds = new Set(resolvedItems.map((item) => item.id));
+            const resolvedKeys = new Set(resolvedItems.map((item) => `${item.id}|${item.issueType}`));
             state.issues = state.issues.filter((issue) => {
-              return !resolvedIds.has(issue.id);
+              return !resolvedKeys.has(`${issue.id}|${issue.type}`);
             });
             state.summary = recalcSummaryFromIssues(state.issues, state.summary);
             setStats(state.summary);
-            renderList();
+            renderList(true);
           }
           const manual = Number(skipped.lowConfidence || 0) + Number(skipped.mixedText || 0) + Number(skipped.noCandidate || 0) + Number(skipped.conflicts || 0);
           if (state.scanComplete) {
@@ -4848,15 +5252,26 @@
 
         if (msg.type === "issues:resolved") {
           const resolvedIds = Array.isArray(msg.resolvedIds) ? msg.resolvedIds.map(String) : [];
-          if (!resolvedIds.length) return;
+          const ignoredDelta = Number(msg.ignoredDelta || 0);
+          if (!resolvedIds.length && !ignoredDelta) return;
           const resolvedSet = new Set(resolvedIds);
           const before = state.issues.length;
           state.issues = state.issues.filter((issue) => !resolvedSet.has(String(issue.id)));
-          if (state.issues.length !== before) {
+          if (state.issues.length !== before || ignoredDelta) {
             state.summary = recalcSummaryFromIssues(state.issues, state.summary);
+            if (ignoredDelta) state.summary.ignored = Number(state.summary.ignored || 0) + ignoredDelta;
             setStats(state.summary);
-            renderList();
+            updateIgnoredLink();
+            renderList(true);
           }
+          return;
+        }
+
+        if (msg.type === "audit-error") {
+          // The scan failed on the plugin side: leave the "Scanning…" state instead of hanging.
+          setScanButtonLoading(false);
+          setDataLoading(false);
+          resetAll();
           return;
         }
 
@@ -4866,8 +5281,8 @@
           showNoSelection();
           // Clear any previous scan data (even though it’s hidden)
           state.issues = [];
-          state.summary = { total: 0, detached: 0, unstyledText: 0, rogueFills: 0, rogueStrokes: 0 };
-          state.activeFilter = "all";
+          state.summary = { total: 0, detached: 0, unstyledText: 0, rogueFills: 0, rogueStrokes: 0, ignored: 0 };
+          state.activeFilter.clear();
           setStats(state.summary);
           renderList();
           setStatusTitle("Status: idle");
@@ -4877,14 +5292,15 @@
         if (msg.type === "locate-status") {
           // Do not overwrite the scan status title with locate/focus messages.
           // (Selection still happens; we just keep the status copy stable.)
-          if (msg.status === "error" && msg.id) {
+          // Only drop the row when the layer is really gone, not on a transient locate failure.
+          if (msg.status === "error" && msg.id && msg.message === "Node not found") {
             const id = String(msg.id);
             const before = state.issues.length;
             state.issues = state.issues.filter((issue) => issue.id !== id);
             if (state.issues.length !== before) {
               state.summary = recalcSummaryFromIssues(state.issues, state.summary);
               setStats(state.summary);
-              renderList();
+              renderList(true);
             }
           }
           return;
@@ -4895,10 +5311,11 @@
           setDataLoading(false);
 
           state.scanComplete = true;
-          state.activeFilter = "all";
+          state.activeFilter.clear();
+          state.scanCanceled = !!msg.canceled;
           state.issues = msg.issues || [];
 
-          const s = msg.summary || { total: 0, detached: 0, unstyledText: 0, rogueFills: 0, rogueStrokes: 0 };
+          const s = msg.summary || { total: 0, detached: 0, unstyledText: 0, rogueFills: 0, rogueStrokes: 0, ignored: 0 };
           // Preserve any additional summary fields coming from code.ts
           const scannedElements = Number(
             (s.scannedElements ?? s.auditedElements ?? s.totalElements ?? s.elementsAudited ?? msg.scannedElements) || 0
@@ -4913,6 +5330,7 @@
             unstyledText: Number(s.unstyledText || 0),
             rogueFills: Number(s.rogueFills || 0),
             rogueStrokes: Number(s.rogueStrokes || 0),
+            ignored: Number(s.ignored || 0),
             scannedElements,
             elementsWithIssues,
           };
@@ -4928,7 +5346,8 @@
           });
 
           setFiltersActive();
-          setStatusTitle(`Scan status: completed`);
+          updateIgnoredLink();
+          setStatusTitle(state.scanCanceled ? "Scan status: canceled" : "Scan status: completed");
           if (!autofixState.allActive) {
             clearAutofixUI();
           }
@@ -4945,8 +5364,8 @@
       let startH = 0;
       let dragDir = "se";
 
-      const MIN_W = 360;
-      const MIN_H = 520;
+      const MIN_W = UI_MIN_W;
+      const MIN_H = UI_MIN_H;
 
       resizeHandles.forEach((handle) => {
         handle.addEventListener("pointerdown", (e) => {
@@ -4985,6 +5404,7 @@
 
       setupCollapsibles();
       setupFilters();
+      setupIssuesToolbar();
       setupOptionCards();
       bindProModalUI();
       bindTrialBannerLink();
@@ -5000,6 +5420,7 @@
       setFiltersActive();
       resetAll();
       parent.postMessage({ pluginMessage: { type: "pro:get-entitlements" } }, "*");
+      parent.postMessage({ pluginMessage: { type: "get-saved-options" } }, "*");
 
       const cancelBtn = document.getElementById("autofixInlineCancel");
       if (cancelBtn && !cancelBtn.dataset.bound) {
@@ -5012,6 +5433,18 @@
           parent.postMessage({ pluginMessage: { type: "pro:autofix:cancel" } }, "*");
         });
         cancelBtn.dataset.bound = "true";
+      }
+
+      const scanCancelBtn = document.getElementById("scanCancelBtn");
+      if (scanCancelBtn && !scanCancelBtn.dataset.bound) {
+        scanCancelBtn.addEventListener("click", (e) => {
+          e.preventDefault();
+          if (scanCancelBtn.disabled) return;
+          scanCancelBtn.textContent = "Canceling...";
+          scanCancelBtn.disabled = true;
+          parent.postMessage({ pluginMessage: { type: "run-audit:cancel" } }, "*");
+        });
+        scanCancelBtn.dataset.bound = "true";
       }
 
       window.addEventListener("resize", () => {
