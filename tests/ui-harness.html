@@ -1,0 +1,227 @@
+<!doctype html><html><head><meta charset="utf-8"><title>harness10</title>
+<style>body{margin:0;background:#222}iframe{border:0;width:440px;height:900px;background:#000;display:block}</style></head>
+<body><iframe id="f"></iframe>
+<script>
+const log = [];
+let scenario = {};
+const F = document.getElementById("f");
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const send = m => F.contentWindow.postMessage({ pluginMessage: m }, "*");
+const W = () => F.contentWindow, D = () => F.contentDocument, Q = s => D().querySelector(s), QA = s => Array.from(D().querySelectorAll(s)), $ = id => D().getElementById(id);
+const ev = code => F.contentWindow.eval(code);
+
+window.addEventListener("message", (e) => {
+  const m = e.data && e.data.pluginMessage; if (!m) return;
+  log.push(m);
+  const sc = scenario;
+  if (m.type === "run-audit") {
+    if (sc.auditCancelCheck) {
+      const check2 = () => {
+        if (log.some(x => x.type === "run-audit:cancel")) {
+          send({ type: "audit-result", issues: [], summary: { total: 0, detached: 0, unstyledText: 0, rogueFills: 0, rogueStrokes: 0, ignored: 0, scannedElements: 2, elementsWithIssues: 0 }, canceled: true });
+        } else {
+          setTimeout(check2, 20);
+        }
+      };
+      check2();
+      return;
+    }
+    setTimeout(() => send({ type: "audit-result", issues: sc.issues || [], summary: sc.summary || { total: (sc.issues||[]).length, scannedElements: 10, elementsWithIssues: (sc.issues||[]).length, ignored: 0 } }), 20);
+  } else if (m.type === "pro:autofix:candidates") {
+    const r = sc.candidates ? sc.candidates(m) : { candidates: [], recommendedId: null };
+    setTimeout(() => send(Object.assign({ type: "pro:autofix:candidates", key: m.key }, r)), 2);
+  } else if (m.type === "issue:ignore") {
+    setTimeout(() => send({ type: "issues:resolved", resolvedIds: [m.id], ignoredDelta: 1 }), 2);
+  } else if (m.type === "issue:unignoreAll") {
+    setTimeout(() => send({ type: "audit-result", issues: sc.afterUnignore || [], summary: sc.afterUnignoreSummary || { total: 0, scannedElements: 10, elementsWithIssues: 0, ignored: 0 } }), 2);
+  } else if (m.type === "select-nodes") {
+    setTimeout(() => send({ type: "select-nodes:status", status: "done", count: m.ids.length }), 2);
+  } else if (m.type === "get-saved-options") {
+    setTimeout(() => send({ type: "saved-options", options: sc.savedOptions || null }), 2);
+  } else if (m.type === "resize") {
+    F.style.height = m.height + "px"; F.style.width = m.width + "px";
+  }
+});
+
+async function load(file, sc) {
+  log.length = 0; scenario = sc || {};
+  await new Promise(res => { F.onload = res; F.src = (file || "../ui.html") + "?" + Date.now(); });
+  // A hidden/covered window never fires requestAnimationFrame, which ui.html's render path waits on.
+  // Timer-backed rAF keeps results deterministic either way and transitions/animations are disabled so style checks don't depend on paint timing.
+  F.contentWindow.requestAnimationFrame = (cb) => setTimeout(() => cb(performance.now()), 16);
+  const noMotion = F.contentDocument.createElement("style");
+  noMotion.textContent = "*,*::before,*::after{transition:none !important;animation:none !important}";
+  F.contentDocument.head.appendChild(noMotion);
+  await sleep(150);
+}
+const proOn = async (extra = {}) => { send(Object.assign({ type: "pro:entitlements", isPro: true, entitlements: { pro: true }, status: "active", licenseKey: "ABCD-1234-EFGH-5678" }, extra)); await sleep(60); };
+const scan = async (wait = 300) => { $("scanBtn").click(); await sleep(wait); };
+const waitFor = async (fn, ms = 4000) => { const t = Date.now(); while (Date.now() - t < ms) { if (fn()) return true; await sleep(25); } return false; };
+const sent = t => log.filter(m => m.type === t);
+const mkIssue = (id, type, name) => ({ id, type, name: name || type, path: "Frame / " + (name || type) });
+const rec = (id, name) => ({ candidates: [{ id: "V:" + id, name: name || "color/brand", displayName: "Colors / " + (name || "color/brand"), color: "rgba(1,2,3,1)", deltaE: 0.5, score: 3, source: "variable" }], recommendedId: "V:" + id, locked: false, debug: { libraryCollections: 0, libraryVariables: 0 } });
+
+window.T = {};
+const results = [];
+const check = (name, cond, detail) => results.push({ name, pass: !!cond, detail: cond ? undefined : detail });
+async function section(name, fn) {
+  try { await fn(); } catch (e) { check("SECTION THREW: " + name, false, String(e && e.stack || e)); }
+}
+
+T.all = async function () {
+  results.length = 0;
+
+  await section("1. Multi-select filter chips", async () => {
+    await load(); await proOn();
+    scenario = { issues: [mkIssue("1:1","ROGUE_FILL"), mkIssue("1:2","ROGUE_STROKE"), mkIssue("1:3","UNSTYLED_TEXT")], candidates: (m) => rec(m.id) };
+    await scan();
+    $("filterFills").click(); await sleep(30);
+    $("filterStrokes").click(); await sleep(30);
+    check("Fills + Strokes can both be active", $("filterFills").dataset.active === "true" && $("filterStrokes").dataset.active === "true" && $("filterAll").dataset.active === "false", JSON.stringify({fills:$("filterFills").dataset.active, strokes:$("filterStrokes").dataset.active, all:$("filterAll").dataset.active}));
+    check("aria-pressed matches dataset.active independently", $("filterFills").getAttribute("aria-pressed") === "true" && $("filterText").getAttribute("aria-pressed") === "false", "");
+    check("list shows only the 2 active-type issues", D().querySelectorAll("#list .row").length === 2, "rows=" + D().querySelectorAll("#list .row").length);
+    $("filterAll").click(); await sleep(30);
+    check("clicking All clears the set", $("filterFills").dataset.active === "false" && $("filterAll").dataset.active === "true", "");
+    check("All shows every issue again", D().querySelectorAll("#list .row").length === 3, "");
+  });
+
+  await section("2. Sort modes", async () => {
+    await load(); await proOn();
+    scenario = { issues: [mkIssue("2:1","ROGUE_FILL","Zebra"), mkIssue("2:2","DETACHED_INSTANCE","Apple"), mkIssue("2:3","UNSTYLED_TEXT","Mango")], candidates: (m) => rec(m.id) };
+    await scan();
+    const namesInOrder = () => QA("#list .row .name").map(n => n.textContent);
+    check("default sort is scan order", JSON.stringify(namesInOrder()) === JSON.stringify(["Zebra","Apple","Mango"]), namesInOrder().join(","));
+    $("sortBtn").click(); await sleep(30);
+    check("sort menu opens", $("sortMenu").classList.contains("isOpen"), "");
+    Q('.fixOption[data-sort="name"]').click(); await sleep(30);
+    check("sort by name orders alphabetically", JSON.stringify(namesInOrder()) === JSON.stringify(["Apple","Mango","Zebra"]), namesInOrder().join(","));
+    check("sort menu closes after picking", !$("sortMenu").classList.contains("isOpen"), "");
+    $("sortBtn").click(); await sleep(30);
+    Q('.fixOption[data-sort="type"]').click(); await sleep(30);
+    check("sort by type groups DETACHED before TEXT before FILL", JSON.stringify(namesInOrder()) === JSON.stringify(["Apple","Mango","Zebra"]), namesInOrder().join(","));
+  });
+
+  await section("3. Free-tier candidate preview", async () => {
+    await load(); // NOT pro
+    scenario = { issues: [mkIssue("3:1","ROGUE_FILL")], candidates: (m) => rec(m.id, "brand/primary") };
+    await scan();
+    await waitFor(() => sent("pro:autofix:candidates").length >= 1);
+    check("free tier requests candidates (not gated client-side)", sent("pro:autofix:candidates").length >= 1, "");
+    await sleep(150);
+    const trig = Q('.fixTrigger[data-issue-key="3:1:fill"]');
+    check("free row shows the real candidate name, not 'Unlock Pro to auto-fix'", trig && /brand\/primary/.test(trig.textContent), trig && trig.textContent);
+    check("free trigger stays disabled", trig && trig.disabled === true, "");
+    const fixBtn3 = Q('.fixBtn[data-issue-key="3:1:fill"]');
+    check("free Fix button stays disabled", fixBtn3 && fixBtn3.disabled === true, "");
+  });
+
+  await section("4. Ignore-list", async () => {
+    await load(); await proOn();
+    scenario = { issues: [mkIssue("4:1","ROGUE_FILL"), mkIssue("4:2","ROGUE_STROKE")], summary: { total: 2, rogueFills: 1, rogueStrokes: 1, scannedElements: 10, elementsWithIssues: 2, ignored: 0 }, candidates: (m) => rec(m.id) };
+    await scan();
+    const ignoreBtn = Q('.row[data-issue-id="4:1"] .ignoreBtn') || QA(".ignoreBtn")[0];
+    check("ignore button exists on the row", !!ignoreBtn, "");
+    ignoreBtn.click();
+    await waitFor(() => D().querySelectorAll("#list .row").length === 1);
+    check("ignoring a row removes it and posts issue:ignore", sent("issue:ignore").length === 1 && D().querySelectorAll("#list .row").length === 1, "rows=" + D().querySelectorAll("#list .row").length);
+    check("'N ignored' link appears", $("ignoredLink").style.display !== "none" && /1 issue ignored/.test($("ignoredLink").textContent), $("ignoredLink").textContent);
+    scenario.afterUnignore = [mkIssue("4:1","ROGUE_FILL"), mkIssue("4:2","ROGUE_STROKE")];
+    scenario.afterUnignoreSummary = { total: 2, rogueFills: 1, rogueStrokes: 1, scannedElements: 10, elementsWithIssues: 2, ignored: 0 };
+    $("ignoredLink").click();
+    await waitFor(() => D().querySelectorAll("#list .row").length === 2);
+    check("un-ignore-all restores the row and hides the link", D().querySelectorAll("#list .row").length === 2 && $("ignoredLink").style.display === "none", "");
+  });
+
+  await section("5. Cancel a running scan", async () => {
+    await load(); await proOn();
+    scenario = { auditCancelCheck: true };
+    $("scanBtn").click();
+    await sleep(50);
+    check("Cancel Scan button appears while scanning", W().getComputedStyle($("scanCancelBtn").closest(".loadingContent")).display !== "none", "");
+    $("scanCancelBtn").click();
+    await waitFor(() => sent("audit-result").some(r => r.canceled));
+    check("run-audit:cancel is sent and a canceled audit-result is handled", sent("run-audit:cancel").length === 1, "");
+    await sleep(150);
+    check("status shows canceled, not completed", /canceled/i.test($("statusTitle").textContent), $("statusTitle").textContent);
+    check("Scan button re-enabled after cancel", !$("scanBtn").disabled, "");
+  });
+
+  await section("6. Select N on canvas", async () => {
+    await load(); await proOn();
+    scenario = { issues: [mkIssue("6:1","ROGUE_FILL"), mkIssue("6:2","ROGUE_STROKE")], candidates: (m) => rec(m.id) };
+    await scan();
+    $("filterFills").click(); await sleep(30);
+    $("selectAllBtn").click(); await sleep(30);
+    const sel = sent("select-nodes")[0];
+    check("select-all sends only the filtered ids", sel && JSON.stringify(sel.ids) === JSON.stringify(["6:1"]), sel && JSON.stringify(sel.ids));
+  });
+
+  await section("7. Export CSV", async () => {
+    await load(); await proOn();
+    scenario = { issues: [mkIssue("7:1","ROGUE_FILL","Card BG"), mkIssue("7:2","DETACHED_INSTANCE","Icon")], candidates: (m) => rec(m.id) };
+    await scan();
+    W().eval(`document.createElement = new Proxy(document.createElement.bind(document), { apply(target, thisArg, args) { const el = target(...args); if (args[0] === 'a') { window.__lastAnchor = el; el.click = () => { window.__anchorClicked = true; }; } return el; } });`);
+    $("exportBtn").click();
+    await sleep(50);
+    const anchor = W().eval("window.__lastAnchor");
+    check("export creates a download anchor with a CSV filename", anchor && /\.csv$/.test(anchor.download), anchor && anchor.download);
+    check("export triggers the (stubbed) anchor click without a real download", W().eval("window.__anchorClicked") === true, "");
+  });
+
+  await section("8. Health Score tooltip", async () => {
+    await load(); await proOn();
+    scenario = { issues: [], summary: { total: 0, scannedElements: 5, elementsWithIssues: 0, ignored: 0 } };
+    await scan();
+    $("healthInfoBtn").focus();
+    await sleep(400);
+    const after = W().getComputedStyle(Q("#healthLabelWrap .tooltip")).opacity;
+    check("health info tooltip becomes visible on focus", after === "1", "after=" + after);
+    check("tooltip explains the formula", /audited elements/.test(Q("#healthLabelWrap .tooltip").textContent), Q("#healthLabelWrap .tooltip").textContent);
+  });
+
+  await section("9. Scanner options persistence", async () => {
+    await load(undefined, { savedOptions: { scanChildren: false, checkRogueFills: true, checkRogueStrokes: false, checkDetached: true, checkTextStyles: false } });
+    await sleep(200);
+    check("saved options are applied to checkboxes on load", $("includeChildren").checked === false && $("rogueStrokes").checked === false && $("detachedInstances").checked === true, JSON.stringify({inc: $("includeChildren").checked, strokes: $("rogueStrokes").checked, det: $("detachedInstances").checked}));
+    log.length = 0;
+    $("rogueFills").checked = false;
+    $("rogueFills").dispatchEvent(new Event("change", { bubbles: true }));
+    await sleep(400);
+    const saved = sent("options:save")[0];
+    check("changing a checkbox sends options:save (debounced)", saved && saved.options.checkRogueFills === false, saved && JSON.stringify(saved.options));
+  });
+
+  await section("10. Regressions: collapse, sort menu, matching queue", async () => {
+    await load(); await proOn();
+    scenario = { issues: [mkIssue("10:1","ROGUE_FILL"), mkIssue("10:2","UNSTYLED_TEXT")], candidates: (m) => rec(m.id) };
+    await scan(500);
+    // sort menu must survive a window resize (the app's own figma.ui.resize() fires real resize events)
+    $("sortBtn").click();
+    await sleep(30);
+    const opened = $("sortMenu").classList.contains("isOpen");
+    W().dispatchEvent(new (W().Event)("resize"));
+    await sleep(30);
+    check("sort menu opens", opened, "");
+    check("sort menu stays open across a resize event", $("sortMenu").classList.contains("isOpen"), "");
+    $("sortBtn").click();
+    // collapsing "Issues found" must collapse the toolbar with it
+    Q('[data-toggle="secIssues"]').click();
+    await sleep(100);
+    check("collapsing Issues found hides the toolbar", W().getComputedStyle($("issuesToolbar")).visibility === "hidden" && $("secIssues").querySelector(".sectionBody").getBoundingClientRect().height === 0, "");
+  });
+
+  await section("11. Regression: stuck-importing rows must not starve the matching queue", async () => {
+    await load(); await proOn();
+    const issues = Array.from({ length: 60 }, (_, i) => mkIssue(String(i), "ROGUE_FILL", "Node " + i));
+    scenario = { issues, candidates: (m) => Number(m.key.split(":")[0]) < 9
+      ? { candidates: [], recommendedId: null, debug: { libraryCollections: 2, libraryVariables: 0, libraryImporting: true } }
+      : rec(m.id) };
+    await scan(300);
+    // before the fix, the 9 stuck rows held every slot for ~30s and 0 other rows resolved
+    const ok = await waitFor(() => ev('Object.keys(autofixState.candidatesByKey).filter(k => Number(k.split(":")[0]) >= 9).length') === 51, 20000);
+    check("all non-stuck rows resolve while stuck rows are still retrying", ok, "resolved=" + ev('Object.keys(autofixState.candidatesByKey).length'));
+  });
+
+  return results;
+};
+</script></body></html>

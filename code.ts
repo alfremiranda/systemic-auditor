@@ -118,7 +118,7 @@ function hasFeature(ent: Entitlements, feature: ProFeature): boolean {
   return !!ent.pro && !!ent.features?.[feature] && !isExpired(ent);
 }
 
-async function loadLibraryVariables(varsApi: any, force = false): Promise<Variable[]> {
+async function loadLibraryVariables(varsApi: typeof figma.variables, force = false): Promise<Variable[]> {
   if (!figma.teamLibrary || typeof figma.teamLibrary.getAvailableLibraryVariableCollectionsAsync !== "function") {
     return [];
   }
@@ -145,7 +145,7 @@ async function loadLibraryVariables(varsApi: any, force = false): Promise<Variab
   return libraryLoadPromise;
 }
 
-async function importLibraryVariables(varsApi: any): Promise<Variable[]> {
+async function importLibraryVariables(varsApi: typeof figma.variables): Promise<Variable[]> {
   libraryVariablesLoading = true;
   try {
     const collections = await figma.teamLibrary.getAvailableLibraryVariableCollectionsAsync();
@@ -397,11 +397,28 @@ function isMixed(value: unknown): value is typeof figma.mixed {
   return value === figma.mixed;
 }
 
+// Structural views over SceneNode for properties the typings don't expose on the union (or that
+// only exist on some node types). Callers narrow these instead of trusting `any`.
+type DetachedInfoHolder = { detachedInfo?: DetachedInfo | null };
+type PaintHolder = {
+  fills?: ReadonlyArray<Paint> | typeof figma.mixed;
+  strokes?: ReadonlyArray<Paint> | typeof figma.mixed;
+  fillStyleId?: string | typeof figma.mixed;
+  strokeStyleId?: string | typeof figma.mixed;
+  boundVariables?: Record<string, unknown>;
+  setFillStyleIdAsync?: (styleId: string) => Promise<void>;
+  setStrokeStyleIdAsync?: (styleId: string) => Promise<void>;
+};
+
+function findAllNodes(root: SceneNode): SceneNode[] {
+  return "findAll" in root ? root.findAll(() => true) : [];
+}
+
 function getNodePath(node: SceneNode): string {
   const parts: string[] = [];
   let current: BaseNode | null = node;
   while (current && current.type !== "PAGE" && current.type !== "DOCUMENT") {
-    if ("name" in current) parts.unshift((current as any).name || current.type);
+    parts.unshift(current.name || current.type);
     current = current.parent;
   }
   if (parts.length > 4) return "… / " + parts.slice(-4).join(" / ");
@@ -425,12 +442,11 @@ function collectNodes(start: readonly SceneNode[], scanChildren: boolean): Scene
 }
 
 function isDetachedInstanceLike(node: SceneNode): boolean {
-  const di = (node as any).detachedInfo;
-  return di != null;
+  return (node as unknown as DetachedInfoHolder).detachedInfo != null;
 }
 
 function canCheckDetachedInfo(node: SceneNode): boolean {
-  return (node as any).detachedInfo !== undefined;
+  return (node as unknown as DetachedInfoHolder).detachedInfo !== undefined;
 }
 
 const detachedLabelCache = new Map<string, string>();
@@ -551,83 +567,112 @@ type InstanceOverride = {
   mainComponentId?: string;
 };
 
+// Override properties are copied by name through these tables instead of one hand-written
+// if/try block per property. The Figma node types are a union of many shapes, so the property
+// bag is typed as Record<string, unknown> rather than `any`.
+type PropBag = Record<string, unknown>;
+type OverrideKey = keyof InstanceOverride;
+// How a stored value is validated before it's written back: "truthy" (enums/objects), "number",
+// "boolean", or "paints" (an array that is copied with .slice() so the stored one isn't aliased).
+type PropKind = "truthy" | "number" | "boolean" | "paints";
+type PropSpec = readonly [OverrideKey, PropKind];
+
+// Order matters when writing back: sizing/constraints before the auto-layout block, which
+// (for the root) is separated by the resize call.
+const LAYOUT_PRE_PROPS: readonly PropSpec[] = [
+  ["layoutAlign", "truthy"],
+  ["layoutGrow", "number"],
+  ["layoutSizingHorizontal", "truthy"],
+  ["layoutSizingVertical", "truthy"],
+  ["constraints", "truthy"],
+];
+const LAYOUT_POST_PROPS: readonly PropSpec[] = [
+  ["layoutMode", "truthy"],
+  ["primaryAxisAlignItems", "truthy"],
+  ["counterAxisAlignItems", "truthy"],
+  ["primaryAxisSizingMode", "truthy"],
+  ["counterAxisSizingMode", "truthy"],
+  ["itemSpacing", "number"],
+  ["paddingLeft", "number"],
+  ["paddingRight", "number"],
+  ["paddingTop", "number"],
+  ["paddingBottom", "number"],
+  ["layoutWrap", "truthy"],
+];
+const VISUAL_PROPS: readonly PropSpec[] = [
+  ["fills", "paints"],
+  ["strokes", "paints"],
+  ["effects", "paints"],
+  ["visible", "boolean"],
+  ["opacity", "number"],
+  ["cornerRadius", "number"],
+  ["topLeftRadius", "number"],
+  ["topRightRadius", "number"],
+  ["bottomLeftRadius", "number"],
+  ["bottomRightRadius", "number"],
+];
+
+function captureProps(node: SceneNode, override: InstanceOverride, specs: readonly PropSpec[]): void {
+  const src = node as unknown as PropBag;
+  const dst = override as unknown as PropBag;
+  for (const [key] of specs) {
+    if (!(key in node)) continue;
+    // cornerRadius is figma.mixed when the corners differ; the per-corner props carry that case.
+    if (key === "cornerRadius" && isMixed(src[key])) continue;
+    dst[key] = src[key];
+  }
+}
+
+function applyProps(node: SceneNode, override: InstanceOverride, specs: readonly PropSpec[]): void {
+  const target = node as unknown as PropBag;
+  const stored = override as unknown as PropBag;
+  for (const [key, kind] of specs) {
+    if (!(key in node)) continue;
+    const value = stored[key];
+    const valid = kind === "number" ? typeof value === "number" : kind === "boolean" ? typeof value === "boolean" : !!value;
+    if (!valid) continue;
+    try {
+      target[key] = kind === "paints" ? (value as readonly unknown[]).slice() : value;
+    } catch {
+      /* ignore */
+    }
+  }
+}
+
 // Fills/strokes/effects/corner-radius/visible/opacity: shared between the root node and every
 // descendant, so a detached relink also restores an instance's own paint/effect/radius tweaks,
 // not just its layout and text. All synchronous — no font loading or async API involved.
 function captureVisualOverride(node: SceneNode, override: InstanceOverride): void {
-  if ("fills" in node) override.fills = (node as any).fills;
-  if ("strokes" in node) override.strokes = (node as any).strokes;
-  if ("effects" in node) override.effects = (node as any).effects;
-  if ("visible" in node) override.visible = (node as any).visible;
-  if ("opacity" in node) override.opacity = (node as any).opacity;
-  if ("cornerRadius" in node && !isMixed((node as any).cornerRadius)) override.cornerRadius = (node as any).cornerRadius;
-  if ("topLeftRadius" in node) override.topLeftRadius = (node as any).topLeftRadius;
-  if ("topRightRadius" in node) override.topRightRadius = (node as any).topRightRadius;
-  if ("bottomLeftRadius" in node) override.bottomLeftRadius = (node as any).bottomLeftRadius;
-  if ("bottomRightRadius" in node) override.bottomRightRadius = (node as any).bottomRightRadius;
+  captureProps(node, override, VISUAL_PROPS);
 }
 
 function applyVisualOverride(node: SceneNode, override: InstanceOverride): void {
-  if ("fills" in node && override.fills) {
-    try { (node as any).fills = override.fills.slice(); } catch { /* ignore */ }
-  }
-  if ("strokes" in node && override.strokes) {
-    try { (node as any).strokes = override.strokes.slice(); } catch { /* ignore */ }
-  }
-  if ("effects" in node && override.effects) {
-    try { (node as any).effects = override.effects.slice(); } catch { /* ignore */ }
-  }
-  if ("visible" in node && typeof override.visible === "boolean") {
-    try { (node as any).visible = override.visible; } catch { /* ignore */ }
-  }
-  if ("opacity" in node && typeof override.opacity === "number") {
-    try { (node as any).opacity = override.opacity; } catch { /* ignore */ }
-  }
-  if ("cornerRadius" in node && typeof override.cornerRadius === "number") {
-    try { (node as any).cornerRadius = override.cornerRadius; } catch { /* ignore */ }
-  }
-  if ("topLeftRadius" in node && typeof override.topLeftRadius === "number") {
-    try { (node as any).topLeftRadius = override.topLeftRadius; } catch { /* ignore */ }
-  }
-  if ("topRightRadius" in node && typeof override.topRightRadius === "number") {
-    try { (node as any).topRightRadius = override.topRightRadius; } catch { /* ignore */ }
-  }
-  if ("bottomLeftRadius" in node && typeof override.bottomLeftRadius === "number") {
-    try { (node as any).bottomLeftRadius = override.bottomLeftRadius; } catch { /* ignore */ }
-  }
-  if ("bottomRightRadius" in node && typeof override.bottomRightRadius === "number") {
-    try { (node as any).bottomRightRadius = override.bottomRightRadius; } catch { /* ignore */ }
-  }
+  applyProps(node, override, VISUAL_PROPS);
+}
+
+// Plain-bag access for size changes, so the call stays a real method call (keeps `this`).
+type Resizable = {
+  resizeWithoutConstraints?: (width: number, height: number) => void;
+  resize?: (width: number, height: number) => void;
+};
+function resizeNode(node: SceneNode, width: number, height: number): void {
+  const r = node as unknown as Resizable;
+  if (typeof r.resizeWithoutConstraints === "function") r.resizeWithoutConstraints(width, height);
+  else if (typeof r.resize === "function") r.resize(width, height);
 }
 
 async function collectInstanceOverrides(root: SceneNode): Promise<Map<string, InstanceOverride>> {
   const map = new Map<string, InstanceOverride>();
   const rootOverride: InstanceOverride = {};
-  if ("layoutAlign" in root) rootOverride.layoutAlign = (root as any).layoutAlign;
-  if ("layoutGrow" in root) rootOverride.layoutGrow = (root as any).layoutGrow;
-  if ("layoutSizingHorizontal" in root) rootOverride.layoutSizingHorizontal = (root as any).layoutSizingHorizontal;
-  if ("layoutSizingVertical" in root) rootOverride.layoutSizingVertical = (root as any).layoutSizingVertical;
-  if ("constraints" in root) rootOverride.constraints = (root as any).constraints;
-  if ("width" in root) rootOverride.width = (root as any).width;
-  if ("height" in root) rootOverride.height = (root as any).height;
-  if ("layoutMode" in root) rootOverride.layoutMode = (root as any).layoutMode;
-  if ("primaryAxisAlignItems" in root) rootOverride.primaryAxisAlignItems = (root as any).primaryAxisAlignItems;
-  if ("counterAxisAlignItems" in root) rootOverride.counterAxisAlignItems = (root as any).counterAxisAlignItems;
-  if ("primaryAxisSizingMode" in root) rootOverride.primaryAxisSizingMode = (root as any).primaryAxisSizingMode;
-  if ("counterAxisSizingMode" in root) rootOverride.counterAxisSizingMode = (root as any).counterAxisSizingMode;
-  if ("itemSpacing" in root) rootOverride.itemSpacing = (root as any).itemSpacing;
-  if ("paddingLeft" in root) rootOverride.paddingLeft = (root as any).paddingLeft;
-  if ("paddingRight" in root) rootOverride.paddingRight = (root as any).paddingRight;
-  if ("paddingTop" in root) rootOverride.paddingTop = (root as any).paddingTop;
-  if ("paddingBottom" in root) rootOverride.paddingBottom = (root as any).paddingBottom;
-  if ("layoutWrap" in root) rootOverride.layoutWrap = (root as any).layoutWrap;
+  captureProps(root, rootOverride, LAYOUT_PRE_PROPS);
+  if ("width" in root) rootOverride.width = root.width;
+  if ("height" in root) rootOverride.height = root.height;
+  captureProps(root, rootOverride, LAYOUT_POST_PROPS);
   captureVisualOverride(root, rootOverride);
   if (Object.keys(rootOverride).length > 0) {
     map.set("__root__", rootOverride);
   }
-  const nodes = typeof (root as any).findAll === "function"
-    ? ((root as any).findAll(() => true) as SceneNode[])
-    : [];
+  const nodes = findAllNodes(root);
   for (const node of nodes) {
     const path = buildNodePath(node, root);
     if (!path) continue;
@@ -649,22 +694,8 @@ async function collectInstanceOverrides(root: SceneNode): Promise<Map<string, In
         /* ignore */
       }
     }
-    if ("layoutAlign" in node) override.layoutAlign = (node as any).layoutAlign;
-    if ("layoutGrow" in node) override.layoutGrow = (node as any).layoutGrow;
-    if ("layoutSizingHorizontal" in node) override.layoutSizingHorizontal = (node as any).layoutSizingHorizontal;
-    if ("layoutSizingVertical" in node) override.layoutSizingVertical = (node as any).layoutSizingVertical;
-    if ("constraints" in node) override.constraints = (node as any).constraints;
-    if ("layoutMode" in node) override.layoutMode = (node as any).layoutMode;
-    if ("primaryAxisAlignItems" in node) override.primaryAxisAlignItems = (node as any).primaryAxisAlignItems;
-    if ("counterAxisAlignItems" in node) override.counterAxisAlignItems = (node as any).counterAxisAlignItems;
-    if ("primaryAxisSizingMode" in node) override.primaryAxisSizingMode = (node as any).primaryAxisSizingMode;
-    if ("counterAxisSizingMode" in node) override.counterAxisSizingMode = (node as any).counterAxisSizingMode;
-    if ("itemSpacing" in node) override.itemSpacing = (node as any).itemSpacing;
-    if ("paddingLeft" in node) override.paddingLeft = (node as any).paddingLeft;
-    if ("paddingRight" in node) override.paddingRight = (node as any).paddingRight;
-    if ("paddingTop" in node) override.paddingTop = (node as any).paddingTop;
-    if ("paddingBottom" in node) override.paddingBottom = (node as any).paddingBottom;
-    if ("layoutWrap" in node) override.layoutWrap = (node as any).layoutWrap;
+    captureProps(node, override, LAYOUT_PRE_PROPS);
+    captureProps(node, override, LAYOUT_POST_PROPS);
     captureVisualOverride(node, override);
     if (Object.keys(override).length > 0) {
       map.set(path, override);
@@ -692,70 +723,18 @@ async function applyInstanceOverridesToInstance(instance: InstanceNode, override
   if (!overrides.size) return;
   const rootOverride = overrides.get("__root__");
   if (rootOverride) {
-    if ("layoutAlign" in instance && rootOverride.layoutAlign) {
-      try { (instance as any).layoutAlign = rootOverride.layoutAlign; } catch { /* ignore */ }
-    }
-    if ("layoutGrow" in instance && typeof rootOverride.layoutGrow === "number") {
-      try { (instance as any).layoutGrow = rootOverride.layoutGrow; } catch { /* ignore */ }
-    }
-    if ("layoutSizingHorizontal" in instance && rootOverride.layoutSizingHorizontal) {
-      try { (instance as any).layoutSizingHorizontal = rootOverride.layoutSizingHorizontal; } catch { /* ignore */ }
-    }
-    if ("layoutSizingVertical" in instance && rootOverride.layoutSizingVertical) {
-      try { (instance as any).layoutSizingVertical = rootOverride.layoutSizingVertical; } catch { /* ignore */ }
-    }
-    if ("constraints" in instance && rootOverride.constraints) {
-      try { (instance as any).constraints = rootOverride.constraints; } catch { /* ignore */ }
-    }
+    applyProps(instance, rootOverride, LAYOUT_PRE_PROPS);
     if (typeof rootOverride.width === "number" && typeof rootOverride.height === "number") {
       try {
-        if ("resizeWithoutConstraints" in instance) {
-          (instance as any).resizeWithoutConstraints(rootOverride.width, rootOverride.height);
-        } else if ("resize" in instance) {
-          (instance as any).resize(rootOverride.width, rootOverride.height);
-        }
+        resizeNode(instance, rootOverride.width, rootOverride.height);
       } catch {
         // ignore resize errors on auto-layout instances
       }
     }
-    if ("layoutMode" in instance && rootOverride.layoutMode) {
-      try { (instance as any).layoutMode = rootOverride.layoutMode; } catch { /* ignore */ }
-    }
-    if ("primaryAxisAlignItems" in instance && rootOverride.primaryAxisAlignItems) {
-      try { (instance as any).primaryAxisAlignItems = rootOverride.primaryAxisAlignItems; } catch { /* ignore */ }
-    }
-    if ("counterAxisAlignItems" in instance && rootOverride.counterAxisAlignItems) {
-      try { (instance as any).counterAxisAlignItems = rootOverride.counterAxisAlignItems; } catch { /* ignore */ }
-    }
-    if ("primaryAxisSizingMode" in instance && rootOverride.primaryAxisSizingMode) {
-      try { (instance as any).primaryAxisSizingMode = rootOverride.primaryAxisSizingMode; } catch { /* ignore */ }
-    }
-    if ("counterAxisSizingMode" in instance && rootOverride.counterAxisSizingMode) {
-      try { (instance as any).counterAxisSizingMode = rootOverride.counterAxisSizingMode; } catch { /* ignore */ }
-    }
-    if ("itemSpacing" in instance && typeof rootOverride.itemSpacing === "number") {
-      try { (instance as any).itemSpacing = rootOverride.itemSpacing; } catch { /* ignore */ }
-    }
-    if ("paddingLeft" in instance && typeof rootOverride.paddingLeft === "number") {
-      try { (instance as any).paddingLeft = rootOverride.paddingLeft; } catch { /* ignore */ }
-    }
-    if ("paddingRight" in instance && typeof rootOverride.paddingRight === "number") {
-      try { (instance as any).paddingRight = rootOverride.paddingRight; } catch { /* ignore */ }
-    }
-    if ("paddingTop" in instance && typeof rootOverride.paddingTop === "number") {
-      try { (instance as any).paddingTop = rootOverride.paddingTop; } catch { /* ignore */ }
-    }
-    if ("paddingBottom" in instance && typeof rootOverride.paddingBottom === "number") {
-      try { (instance as any).paddingBottom = rootOverride.paddingBottom; } catch { /* ignore */ }
-    }
-    if ("layoutWrap" in instance && rootOverride.layoutWrap) {
-      try { (instance as any).layoutWrap = rootOverride.layoutWrap; } catch { /* ignore */ }
-    }
+    applyProps(instance, rootOverride, LAYOUT_POST_PROPS);
     applyVisualOverride(instance, rootOverride);
   }
-  const nodes = typeof (instance as any).findAll === "function"
-    ? ((instance as any).findAll(() => true) as SceneNode[])
-    : [];
+  const nodes = findAllNodes(instance);
   for (const node of nodes) {
     const path = buildNodePath(node, instance);
     if (!path || !overrides.has(path)) continue;
@@ -781,54 +760,8 @@ async function applyInstanceOverridesToInstance(instance: InstanceNode, override
         try { textNode.textAutoResize = override.textAutoResize; } catch { /* ignore */ }
       }
     }
-    if ("layoutAlign" in node && override.layoutAlign) {
-      try { (node as any).layoutAlign = override.layoutAlign; } catch { /* ignore */ }
-    }
-    if ("layoutGrow" in node && typeof override.layoutGrow === "number") {
-      try { (node as any).layoutGrow = override.layoutGrow; } catch { /* ignore */ }
-    }
-    if ("layoutSizingHorizontal" in node && override.layoutSizingHorizontal) {
-      try { (node as any).layoutSizingHorizontal = override.layoutSizingHorizontal; } catch { /* ignore */ }
-    }
-    if ("layoutSizingVertical" in node && override.layoutSizingVertical) {
-      try { (node as any).layoutSizingVertical = override.layoutSizingVertical; } catch { /* ignore */ }
-    }
-    if ("constraints" in node && override.constraints) {
-      try { (node as any).constraints = override.constraints; } catch { /* ignore */ }
-    }
-    if ("layoutMode" in node && override.layoutMode) {
-      try { (node as any).layoutMode = override.layoutMode; } catch { /* ignore */ }
-    }
-    if ("primaryAxisAlignItems" in node && override.primaryAxisAlignItems) {
-      try { (node as any).primaryAxisAlignItems = override.primaryAxisAlignItems; } catch { /* ignore */ }
-    }
-    if ("counterAxisAlignItems" in node && override.counterAxisAlignItems) {
-      try { (node as any).counterAxisAlignItems = override.counterAxisAlignItems; } catch { /* ignore */ }
-    }
-    if ("primaryAxisSizingMode" in node && override.primaryAxisSizingMode) {
-      try { (node as any).primaryAxisSizingMode = override.primaryAxisSizingMode; } catch { /* ignore */ }
-    }
-    if ("counterAxisSizingMode" in node && override.counterAxisSizingMode) {
-      try { (node as any).counterAxisSizingMode = override.counterAxisSizingMode; } catch { /* ignore */ }
-    }
-    if ("itemSpacing" in node && typeof override.itemSpacing === "number") {
-      try { (node as any).itemSpacing = override.itemSpacing; } catch { /* ignore */ }
-    }
-    if ("paddingLeft" in node && typeof override.paddingLeft === "number") {
-      try { (node as any).paddingLeft = override.paddingLeft; } catch { /* ignore */ }
-    }
-    if ("paddingRight" in node && typeof override.paddingRight === "number") {
-      try { (node as any).paddingRight = override.paddingRight; } catch { /* ignore */ }
-    }
-    if ("paddingTop" in node && typeof override.paddingTop === "number") {
-      try { (node as any).paddingTop = override.paddingTop; } catch { /* ignore */ }
-    }
-    if ("paddingBottom" in node && typeof override.paddingBottom === "number") {
-      try { (node as any).paddingBottom = override.paddingBottom; } catch { /* ignore */ }
-    }
-    if ("layoutWrap" in node && override.layoutWrap) {
-      try { (node as any).layoutWrap = override.layoutWrap; } catch { /* ignore */ }
-    }
+    applyProps(node, override, LAYOUT_PRE_PROPS);
+    applyProps(node, override, LAYOUT_POST_PROPS);
     applyVisualOverride(node, override);
     if (node.type === "INSTANCE" && override.mainComponentId) {
       // Best-effort nested instance-swap replay: only touch it if the fresh instance's
@@ -857,7 +790,7 @@ async function applyAutofixItem(item: AutofixAllItem): Promise<{ ok: boolean; er
   if (!node || !("id" in node)) return { ok: false, error: "Node not found." };
 
   if (item.issueType === "DETACHED_INSTANCE" || item.kind === "detached") {
-    const info = (node as any).detachedInfo as DetachedInfo | null;
+    const info = (node as unknown as DetachedInfoHolder).detachedInfo ?? null;
     if (!info) return { ok: false, error: "Node is not detached." };
     const overrides = await collectInstanceOverrides(node as SceneNode);
     const instance = await createInstanceFromDetachedInfo(info);
@@ -873,14 +806,13 @@ async function applyAutofixItem(item: AutofixAllItem): Promise<{ ok: boolean; er
       instance.name = (node as SceneNode).name;
       instance.x = (node as SceneNode).x;
       instance.y = (node as SceneNode).y;
-      if ("rotation" in instance) instance.rotation = (node as any).rotation || 0;
-      if ("opacity" in instance) instance.opacity = (node as any).opacity ?? 1;
-      if ("visible" in instance) instance.visible = (node as any).visible ?? true;
-      if ("locked" in instance) instance.locked = (node as any).locked ?? false;
-      if ("resizeWithoutConstraints" in instance && "width" in node && "height" in node) {
-        (instance as any).resizeWithoutConstraints((node as any).width, (node as any).height);
-      } else if ("resize" in instance && "width" in node && "height" in node) {
-        (instance as any).resize((node as any).width, (node as any).height);
+      const original = node as unknown as { rotation?: number; opacity?: number; visible?: boolean; locked?: boolean; width?: number; height?: number };
+      if ("rotation" in instance) instance.rotation = original.rotation || 0;
+      if ("opacity" in instance) instance.opacity = original.opacity ?? 1;
+      if ("visible" in instance) instance.visible = original.visible ?? true;
+      if ("locked" in instance) instance.locked = original.locked ?? false;
+      if (typeof original.width === "number" && typeof original.height === "number") {
+        resizeNode(instance, original.width, original.height);
       }
       await applyInstanceOverridesToInstance(instance, overrides);
     } catch (e) {
@@ -933,10 +865,11 @@ async function applyAutofixItem(item: AutofixAllItem): Promise<{ ok: boolean; er
   if (candidateId.startsWith("style:")) {
     const styleId = candidateId.replace("style:", "");
     // documentAccess is "dynamic-page": the sync fillStyleId/strokeStyleId setters throw.
-    if (kind === "fills" && "setFillStyleIdAsync" in node) {
-      await (node as any).setFillStyleIdAsync(styleId);
-    } else if (kind === "strokes" && "setStrokeStyleIdAsync" in node) {
-      await (node as any).setStrokeStyleIdAsync(styleId);
+    const styleHolder = node as unknown as PaintHolder;
+    if (kind === "fills" && styleHolder.setFillStyleIdAsync) {
+      await styleHolder.setFillStyleIdAsync(styleId);
+    } else if (kind === "strokes" && styleHolder.setStrokeStyleIdAsync) {
+      await styleHolder.setStrokeStyleIdAsync(styleId);
     } else {
       return { ok: false, error: "Unsupported node." };
     }
@@ -945,17 +878,18 @@ async function applyAutofixItem(item: AutofixAllItem): Promise<{ ok: boolean; er
 
   const variable = await figma.variables.getVariableByIdAsync(candidateId);
   if (!variable) return { ok: false, error: "Variable not found." };
-  const paints = (node as any)[kind] as ReadonlyArray<Paint> | typeof figma.mixed | undefined;
+  const paintHolder = node as unknown as PaintHolder;
+  const paints = paintHolder[kind];
   if (!paints || paints === figma.mixed || !Array.isArray(paints) || paints.length === 0) {
     return { ok: false, error: "No paint to bind." };
   }
   const next = paints.slice();
-  const idx = next.findIndex((p) => p && (p as any).type === "SOLID" && (p as any).visible !== false);
+  const idx = next.findIndex((p) => p && p.type === "SOLID" && p.visible !== false);
   const paintIndex = idx >= 0 ? idx : 0;
   const paint = next[paintIndex] as SolidPaint;
   if (!paint || paint.type !== "SOLID") return { ok: false, error: "Unsupported paint type." };
   next[paintIndex] = figma.variables.setBoundVariableForPaint(paint, "color", variable);
-  (node as any)[kind] = next;
+  paintHolder[kind] = next;
   return { ok: true };
 }
 
@@ -1015,36 +949,31 @@ async function getTextStylesForMatching(): Promise<TextStyle[]> {
   return styles;
 }
 
+// Any truthy entry in a boundVariables map (color, opacity, gradient-stop fields, ...) counts.
+function hasTruthyBinding(bindings: unknown): boolean {
+  if (!bindings || typeof bindings !== "object") return false;
+  const map = bindings as Record<string, unknown>;
+  return Object.keys(map).some((k) => !!map[k]);
+}
+
 function hasBoundPaintVariable(node: SceneNode, kind: "fills" | "strokes"): boolean {
-  const anyNode = node as any;
+  const holder = node as unknown as PaintHolder;
 
   // Node-level bindings
-  const bv = anyNode.boundVariables;
+  const bv = holder.boundVariables;
   if (bv && bv[kind]) return true;
 
   // Paint-level bindings
-  if (kind in anyNode) {
-    const paints = anyNode[kind] as readonly any[] | typeof figma.mixed;
+  if (kind in node) {
+    const paints = holder[kind];
     if (!isMixed(paints) && Array.isArray(paints)) {
-      for (const p of paints) {
-        const pbv = p?.boundVariables as any;
-        if (pbv && typeof pbv === "object") {
-          if (pbv.color || pbv.opacity) return true;
-          for (const k of Object.keys(pbv)) {
-            if (pbv[k]) return true;
-          }
-        }
-
-        const stops = (p as any).gradientStops as any[] | undefined;
+      for (const paint of paints as ReadonlyArray<Paint>) {
+        const p = paint as unknown as { boundVariables?: unknown; gradientStops?: ReadonlyArray<{ boundVariables?: unknown } | undefined> } | undefined;
+        if (hasTruthyBinding(p?.boundVariables)) return true;
+        const stops = p?.gradientStops;
         if (Array.isArray(stops)) {
-          for (const s of stops) {
-            const sbv = s?.boundVariables as any;
-            if (sbv && typeof sbv === "object") {
-              if (sbv.color || sbv.opacity) return true;
-              for (const k of Object.keys(sbv)) {
-                if (sbv[k]) return true;
-              }
-            }
+          for (const stop of stops) {
+            if (hasTruthyBinding(stop?.boundVariables)) return true;
           }
         }
       }
@@ -1057,10 +986,11 @@ function hasBoundPaintVariable(node: SceneNode, kind: "fills" | "strokes"): bool
 function hasRogueFill(node: SceneNode): boolean {
   if (!("fills" in node)) return false;
 
-  const fills = (node as any).fills as readonly Paint[] | typeof figma.mixed;
+  const paintHolder = node as unknown as PaintHolder;
+  const fills = paintHolder.fills;
   if (isMixed(fills) || !Array.isArray(fills) || fills.length === 0) return false;
 
-  const fillStyleId = (node as any).fillStyleId as string | typeof figma.mixed | undefined;
+  const fillStyleId = paintHolder.fillStyleId;
 
   const visibleFills = fills.filter((p) => (p.visible ?? true) === true);
   if (visibleFills.length === 0) return false;
@@ -1078,10 +1008,11 @@ function hasRogueFill(node: SceneNode): boolean {
 function hasRogueStroke(node: SceneNode): boolean {
   if (!("strokes" in node)) return false;
 
-  const strokes = (node as any).strokes as readonly Paint[] | typeof figma.mixed;
+  const paintHolder = node as unknown as PaintHolder;
+  const strokes = paintHolder.strokes;
   if (isMixed(strokes) || !Array.isArray(strokes) || strokes.length === 0) return false;
 
-  const strokeStyleId = (node as any).strokeStyleId as string | typeof figma.mixed | undefined;
+  const strokeStyleId = paintHolder.strokeStyleId;
 
   const visibleStrokes = strokes.filter((p) => (p.visible ?? true) === true);
   if (visibleStrokes.length === 0) return false;
@@ -1113,22 +1044,20 @@ function isMixedTextProps(node: TextNode): boolean {
 
 function textLineHeightToPx(lineHeight: LineHeight, fontSize: number): number | null {
   if (!lineHeight) return null;
-  if ("unit" in lineHeight && lineHeight.unit === "AUTO") return null;
-  const unit = (lineHeight as any).unit;
-  const value = (lineHeight as any).value;
+  if (lineHeight.unit === "AUTO") return null;
+  const value = lineHeight.value;
   if (typeof value !== "number") return null;
-  if (unit === "PIXELS") return value;
-  if (unit === "PERCENT") return fontSize * (value / 100);
+  if (lineHeight.unit === "PIXELS") return value;
+  if (lineHeight.unit === "PERCENT") return fontSize * (value / 100);
   return null;
 }
 
 function letterSpacingToPx(letterSpacing: LetterSpacing, fontSize: number): number | null {
   if (!letterSpacing) return null;
-  const unit = (letterSpacing as any).unit;
-  const value = (letterSpacing as any).value;
+  const value = letterSpacing.value;
   if (typeof value !== "number") return null;
-  if (unit === "PIXELS") return value;
-  if (unit === "PERCENT") return fontSize * (value / 100);
+  if (letterSpacing.unit === "PIXELS") return value;
+  if (letterSpacing.unit === "PERCENT") return fontSize * (value / 100);
   return null;
 }
 
@@ -1147,7 +1076,7 @@ function normalizeTextProps(node: TextNode): {
   const lineHeight = isMixed(node.lineHeight) && hasChars ? node.getRangeLineHeight(rangeStart, rangeEnd) as LineHeight : node.lineHeight as LineHeight;
   const letterSpacing = isMixed(node.letterSpacing) && hasChars ? node.getRangeLetterSpacing(rangeStart, rangeEnd) as LetterSpacing : node.letterSpacing as LetterSpacing;
 
-  const lineHeightAuto = !!(lineHeight && "unit" in lineHeight && (lineHeight as any).unit === "AUTO");
+  const lineHeightAuto = !!(lineHeight && lineHeight.unit === "AUTO");
   const lineHeightPx = fontSize ? textLineHeightToPx(lineHeight as LineHeight, fontSize) : null;
   const letterSpacingPx = fontSize ? letterSpacingToPx(letterSpacing as LetterSpacing, fontSize) : null;
 
@@ -1240,9 +1169,9 @@ function textSemanticScore(styleName: string, keywords: string[]): number {
 }
 
 function textStyleHasVariableBindings(style: TextStyle): boolean {
-  const bound = (style as any).boundVariables as Record<string, any> | undefined;
+  const bound = style.boundVariables as Record<string, unknown> | undefined;
   if (!bound) return false;
-  return Object.keys(bound).some((k) => bound[k]);
+  return Object.keys(bound).some((k) => !!bound[k]);
 }
 
 async function findTextCandidates(node: TextNode): Promise<{
@@ -1269,7 +1198,7 @@ async function findTextCandidates(node: TextNode): Promise<{
     const sizeDiff = Math.abs(style.fontSize - props.fontSize);
 
     const styleLineHeight = style.lineHeight as LineHeight;
-    const styleLineAuto = !!(styleLineHeight && "unit" in styleLineHeight && (styleLineHeight as any).unit === "AUTO");
+    const styleLineAuto = !!(styleLineHeight && styleLineHeight.unit === "AUTO");
     const styleLinePx = textLineHeightToPx(styleLineHeight, style.fontSize);
 
     const lineDiff = (props.lineHeightAuto && styleLineAuto)
@@ -1357,12 +1286,12 @@ function nodeScopeForVariable(node: SceneNode, kind: "fills" | "strokes"): strin
   return scopes;
 }
 
-function variableMatchesScope(variable: any, node: SceneNode, kind: "fills" | "strokes"): boolean {
-  const scopes = Array.isArray(variable.scopes) ? variable.scopes.map(String) : [];
+function variableMatchesScope(variable: Variable, node: SceneNode, kind: "fills" | "strokes"): boolean {
+  const scopes: string[] = Array.isArray(variable.scopes) ? variable.scopes.map(String) : [];
   if (scopes.length === 0) return true;
-  if (scopes.includes("ALL_SCOPES")) return true;
+  if (scopes.indexOf("ALL_SCOPES") >= 0) return true;
   const targetScopes = nodeScopeForVariable(node, kind);
-  return targetScopes.some((s) => scopes.includes(s));
+  return targetScopes.some((s) => scopes.indexOf(s) >= 0);
 }
 
 function nameIntentScore(name: string): number {
@@ -1377,11 +1306,12 @@ function nameIntentScore(name: string): number {
   return score;
 }
 
-function getModeIdForCollection(node: SceneNode, collection: any): string | null {
+function getModeIdForCollection(node: SceneNode, collection: VariableCollection | null | undefined): string | null {
   if (!collection || !collection.id) return null;
-  const resolved = (node as any).resolvedVariableModes as Record<string, string> | undefined;
+  const modes = node as unknown as { resolvedVariableModes?: Record<string, string>; explicitVariableModes?: Record<string, string> };
+  const resolved = modes.resolvedVariableModes;
   if (resolved && resolved[collection.id]) return resolved[collection.id];
-  const explicit = (node as any).explicitVariableModes as Record<string, string> | undefined;
+  const explicit = modes.explicitVariableModes;
   if (explicit && explicit[collection.id]) return explicit[collection.id];
   if (collection.defaultModeId) return collection.defaultModeId;
   if (Array.isArray(collection.modes) && collection.modes[0]?.modeId) return collection.modes[0].modeId;
@@ -1509,19 +1439,20 @@ function paintToRgba(paint: Paint): RGBA | null {
 }
 
 function getSolidPaintColor(node: SceneNode, kind: "fills" | "strokes"): RGBA | null {
-  const paints = (node as any)[kind] as ReadonlyArray<Paint> | typeof figma.mixed | undefined;
+  const paints = (node as unknown as PaintHolder)[kind];
   if (!paints || paints === figma.mixed || !Array.isArray(paints)) return null;
   // Same paint the bind step targets: the first visible SOLID paint.
-  const paint = paints.find((p) => p && p.type === "SOLID" && (p as any).visible !== false);
+  const paint = paints.find((p) => p && p.type === "SOLID" && p.visible !== false);
   if (!paint) return null;
   return paintToRgba(paint);
 }
 
 function isVariableAlias(value: unknown): value is { type: "VARIABLE_ALIAS"; id: string } {
-  return !!value && typeof value === "object" && (value as any).type === "VARIABLE_ALIAS" && typeof (value as any).id === "string";
+  const v = value as { type?: unknown; id?: unknown } | null | undefined;
+  return !!v && typeof v === "object" && v.type === "VARIABLE_ALIAS" && typeof v.id === "string";
 }
 
-function pickModeIdForVariable(variable: any, preferredModeId?: string | null): string | null {
+function pickModeIdForVariable(variable: Variable | null | undefined, preferredModeId?: string | null): string | null {
   if (!variable) return null;
   const valuesByMode = variable.valuesByMode || {};
   if (preferredModeId && valuesByMode[preferredModeId] != null) return preferredModeId;
@@ -1529,7 +1460,7 @@ function pickModeIdForVariable(variable: any, preferredModeId?: string | null): 
   return keys.length ? keys[0] : null;
 }
 
-async function resolveVariableColor(variable: any, modeId: string, seen: Set<string>): Promise<RGBA | null> {
+async function resolveVariableColor(variable: Variable | null | undefined, modeId: string, seen: Set<string>): Promise<RGBA | null> {
   if (!variable) return null;
   if (seen.has(variable.id)) return null;
   seen.add(variable.id);
@@ -1545,8 +1476,8 @@ async function resolveVariableColor(variable: any, modeId: string, seen: Set<str
   if (isVariableAlias(value)) {
     const aliasVar = await figma.variables.getVariableByIdAsync(value.id);
     if (!aliasVar) return null;
-    const aliasModeId = pickModeIdForVariable(aliasVar as any, resolvedModeId);
-    return resolveVariableColor(aliasVar as any, aliasModeId || resolvedModeId, seen);
+    const aliasModeId = pickModeIdForVariable(aliasVar, resolvedModeId);
+    return resolveVariableColor(aliasVar, aliasModeId || resolvedModeId, seen);
   }
 
   if (typeof value === "object" && value && "r" in value && "g" in value && "b" in value) {
@@ -1597,7 +1528,7 @@ async function findColorCandidates(target: RGBA, consumer: SceneNode, kind: "fil
   const candidates: AutofixCandidate[] = [];
   const targetKey = rgbaToKey(target);
 
-  const varsApi = figma.variables as any;
+  const varsApi = figma.variables;
   const { collections, vars: localVars } = await getLocalColorVariablesCached();
   // Throttled (5s) when nothing is cached yet, so an empty or failing library isn't re-imported per row.
   const libraryVars = await loadLibraryVariables(varsApi);
@@ -1605,18 +1536,18 @@ async function findColorCandidates(target: RGBA, consumer: SceneNode, kind: "fil
   for (const v of localVars) variableMap.set(v.id, v);
   for (const v of libraryVars) variableMap.set(v.id, v);
   const variables = Array.from(variableMap.values());
-  const collectionById = new Map<string, any>();
+  const collectionById = new Map<string, VariableCollection>();
   for (const c of collections) collectionById.set(c.id, c);
 
   for (const v of variables) {
-    const variable: any = v;
+    const variable = v;
     if (variable.resolvedType !== "COLOR") continue;
     const name = String(variable.name || "");
     const isHidden = name.startsWith(".") || name.startsWith("-");
     if (name.startsWith("_")) continue;
     if (kind === "strokes" && shouldExcludeForStroke(name)) continue;
 
-    let collection = collectionById.get(variable.variableCollectionId);
+    let collection: VariableCollection | null | undefined = collectionById.get(variable.variableCollectionId);
     if (!collection && variable.variableCollectionId) {
       try {
         collection = await figma.variables.getVariableCollectionByIdAsync(variable.variableCollectionId);
@@ -1689,7 +1620,7 @@ async function findColorCandidates(target: RGBA, consumer: SceneNode, kind: "fil
 
     const collectionName = String(collection?.name || "Variables");
     const isSemantic = /semantic|ui|theme|token/i.test(collectionName);
-    const isLocal = !((collection as any)?.remote === true) && !((variable as any)?.remote === true);
+    const isLocal = !(collection?.remote === true) && !(variable.remote === true);
     const score = (aliasHit ? 2 : 0) + (isSemantic ? 1 : 0) + (isLocal ? 0.5 : 0) + layerScore + nameIntentScore(name);
     const isHiddenCollection = collectionName.startsWith(".") || collectionName.startsWith("-");
 
@@ -1711,7 +1642,7 @@ async function findColorCandidates(target: RGBA, consumer: SceneNode, kind: "fil
     const styles = await figma.getLocalPaintStylesAsync();
     for (const style of styles) {
       const paints = style.paints || [];
-      const paint = paints.find((p) => p && (p as any).visible !== false) || paints[0];
+      const paint = paints.find((p) => p && p.visible !== false) || paints[0];
       const color = paintToRgba(paint as Paint);
       if (!color) continue;
       if (rgbaToKey(color) !== targetKey) continue;
@@ -1730,7 +1661,7 @@ async function findColorCandidates(target: RGBA, consumer: SceneNode, kind: "fil
 
   const scoped = candidates.filter((c) => {
     if (c.source !== "variable") return true;
-    const variable = variables.find((v: any) => v.id === c.id) as any;
+    const variable = variables.find((v) => v.id === c.id);
     if (!variable) return true;
     return variableMatchesScope(variable, consumer, kind);
   });
@@ -1808,6 +1739,18 @@ type LicenseResult = {
 
 const MAX_SERVER_MESSAGE_LENGTH = 200;
 
+// Fields read from the Worker's JSON reply; everything is `unknown` and narrowed where used.
+type LicenseResponseBody = {
+  ok?: unknown;
+  error?: unknown;
+  message?: unknown;
+  status?: unknown;
+  valid?: unknown;
+  activated?: unknown;
+  daysLeft?: unknown;
+  entitlements?: { pro?: unknown };
+};
+
 async function callLicenseEndpoint(
   url: string,
   licenseKey: string,
@@ -1861,7 +1804,7 @@ async function callLicenseEndpoint(
   }
 
   const rawText = await res.text();
-  let data: any = null;
+  let data: LicenseResponseBody | null = null;
   try {
     data = rawText ? JSON.parse(rawText) : null;
   } catch {
@@ -1955,7 +1898,7 @@ async function runAudit(selection: readonly SceneNode[], options: AuditOptions) 
       if (options.checkDetached && canCheckDetachedInfo(node)) {
         markAudited(node);
         if (isDetachedInstanceLike(node)) {
-          const info = (node as any).detachedInfo as DetachedInfo | null;
+          const info = (node as unknown as DetachedInfoHolder).detachedInfo ?? null;
           const label = info ? await getDetachedComponentName(info) : undefined;
           const before = issues.length;
           addIssue(node, "DETACHED_INSTANCE", { detachedComponentName: label });
@@ -2054,7 +1997,10 @@ figma.ui.onmessage = async (msg) => {
   }
 };
 
-async function handleMessage(msg: any): Promise<void> {
+// Messages from ui.html: fields are untyped on the wire, so each handler narrows what it reads.
+type UiMessage = { type?: string; [field: string]: unknown };
+
+async function handleMessage(msg: UiMessage): Promise<void> {
   if (!msg || typeof msg !== "object") return;
 
   if (msg.type === "resize") {
@@ -2074,7 +2020,7 @@ async function handleMessage(msg: any): Promise<void> {
   }
 
   if (msg.type === "options:save") {
-    const options = msg.options;
+    const options = msg.options as Partial<AuditOptions> | null | undefined;
     if (options && typeof options === "object") {
       if (optionsSaveTimer) clearTimeout(optionsSaveTimer);
       optionsSaveTimer = setTimeout(() => {
@@ -2256,8 +2202,8 @@ async function handleMessage(msg: any): Promise<void> {
     }
 
     try {
-      const varsApi = figma.variables as any;
-      if (!varsApi || (typeof varsApi.getVariablesAsync !== "function" && typeof varsApi.getLocalVariablesAsync !== "function")) {
+      const varsApi = figma.variables;
+      if (!varsApi || typeof varsApi.getLocalVariablesAsync !== "function") {
         reply({ candidates: [], recommendedId: null });
         return;
       }
@@ -2286,7 +2232,7 @@ async function handleMessage(msg: any): Promise<void> {
 
       const { candidates, recommendedId, debug } = await findColorCandidates(color, node as SceneNode, kind as "fills" | "strokes");
       reply({ candidates, recommendedId, debug });
-    } catch (e) {
+    } catch {
       reply({ candidates: [], recommendedId: null });
     }
     return;
@@ -2295,7 +2241,8 @@ async function handleMessage(msg: any): Promise<void> {
   if (msg.type === "pro:autofix:apply") {
     const allowed = hasFeature(entitlements, "autofix");
     const id = String(msg.id || "");
-    const kind = ["fill", "stroke", "text", "detached"].indexOf(msg.kind) >= 0 ? msg.kind : "fill";
+    const rawKind = String(msg.kind || "");
+    const kind = ["fill", "stroke", "text", "detached"].indexOf(rawKind) >= 0 ? rawKind : "fill";
     const candidateId = String(msg.candidateId || "");
     const issueType = String(msg.issueType || "");
     const reply = (ok: boolean, error?: string) =>
@@ -2404,7 +2351,7 @@ async function handleMessage(msg: any): Promise<void> {
     textStyleCache = null;
     variableColorCache.clear();
     localColorVariablesCache = null;
-    const varsApi = figma.variables as any;
+    const varsApi = figma.variables;
     if (varsApi && typeof varsApi.importVariableByKeyAsync === "function") {
       // Fire and forget: candidates are matched lazily, and a failure here must not surface as an unhandled rejection.
       loadLibraryVariables(varsApi, true).catch(() => {
@@ -2419,7 +2366,7 @@ async function handleMessage(msg: any): Promise<void> {
       return;
     }
 
-    const options: AuditOptions = msg.options ?? {
+    const options: AuditOptions = (msg.options as AuditOptions | undefined) ?? {
       scanChildren: true,
       checkRogueFills: true,
       checkRogueStrokes: true,
@@ -2477,7 +2424,7 @@ async function handleMessage(msg: any): Promise<void> {
         await figma.setCurrentPageAsync(p as PageNode);
       }
 
-      if (!("x" in (found as any))) {
+      if (!("x" in found)) {
         figma.notify("That item isn’t a canvas layer I can zoom to.");
         figma.ui.postMessage({ type: "locate-status", status: "error", id, message: "Not a canvas node" });
         return;
@@ -2518,7 +2465,7 @@ async function handleMessage(msg: any): Promise<void> {
       let targetPageId: string | null = null;
       for (const id of ids) {
         const node = await figma.getNodeByIdAsync(id);
-        if (!node || !("x" in (node as any))) continue;
+        if (!node || !("x" in node)) continue;
         let p: BaseNode | null = node;
         while (p && p.type !== "PAGE" && p.type !== "DOCUMENT") p = p.parent;
         const pageId = p && p.type === "PAGE" ? p.id : null;

@@ -1,40 +1,32 @@
-Below are the steps to get your plugin running. You can also find instructions at:
+# Systemic Auditor
 
-  https://www.figma.com/plugin-docs/plugin-quickstart-guide/
+A Figma plugin that audits a selection for design-system drift and fixes it against your variables and styles:
 
-This plugin template uses Typescript and NPM, two standard tools in creating JavaScript applications.
+- **Detached instances**: relinked to their original component, replaying layout, text, fills, strokes, effects, radius, visibility, opacity and nested component swaps.
+- **Unstyled text**: matched to local text styles.
+- **Rogue fills and strokes**: matched to local and team-library color variables (CIEDE2000, with a recommended match under ΔE 2).
 
-First, download Node.js which comes with NPM. This will allow you to install TypeScript and other
-libraries. You can find the download link here:
+Scanning, the candidate preview, ignore-list, filters/sort and CSV export are available to everyone; applying fixes (including "Fix all") is a Pro feature gated by a license key. See [CLAUDE.md](CLAUDE.md) for the architecture, message protocol, domain logic and known issues.
 
-  https://nodejs.org/en/download/
+## Develop
 
-Next, install TypeScript using the command:
+```bash
+npm install
+npm run build      # compile code.ts -> code.js (code.js is committed; manifest.json points at it)
+npm run watch      # rebuild on change
+npm run typecheck  # tsc --noEmit
+npm run lint
+npm test           # Node tests for code.js against a stubbed figma API
+```
 
-  npm install -g typescript
+`ui.html` is a single hand-written file with no build step. To run the plugin: in Figma desktop, **Plugins → Development → Import plugin from manifest…** and pick `manifest.json`.
 
-Finally, in the directory of your plugin, get the latest type definitions for the plugin API by running:
+### Tests
 
-  npm install --save-dev @figma/plugin-typings
+- `npm test` runs `tests/backend.test.js` and `tests/cache.test.js`, which load the compiled `code.js` into a Node `vm` with a fake `figma` object. Run `npm run build` first.
+- `tests/ui-harness.html` drives `ui.html` in an iframe with a fake backend. Serve the repo root (`python3 -m http.server 8790`), open `http://localhost:8790/tests/ui-harness.html` in a **visible, foreground** browser tab (a hidden tab throttles `requestAnimationFrame` and gives false failures), then run `await load(); await T.all();` in the console and inspect `results`. The harness stubs the export button's anchor click, so running it never downloads a file.
 
-If you are familiar with JavaScript, TypeScript will look very familiar. In fact, valid JavaScript code
-is already valid Typescript code.
+## Notes
 
-TypeScript adds type annotations to variables. This allows code editors such as Visual Studio Code
-to provide information about the Figma API while you are writing code, as well as help catch bugs
-you previously didn't notice.
-
-For more information, visit https://www.typescriptlang.org/
-
-Using TypeScript requires a compiler to convert TypeScript (code.ts) into JavaScript (code.js)
-for the browser to run.
-
-We recommend writing TypeScript code using Visual Studio code:
-
-1. Download Visual Studio Code if you haven't already: https://code.visualstudio.com/.
-2. Open this directory in Visual Studio Code.
-3. Compile TypeScript to JavaScript: Run the "Terminal > Run Build Task..." menu item,
-    then select "npm: watch". You will have to do this again every time
-    you reopen Visual Studio Code.
-
-That's it! Visual Studio Code will regenerate the JavaScript file every time you save.
+- `documentAccess` is `dynamic-page`, so only the async Plugin APIs work (`getNodeByIdAsync`, `setFillStyleIdAsync`, ...); the sync variants throw.
+- Network access is limited to the domains in `manifest.json` (`networkAccess.allowedDomains`).

@@ -1498,19 +1498,6 @@
             0 0 10px rgba(163,230,53,.2);
         }
       }
-      .dataLoading{
-        display: none;
-        align-items: center;
-        gap: 10px;
-        padding: 10px 12px;
-        border-radius: 8px;
-        border: 1px solid rgba(148,163,184,.22);
-        background: rgba(15,23,42,.35);
-        color: rgba(255,255,255,.82);
-        font-size: 12px;
-        font-weight: 600;
-      }
-      .dataLoading.isVisible{ display: inline-flex; }
       .issuesScroll {
         flex: 1 1 auto;
         min-height: calc(4 * var(--issue-row-min-h));
@@ -2275,11 +2262,6 @@
             </div>
           </div>
 
-          <div class="dataLoading" id="dataLoading">
-            <span class="spinner" aria-hidden="true"></span>
-            <span>Finding issues and matching variables…</span>
-          </div>
-
           <div class="divider" id="issuesDivider" style="margin-top:14px;"></div>
 
           <div class="section" id="secIssues" data-open="true">
@@ -2540,21 +2522,19 @@
       }
 
       function setDataLoading(loading){
-        const el = document.getElementById("dataLoading");
         if (loading) {
           document.body.dataset.loading = "true";
         } else {
           delete document.body.dataset.loading;
         }
-        if (el) el.classList.remove("isVisible");
         requestAnimationFrame(() => {
           scheduleResizeToFit(120);
         });
       }
 
       // Small, non-disruptive "N matching…" indicator in the issues toolbar — distinct from
-      // setDataLoading()/body[data-loading], which hides the whole stat grid + issues list and is
-      // meant for the initial post-scan load, not for background per-row candidate fetching.
+      // setDataLoading()/body[data-loading], which hides the stat grid + issues list for the
+      // duration of the scan itself, not for background per-row candidate fetching afterwards.
       function updateMatchingIndicator(){
         const el = document.getElementById("matchingIndicator");
         const text = document.getElementById("matchingIndicatorText");
@@ -2572,9 +2552,6 @@
         if (autofixState.pendingKeys[key]) return;
         autofixState.pendingKeys[key] = true;
         autofixState.pendingCount += 1;
-        if (state.isScanning) {
-          setDataLoading(true);
-        }
         updateMatchingIndicator();
       }
 
@@ -2587,7 +2564,6 @@
           setDataLoading(false);
           setTimeout(refreshAutofixRows, 60);
           setTimeout(ensureAutofixRequests, 120);
-          setTimeout(finalizeStuckAutofixRows, 200);
         }
       }
 
@@ -2885,18 +2861,6 @@
 
       function ensureAutofixRequests(){
         scheduleAutofixQueue();
-      }
-
-      function finalizeStuckAutofixRows(){
-        if (!state.scanComplete) return;
-        document.querySelectorAll(".fixDropdown[data-issue-key]").forEach((dropdown) => {
-          const key = dropdown.dataset.issueKey;
-          if (!key) return;
-          const trigger = dropdown.querySelector(".fixTrigger");
-          const valueEl = trigger ? trigger.querySelector(".fixValue") : null;
-          if (!valueEl || !valueEl.textContent || !valueEl.textContent.includes("Loading")) return;
-          // Keep loading until we receive a real response.
-        });
       }
 
       function closeAllFixDropdowns(exceptKey){
@@ -4052,7 +4016,6 @@
         // Ensure any cached candidate responses are applied to freshly rendered rows.
         setTimeout(refreshAutofixRows, 80);
         setTimeout(scheduleAutofixQueue, 140);
-        setTimeout(finalizeStuckAutofixRows, 240);
         if (!autofixState.allActive) {
           setAutofixInline(false, "", 0);
         }

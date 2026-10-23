@@ -350,12 +350,14 @@ let lastAuditSelectionIds = [];
 function isMixed(value) {
     return value === figma.mixed;
 }
+function findAllNodes(root) {
+    return "findAll" in root ? root.findAll(() => true) : [];
+}
 function getNodePath(node) {
     const parts = [];
     let current = node;
     while (current && current.type !== "PAGE" && current.type !== "DOCUMENT") {
-        if ("name" in current)
-            parts.unshift(current.name || current.type);
+        parts.unshift(current.name || current.type);
         current = current.parent;
     }
     if (parts.length > 4)
@@ -379,8 +381,7 @@ function collectNodes(start, scanChildren) {
     return out;
 }
 function isDetachedInstanceLike(node) {
-    const di = node.detachedInfo;
-    return di != null;
+    return node.detachedInfo != null;
 }
 function canCheckDetachedInfo(node) {
     return node.detachedInfo !== undefined;
@@ -468,140 +469,101 @@ function buildNodePath(node, root) {
     }
     return parts.join(" > ");
 }
+// Order matters when writing back: sizing/constraints before the auto-layout block, which
+// (for the root) is separated by the resize call.
+const LAYOUT_PRE_PROPS = [
+    ["layoutAlign", "truthy"],
+    ["layoutGrow", "number"],
+    ["layoutSizingHorizontal", "truthy"],
+    ["layoutSizingVertical", "truthy"],
+    ["constraints", "truthy"],
+];
+const LAYOUT_POST_PROPS = [
+    ["layoutMode", "truthy"],
+    ["primaryAxisAlignItems", "truthy"],
+    ["counterAxisAlignItems", "truthy"],
+    ["primaryAxisSizingMode", "truthy"],
+    ["counterAxisSizingMode", "truthy"],
+    ["itemSpacing", "number"],
+    ["paddingLeft", "number"],
+    ["paddingRight", "number"],
+    ["paddingTop", "number"],
+    ["paddingBottom", "number"],
+    ["layoutWrap", "truthy"],
+];
+const VISUAL_PROPS = [
+    ["fills", "paints"],
+    ["strokes", "paints"],
+    ["effects", "paints"],
+    ["visible", "boolean"],
+    ["opacity", "number"],
+    ["cornerRadius", "number"],
+    ["topLeftRadius", "number"],
+    ["topRightRadius", "number"],
+    ["bottomLeftRadius", "number"],
+    ["bottomRightRadius", "number"],
+];
+function captureProps(node, override, specs) {
+    const src = node;
+    const dst = override;
+    for (const [key] of specs) {
+        if (!(key in node))
+            continue;
+        // cornerRadius is figma.mixed when the corners differ; the per-corner props carry that case.
+        if (key === "cornerRadius" && isMixed(src[key]))
+            continue;
+        dst[key] = src[key];
+    }
+}
+function applyProps(node, override, specs) {
+    const target = node;
+    const stored = override;
+    for (const [key, kind] of specs) {
+        if (!(key in node))
+            continue;
+        const value = stored[key];
+        const valid = kind === "number" ? typeof value === "number" : kind === "boolean" ? typeof value === "boolean" : !!value;
+        if (!valid)
+            continue;
+        try {
+            target[key] = kind === "paints" ? value.slice() : value;
+        }
+        catch (_a) {
+            /* ignore */
+        }
+    }
+}
 // Fills/strokes/effects/corner-radius/visible/opacity: shared between the root node and every
 // descendant, so a detached relink also restores an instance's own paint/effect/radius tweaks,
 // not just its layout and text. All synchronous — no font loading or async API involved.
 function captureVisualOverride(node, override) {
-    if ("fills" in node)
-        override.fills = node.fills;
-    if ("strokes" in node)
-        override.strokes = node.strokes;
-    if ("effects" in node)
-        override.effects = node.effects;
-    if ("visible" in node)
-        override.visible = node.visible;
-    if ("opacity" in node)
-        override.opacity = node.opacity;
-    if ("cornerRadius" in node && !isMixed(node.cornerRadius))
-        override.cornerRadius = node.cornerRadius;
-    if ("topLeftRadius" in node)
-        override.topLeftRadius = node.topLeftRadius;
-    if ("topRightRadius" in node)
-        override.topRightRadius = node.topRightRadius;
-    if ("bottomLeftRadius" in node)
-        override.bottomLeftRadius = node.bottomLeftRadius;
-    if ("bottomRightRadius" in node)
-        override.bottomRightRadius = node.bottomRightRadius;
+    captureProps(node, override, VISUAL_PROPS);
 }
 function applyVisualOverride(node, override) {
-    if ("fills" in node && override.fills) {
-        try {
-            node.fills = override.fills.slice();
-        }
-        catch ( /* ignore */_a) { /* ignore */ }
-    }
-    if ("strokes" in node && override.strokes) {
-        try {
-            node.strokes = override.strokes.slice();
-        }
-        catch ( /* ignore */_b) { /* ignore */ }
-    }
-    if ("effects" in node && override.effects) {
-        try {
-            node.effects = override.effects.slice();
-        }
-        catch ( /* ignore */_c) { /* ignore */ }
-    }
-    if ("visible" in node && typeof override.visible === "boolean") {
-        try {
-            node.visible = override.visible;
-        }
-        catch ( /* ignore */_d) { /* ignore */ }
-    }
-    if ("opacity" in node && typeof override.opacity === "number") {
-        try {
-            node.opacity = override.opacity;
-        }
-        catch ( /* ignore */_f) { /* ignore */ }
-    }
-    if ("cornerRadius" in node && typeof override.cornerRadius === "number") {
-        try {
-            node.cornerRadius = override.cornerRadius;
-        }
-        catch ( /* ignore */_g) { /* ignore */ }
-    }
-    if ("topLeftRadius" in node && typeof override.topLeftRadius === "number") {
-        try {
-            node.topLeftRadius = override.topLeftRadius;
-        }
-        catch ( /* ignore */_h) { /* ignore */ }
-    }
-    if ("topRightRadius" in node && typeof override.topRightRadius === "number") {
-        try {
-            node.topRightRadius = override.topRightRadius;
-        }
-        catch ( /* ignore */_j) { /* ignore */ }
-    }
-    if ("bottomLeftRadius" in node && typeof override.bottomLeftRadius === "number") {
-        try {
-            node.bottomLeftRadius = override.bottomLeftRadius;
-        }
-        catch ( /* ignore */_k) { /* ignore */ }
-    }
-    if ("bottomRightRadius" in node && typeof override.bottomRightRadius === "number") {
-        try {
-            node.bottomRightRadius = override.bottomRightRadius;
-        }
-        catch ( /* ignore */_l) { /* ignore */ }
-    }
+    applyProps(node, override, VISUAL_PROPS);
+}
+function resizeNode(node, width, height) {
+    const r = node;
+    if (typeof r.resizeWithoutConstraints === "function")
+        r.resizeWithoutConstraints(width, height);
+    else if (typeof r.resize === "function")
+        r.resize(width, height);
 }
 function collectInstanceOverrides(root) {
     return __awaiter(this, void 0, void 0, function* () {
         const map = new Map();
         const rootOverride = {};
-        if ("layoutAlign" in root)
-            rootOverride.layoutAlign = root.layoutAlign;
-        if ("layoutGrow" in root)
-            rootOverride.layoutGrow = root.layoutGrow;
-        if ("layoutSizingHorizontal" in root)
-            rootOverride.layoutSizingHorizontal = root.layoutSizingHorizontal;
-        if ("layoutSizingVertical" in root)
-            rootOverride.layoutSizingVertical = root.layoutSizingVertical;
-        if ("constraints" in root)
-            rootOverride.constraints = root.constraints;
+        captureProps(root, rootOverride, LAYOUT_PRE_PROPS);
         if ("width" in root)
             rootOverride.width = root.width;
         if ("height" in root)
             rootOverride.height = root.height;
-        if ("layoutMode" in root)
-            rootOverride.layoutMode = root.layoutMode;
-        if ("primaryAxisAlignItems" in root)
-            rootOverride.primaryAxisAlignItems = root.primaryAxisAlignItems;
-        if ("counterAxisAlignItems" in root)
-            rootOverride.counterAxisAlignItems = root.counterAxisAlignItems;
-        if ("primaryAxisSizingMode" in root)
-            rootOverride.primaryAxisSizingMode = root.primaryAxisSizingMode;
-        if ("counterAxisSizingMode" in root)
-            rootOverride.counterAxisSizingMode = root.counterAxisSizingMode;
-        if ("itemSpacing" in root)
-            rootOverride.itemSpacing = root.itemSpacing;
-        if ("paddingLeft" in root)
-            rootOverride.paddingLeft = root.paddingLeft;
-        if ("paddingRight" in root)
-            rootOverride.paddingRight = root.paddingRight;
-        if ("paddingTop" in root)
-            rootOverride.paddingTop = root.paddingTop;
-        if ("paddingBottom" in root)
-            rootOverride.paddingBottom = root.paddingBottom;
-        if ("layoutWrap" in root)
-            rootOverride.layoutWrap = root.layoutWrap;
+        captureProps(root, rootOverride, LAYOUT_POST_PROPS);
         captureVisualOverride(root, rootOverride);
         if (Object.keys(rootOverride).length > 0) {
             map.set("__root__", rootOverride);
         }
-        const nodes = typeof root.findAll === "function"
-            ? root.findAll(() => true)
-            : [];
+        const nodes = findAllNodes(root);
         for (const node of nodes) {
             const path = buildNodePath(node, root);
             if (!path)
@@ -626,38 +588,8 @@ function collectInstanceOverrides(root) {
                     /* ignore */
                 }
             }
-            if ("layoutAlign" in node)
-                override.layoutAlign = node.layoutAlign;
-            if ("layoutGrow" in node)
-                override.layoutGrow = node.layoutGrow;
-            if ("layoutSizingHorizontal" in node)
-                override.layoutSizingHorizontal = node.layoutSizingHorizontal;
-            if ("layoutSizingVertical" in node)
-                override.layoutSizingVertical = node.layoutSizingVertical;
-            if ("constraints" in node)
-                override.constraints = node.constraints;
-            if ("layoutMode" in node)
-                override.layoutMode = node.layoutMode;
-            if ("primaryAxisAlignItems" in node)
-                override.primaryAxisAlignItems = node.primaryAxisAlignItems;
-            if ("counterAxisAlignItems" in node)
-                override.counterAxisAlignItems = node.counterAxisAlignItems;
-            if ("primaryAxisSizingMode" in node)
-                override.primaryAxisSizingMode = node.primaryAxisSizingMode;
-            if ("counterAxisSizingMode" in node)
-                override.counterAxisSizingMode = node.counterAxisSizingMode;
-            if ("itemSpacing" in node)
-                override.itemSpacing = node.itemSpacing;
-            if ("paddingLeft" in node)
-                override.paddingLeft = node.paddingLeft;
-            if ("paddingRight" in node)
-                override.paddingRight = node.paddingRight;
-            if ("paddingTop" in node)
-                override.paddingTop = node.paddingTop;
-            if ("paddingBottom" in node)
-                override.paddingBottom = node.paddingBottom;
-            if ("layoutWrap" in node)
-                override.layoutWrap = node.layoutWrap;
+            captureProps(node, override, LAYOUT_PRE_PROPS);
+            captureProps(node, override, LAYOUT_POST_PROPS);
             captureVisualOverride(node, override);
             if (Object.keys(override).length > 0) {
                 map.set(path, override);
@@ -689,120 +621,19 @@ function applyInstanceOverridesToInstance(instance, overrides) {
             return;
         const rootOverride = overrides.get("__root__");
         if (rootOverride) {
-            if ("layoutAlign" in instance && rootOverride.layoutAlign) {
-                try {
-                    instance.layoutAlign = rootOverride.layoutAlign;
-                }
-                catch ( /* ignore */_a) { /* ignore */ }
-            }
-            if ("layoutGrow" in instance && typeof rootOverride.layoutGrow === "number") {
-                try {
-                    instance.layoutGrow = rootOverride.layoutGrow;
-                }
-                catch ( /* ignore */_b) { /* ignore */ }
-            }
-            if ("layoutSizingHorizontal" in instance && rootOverride.layoutSizingHorizontal) {
-                try {
-                    instance.layoutSizingHorizontal = rootOverride.layoutSizingHorizontal;
-                }
-                catch ( /* ignore */_c) { /* ignore */ }
-            }
-            if ("layoutSizingVertical" in instance && rootOverride.layoutSizingVertical) {
-                try {
-                    instance.layoutSizingVertical = rootOverride.layoutSizingVertical;
-                }
-                catch ( /* ignore */_d) { /* ignore */ }
-            }
-            if ("constraints" in instance && rootOverride.constraints) {
-                try {
-                    instance.constraints = rootOverride.constraints;
-                }
-                catch ( /* ignore */_f) { /* ignore */ }
-            }
+            applyProps(instance, rootOverride, LAYOUT_PRE_PROPS);
             if (typeof rootOverride.width === "number" && typeof rootOverride.height === "number") {
                 try {
-                    if ("resizeWithoutConstraints" in instance) {
-                        instance.resizeWithoutConstraints(rootOverride.width, rootOverride.height);
-                    }
-                    else if ("resize" in instance) {
-                        instance.resize(rootOverride.width, rootOverride.height);
-                    }
+                    resizeNode(instance, rootOverride.width, rootOverride.height);
                 }
-                catch (_g) {
+                catch (_a) {
                     // ignore resize errors on auto-layout instances
                 }
             }
-            if ("layoutMode" in instance && rootOverride.layoutMode) {
-                try {
-                    instance.layoutMode = rootOverride.layoutMode;
-                }
-                catch ( /* ignore */_h) { /* ignore */ }
-            }
-            if ("primaryAxisAlignItems" in instance && rootOverride.primaryAxisAlignItems) {
-                try {
-                    instance.primaryAxisAlignItems = rootOverride.primaryAxisAlignItems;
-                }
-                catch ( /* ignore */_j) { /* ignore */ }
-            }
-            if ("counterAxisAlignItems" in instance && rootOverride.counterAxisAlignItems) {
-                try {
-                    instance.counterAxisAlignItems = rootOverride.counterAxisAlignItems;
-                }
-                catch ( /* ignore */_k) { /* ignore */ }
-            }
-            if ("primaryAxisSizingMode" in instance && rootOverride.primaryAxisSizingMode) {
-                try {
-                    instance.primaryAxisSizingMode = rootOverride.primaryAxisSizingMode;
-                }
-                catch ( /* ignore */_l) { /* ignore */ }
-            }
-            if ("counterAxisSizingMode" in instance && rootOverride.counterAxisSizingMode) {
-                try {
-                    instance.counterAxisSizingMode = rootOverride.counterAxisSizingMode;
-                }
-                catch ( /* ignore */_m) { /* ignore */ }
-            }
-            if ("itemSpacing" in instance && typeof rootOverride.itemSpacing === "number") {
-                try {
-                    instance.itemSpacing = rootOverride.itemSpacing;
-                }
-                catch ( /* ignore */_o) { /* ignore */ }
-            }
-            if ("paddingLeft" in instance && typeof rootOverride.paddingLeft === "number") {
-                try {
-                    instance.paddingLeft = rootOverride.paddingLeft;
-                }
-                catch ( /* ignore */_p) { /* ignore */ }
-            }
-            if ("paddingRight" in instance && typeof rootOverride.paddingRight === "number") {
-                try {
-                    instance.paddingRight = rootOverride.paddingRight;
-                }
-                catch ( /* ignore */_q) { /* ignore */ }
-            }
-            if ("paddingTop" in instance && typeof rootOverride.paddingTop === "number") {
-                try {
-                    instance.paddingTop = rootOverride.paddingTop;
-                }
-                catch ( /* ignore */_r) { /* ignore */ }
-            }
-            if ("paddingBottom" in instance && typeof rootOverride.paddingBottom === "number") {
-                try {
-                    instance.paddingBottom = rootOverride.paddingBottom;
-                }
-                catch ( /* ignore */_s) { /* ignore */ }
-            }
-            if ("layoutWrap" in instance && rootOverride.layoutWrap) {
-                try {
-                    instance.layoutWrap = rootOverride.layoutWrap;
-                }
-                catch ( /* ignore */_t) { /* ignore */ }
-            }
+            applyProps(instance, rootOverride, LAYOUT_POST_PROPS);
             applyVisualOverride(instance, rootOverride);
         }
-        const nodes = typeof instance.findAll === "function"
-            ? instance.findAll(() => true)
-            : [];
+        const nodes = findAllNodes(instance);
         for (const node of nodes) {
             const path = buildNodePath(node, instance);
             if (!path || !overrides.has(path))
@@ -817,7 +648,7 @@ function applyInstanceOverridesToInstance(instance, overrides) {
                     try {
                         textNode.characters = override.text;
                     }
-                    catch (_u) {
+                    catch (_b) {
                         // ignore if fonts failed to load or text is read-only
                     }
                 }
@@ -825,117 +656,23 @@ function applyInstanceOverridesToInstance(instance, overrides) {
                     try {
                         textNode.textAlignHorizontal = override.textAlignHorizontal;
                     }
-                    catch ( /* ignore */_v) { /* ignore */ }
+                    catch ( /* ignore */_c) { /* ignore */ }
                 }
                 if (override.textAlignVertical) {
                     try {
                         textNode.textAlignVertical = override.textAlignVertical;
                     }
-                    catch ( /* ignore */_w) { /* ignore */ }
+                    catch ( /* ignore */_d) { /* ignore */ }
                 }
                 if (override.textAutoResize) {
                     try {
                         textNode.textAutoResize = override.textAutoResize;
                     }
-                    catch ( /* ignore */_x) { /* ignore */ }
+                    catch ( /* ignore */_f) { /* ignore */ }
                 }
             }
-            if ("layoutAlign" in node && override.layoutAlign) {
-                try {
-                    node.layoutAlign = override.layoutAlign;
-                }
-                catch ( /* ignore */_y) { /* ignore */ }
-            }
-            if ("layoutGrow" in node && typeof override.layoutGrow === "number") {
-                try {
-                    node.layoutGrow = override.layoutGrow;
-                }
-                catch ( /* ignore */_z) { /* ignore */ }
-            }
-            if ("layoutSizingHorizontal" in node && override.layoutSizingHorizontal) {
-                try {
-                    node.layoutSizingHorizontal = override.layoutSizingHorizontal;
-                }
-                catch ( /* ignore */_0) { /* ignore */ }
-            }
-            if ("layoutSizingVertical" in node && override.layoutSizingVertical) {
-                try {
-                    node.layoutSizingVertical = override.layoutSizingVertical;
-                }
-                catch ( /* ignore */_1) { /* ignore */ }
-            }
-            if ("constraints" in node && override.constraints) {
-                try {
-                    node.constraints = override.constraints;
-                }
-                catch ( /* ignore */_2) { /* ignore */ }
-            }
-            if ("layoutMode" in node && override.layoutMode) {
-                try {
-                    node.layoutMode = override.layoutMode;
-                }
-                catch ( /* ignore */_3) { /* ignore */ }
-            }
-            if ("primaryAxisAlignItems" in node && override.primaryAxisAlignItems) {
-                try {
-                    node.primaryAxisAlignItems = override.primaryAxisAlignItems;
-                }
-                catch ( /* ignore */_4) { /* ignore */ }
-            }
-            if ("counterAxisAlignItems" in node && override.counterAxisAlignItems) {
-                try {
-                    node.counterAxisAlignItems = override.counterAxisAlignItems;
-                }
-                catch ( /* ignore */_5) { /* ignore */ }
-            }
-            if ("primaryAxisSizingMode" in node && override.primaryAxisSizingMode) {
-                try {
-                    node.primaryAxisSizingMode = override.primaryAxisSizingMode;
-                }
-                catch ( /* ignore */_6) { /* ignore */ }
-            }
-            if ("counterAxisSizingMode" in node && override.counterAxisSizingMode) {
-                try {
-                    node.counterAxisSizingMode = override.counterAxisSizingMode;
-                }
-                catch ( /* ignore */_7) { /* ignore */ }
-            }
-            if ("itemSpacing" in node && typeof override.itemSpacing === "number") {
-                try {
-                    node.itemSpacing = override.itemSpacing;
-                }
-                catch ( /* ignore */_8) { /* ignore */ }
-            }
-            if ("paddingLeft" in node && typeof override.paddingLeft === "number") {
-                try {
-                    node.paddingLeft = override.paddingLeft;
-                }
-                catch ( /* ignore */_9) { /* ignore */ }
-            }
-            if ("paddingRight" in node && typeof override.paddingRight === "number") {
-                try {
-                    node.paddingRight = override.paddingRight;
-                }
-                catch ( /* ignore */_10) { /* ignore */ }
-            }
-            if ("paddingTop" in node && typeof override.paddingTop === "number") {
-                try {
-                    node.paddingTop = override.paddingTop;
-                }
-                catch ( /* ignore */_11) { /* ignore */ }
-            }
-            if ("paddingBottom" in node && typeof override.paddingBottom === "number") {
-                try {
-                    node.paddingBottom = override.paddingBottom;
-                }
-                catch ( /* ignore */_12) { /* ignore */ }
-            }
-            if ("layoutWrap" in node && override.layoutWrap) {
-                try {
-                    node.layoutWrap = override.layoutWrap;
-                }
-                catch ( /* ignore */_13) { /* ignore */ }
-            }
+            applyProps(node, override, LAYOUT_PRE_PROPS);
+            applyProps(node, override, LAYOUT_POST_PROPS);
             applyVisualOverride(node, override);
             if (node.type === "INSTANCE" && override.mainComponentId) {
                 // Best-effort nested instance-swap replay: only touch it if the fresh instance's
@@ -950,7 +687,7 @@ function applyInstanceOverridesToInstance(instance, overrides) {
                         }
                     }
                 }
-                catch (_14) {
+                catch (_g) {
                     /* ignore — not critical, layout/text/paint overrides above already applied */
                 }
             }
@@ -959,7 +696,7 @@ function applyInstanceOverridesToInstance(instance, overrides) {
 }
 function applyAutofixItem(item) {
     return __awaiter(this, void 0, void 0, function* () {
-        var _a, _b, _c;
+        var _a, _b, _c, _d;
         const id = String(item.id || "");
         if (!id)
             return { ok: false, error: "Missing node id." };
@@ -967,7 +704,7 @@ function applyAutofixItem(item) {
         if (!node || !("id" in node))
             return { ok: false, error: "Node not found." };
         if (item.issueType === "DETACHED_INSTANCE" || item.kind === "detached") {
-            const info = node.detachedInfo;
+            const info = (_a = node.detachedInfo) !== null && _a !== void 0 ? _a : null;
             if (!info)
                 return { ok: false, error: "Node is not detached." };
             const overrides = yield collectInstanceOverrides(node);
@@ -986,19 +723,17 @@ function applyAutofixItem(item) {
                 instance.name = node.name;
                 instance.x = node.x;
                 instance.y = node.y;
+                const original = node;
                 if ("rotation" in instance)
-                    instance.rotation = node.rotation || 0;
+                    instance.rotation = original.rotation || 0;
                 if ("opacity" in instance)
-                    instance.opacity = (_a = node.opacity) !== null && _a !== void 0 ? _a : 1;
+                    instance.opacity = (_b = original.opacity) !== null && _b !== void 0 ? _b : 1;
                 if ("visible" in instance)
-                    instance.visible = (_b = node.visible) !== null && _b !== void 0 ? _b : true;
+                    instance.visible = (_c = original.visible) !== null && _c !== void 0 ? _c : true;
                 if ("locked" in instance)
-                    instance.locked = (_c = node.locked) !== null && _c !== void 0 ? _c : false;
-                if ("resizeWithoutConstraints" in instance && "width" in node && "height" in node) {
-                    instance.resizeWithoutConstraints(node.width, node.height);
-                }
-                else if ("resize" in instance && "width" in node && "height" in node) {
-                    instance.resize(node.width, node.height);
+                    instance.locked = (_d = original.locked) !== null && _d !== void 0 ? _d : false;
+                if (typeof original.width === "number" && typeof original.height === "number") {
+                    resizeNode(instance, original.width, original.height);
                 }
                 yield applyInstanceOverridesToInstance(instance, overrides);
             }
@@ -1007,7 +742,7 @@ function applyAutofixItem(item) {
                 try {
                     instance.remove();
                 }
-                catch (_d) {
+                catch (_f) {
                     /* already removed */
                 }
                 return { ok: false, error: stringifyMessage(e) || "Relink failed." };
@@ -1053,11 +788,12 @@ function applyAutofixItem(item) {
         if (candidateId.startsWith("style:")) {
             const styleId = candidateId.replace("style:", "");
             // documentAccess is "dynamic-page": the sync fillStyleId/strokeStyleId setters throw.
-            if (kind === "fills" && "setFillStyleIdAsync" in node) {
-                yield node.setFillStyleIdAsync(styleId);
+            const styleHolder = node;
+            if (kind === "fills" && styleHolder.setFillStyleIdAsync) {
+                yield styleHolder.setFillStyleIdAsync(styleId);
             }
-            else if (kind === "strokes" && "setStrokeStyleIdAsync" in node) {
-                yield node.setStrokeStyleIdAsync(styleId);
+            else if (kind === "strokes" && styleHolder.setStrokeStyleIdAsync) {
+                yield styleHolder.setStrokeStyleIdAsync(styleId);
             }
             else {
                 return { ok: false, error: "Unsupported node." };
@@ -1067,7 +803,8 @@ function applyAutofixItem(item) {
         const variable = yield figma.variables.getVariableByIdAsync(candidateId);
         if (!variable)
             return { ok: false, error: "Variable not found." };
-        const paints = node[kind];
+        const paintHolder = node;
+        const paints = paintHolder[kind];
         if (!paints || paints === figma.mixed || !Array.isArray(paints) || paints.length === 0) {
             return { ok: false, error: "No paint to bind." };
         }
@@ -1078,7 +815,7 @@ function applyAutofixItem(item) {
         if (!paint || paint.type !== "SOLID")
             return { ok: false, error: "Unsupported paint type." };
         next[paintIndex] = figma.variables.setBoundVariableForPaint(paint, "color", variable);
-        node[kind] = next;
+        paintHolder[kind] = next;
         return { ok: true };
     });
 }
@@ -1143,38 +880,32 @@ function getTextStylesForMatching() {
         return styles;
     });
 }
+// Any truthy entry in a boundVariables map (color, opacity, gradient-stop fields, ...) counts.
+function hasTruthyBinding(bindings) {
+    if (!bindings || typeof bindings !== "object")
+        return false;
+    const map = bindings;
+    return Object.keys(map).some((k) => !!map[k]);
+}
 function hasBoundPaintVariable(node, kind) {
-    const anyNode = node;
+    const holder = node;
     // Node-level bindings
-    const bv = anyNode.boundVariables;
+    const bv = holder.boundVariables;
     if (bv && bv[kind])
         return true;
     // Paint-level bindings
-    if (kind in anyNode) {
-        const paints = anyNode[kind];
+    if (kind in node) {
+        const paints = holder[kind];
         if (!isMixed(paints) && Array.isArray(paints)) {
-            for (const p of paints) {
-                const pbv = p === null || p === void 0 ? void 0 : p.boundVariables;
-                if (pbv && typeof pbv === "object") {
-                    if (pbv.color || pbv.opacity)
-                        return true;
-                    for (const k of Object.keys(pbv)) {
-                        if (pbv[k])
-                            return true;
-                    }
-                }
-                const stops = p.gradientStops;
+            for (const paint of paints) {
+                const p = paint;
+                if (hasTruthyBinding(p === null || p === void 0 ? void 0 : p.boundVariables))
+                    return true;
+                const stops = p === null || p === void 0 ? void 0 : p.gradientStops;
                 if (Array.isArray(stops)) {
-                    for (const s of stops) {
-                        const sbv = s === null || s === void 0 ? void 0 : s.boundVariables;
-                        if (sbv && typeof sbv === "object") {
-                            if (sbv.color || sbv.opacity)
-                                return true;
-                            for (const k of Object.keys(sbv)) {
-                                if (sbv[k])
-                                    return true;
-                            }
-                        }
+                    for (const stop of stops) {
+                        if (hasTruthyBinding(stop === null || stop === void 0 ? void 0 : stop.boundVariables))
+                            return true;
                     }
                 }
             }
@@ -1185,10 +916,11 @@ function hasBoundPaintVariable(node, kind) {
 function hasRogueFill(node) {
     if (!("fills" in node))
         return false;
-    const fills = node.fills;
+    const paintHolder = node;
+    const fills = paintHolder.fills;
     if (isMixed(fills) || !Array.isArray(fills) || fills.length === 0)
         return false;
-    const fillStyleId = node.fillStyleId;
+    const fillStyleId = paintHolder.fillStyleId;
     const visibleFills = fills.filter((p) => { var _a; return ((_a = p.visible) !== null && _a !== void 0 ? _a : true) === true; });
     if (visibleFills.length === 0)
         return false;
@@ -1204,10 +936,11 @@ function hasRogueFill(node) {
 function hasRogueStroke(node) {
     if (!("strokes" in node))
         return false;
-    const strokes = node.strokes;
+    const paintHolder = node;
+    const strokes = paintHolder.strokes;
     if (isMixed(strokes) || !Array.isArray(strokes) || strokes.length === 0)
         return false;
-    const strokeStyleId = node.strokeStyleId;
+    const strokeStyleId = paintHolder.strokeStyleId;
     const visibleStrokes = strokes.filter((p) => { var _a; return ((_a = p.visible) !== null && _a !== void 0 ? _a : true) === true; });
     if (visibleStrokes.length === 0)
         return false;
@@ -1235,28 +968,26 @@ function isMixedTextProps(node) {
 function textLineHeightToPx(lineHeight, fontSize) {
     if (!lineHeight)
         return null;
-    if ("unit" in lineHeight && lineHeight.unit === "AUTO")
+    if (lineHeight.unit === "AUTO")
         return null;
-    const unit = lineHeight.unit;
     const value = lineHeight.value;
     if (typeof value !== "number")
         return null;
-    if (unit === "PIXELS")
+    if (lineHeight.unit === "PIXELS")
         return value;
-    if (unit === "PERCENT")
+    if (lineHeight.unit === "PERCENT")
         return fontSize * (value / 100);
     return null;
 }
 function letterSpacingToPx(letterSpacing, fontSize) {
     if (!letterSpacing)
         return null;
-    const unit = letterSpacing.unit;
     const value = letterSpacing.value;
     if (typeof value !== "number")
         return null;
-    if (unit === "PIXELS")
+    if (letterSpacing.unit === "PIXELS")
         return value;
-    if (unit === "PERCENT")
+    if (letterSpacing.unit === "PERCENT")
         return fontSize * (value / 100);
     return null;
 }
@@ -1268,7 +999,7 @@ function normalizeTextProps(node) {
     const fontSize = isMixed(node.fontSize) && hasChars ? node.getRangeFontSize(rangeStart, rangeEnd) : node.fontSize;
     const lineHeight = isMixed(node.lineHeight) && hasChars ? node.getRangeLineHeight(rangeStart, rangeEnd) : node.lineHeight;
     const letterSpacing = isMixed(node.letterSpacing) && hasChars ? node.getRangeLetterSpacing(rangeStart, rangeEnd) : node.letterSpacing;
-    const lineHeightAuto = !!(lineHeight && "unit" in lineHeight && lineHeight.unit === "AUTO");
+    const lineHeightAuto = !!(lineHeight && lineHeight.unit === "AUTO");
     const lineHeightPx = fontSize ? textLineHeightToPx(lineHeight, fontSize) : null;
     const letterSpacingPx = fontSize ? letterSpacingToPx(letterSpacing, fontSize) : null;
     return {
@@ -1353,7 +1084,7 @@ function textStyleHasVariableBindings(style) {
     const bound = style.boundVariables;
     if (!bound)
         return false;
-    return Object.keys(bound).some((k) => bound[k]);
+    return Object.keys(bound).some((k) => !!bound[k]);
 }
 function findTextCandidates(node) {
     return __awaiter(this, void 0, void 0, function* () {
@@ -1375,7 +1106,7 @@ function findTextCandidates(node) {
                 continue;
             const sizeDiff = Math.abs(style.fontSize - props.fontSize);
             const styleLineHeight = style.lineHeight;
-            const styleLineAuto = !!(styleLineHeight && "unit" in styleLineHeight && styleLineHeight.unit === "AUTO");
+            const styleLineAuto = !!(styleLineHeight && styleLineHeight.unit === "AUTO");
             const styleLinePx = textLineHeightToPx(styleLineHeight, style.fontSize);
             const lineDiff = (props.lineHeightAuto && styleLineAuto)
                 ? 0
@@ -1456,10 +1187,10 @@ function variableMatchesScope(variable, node, kind) {
     const scopes = Array.isArray(variable.scopes) ? variable.scopes.map(String) : [];
     if (scopes.length === 0)
         return true;
-    if (scopes.includes("ALL_SCOPES"))
+    if (scopes.indexOf("ALL_SCOPES") >= 0)
         return true;
     const targetScopes = nodeScopeForVariable(node, kind);
-    return targetScopes.some((s) => scopes.includes(s));
+    return targetScopes.some((s) => scopes.indexOf(s) >= 0);
 }
 function nameIntentScore(name) {
     const lower = String(name || "").toLowerCase();
@@ -1481,10 +1212,11 @@ function getModeIdForCollection(node, collection) {
     var _a;
     if (!collection || !collection.id)
         return null;
-    const resolved = node.resolvedVariableModes;
+    const modes = node;
+    const resolved = modes.resolvedVariableModes;
     if (resolved && resolved[collection.id])
         return resolved[collection.id];
-    const explicit = node.explicitVariableModes;
+    const explicit = modes.explicitVariableModes;
     if (explicit && explicit[collection.id])
         return explicit[collection.id];
     if (collection.defaultModeId)
@@ -1605,7 +1337,8 @@ function getSolidPaintColor(node, kind) {
     return paintToRgba(paint);
 }
 function isVariableAlias(value) {
-    return !!value && typeof value === "object" && value.type === "VARIABLE_ALIAS" && typeof value.id === "string";
+    const v = value;
+    return !!v && typeof v === "object" && v.type === "VARIABLE_ALIAS" && typeof v.id === "string";
 }
 function pickModeIdForVariable(variable, preferredModeId) {
     if (!variable)
@@ -1779,7 +1512,7 @@ function findColorCandidates(target, consumer, kind) {
                 continue;
             const collectionName = String((collection === null || collection === void 0 ? void 0 : collection.name) || "Variables");
             const isSemantic = /semantic|ui|theme|token/i.test(collectionName);
-            const isLocal = !((collection === null || collection === void 0 ? void 0 : collection.remote) === true) && !((variable === null || variable === void 0 ? void 0 : variable.remote) === true);
+            const isLocal = !((collection === null || collection === void 0 ? void 0 : collection.remote) === true) && !(variable.remote === true);
             const score = (aliasHit ? 2 : 0) + (isSemantic ? 1 : 0) + (isLocal ? 0.5 : 0) + layerScore + nameIntentScore(name);
             const isHiddenCollection = collectionName.startsWith(".") || collectionName.startsWith("-");
             candidates.push({
@@ -1979,6 +1712,7 @@ function activateLicenseWithWorker(licenseKey, instanceId) {
 }
 function runAudit(selection, options) {
     return __awaiter(this, void 0, void 0, function* () {
+        var _a;
         const nodes = collectNodes(selection, options.scanChildren);
         const issues = [];
         const totalNodes = nodes.length;
@@ -2014,7 +1748,7 @@ function runAudit(selection, options) {
                 if (options.checkDetached && canCheckDetachedInfo(node)) {
                     markAudited(node);
                     if (isDetachedInstanceLike(node)) {
-                        const info = node.detachedInfo;
+                        const info = (_a = node.detachedInfo) !== null && _a !== void 0 ? _a : null;
                         const label = info ? yield getDetachedComponentName(info) : undefined;
                         const before = issues.length;
                         addIssue(node, "DETACHED_INSTANCE", { detachedComponentName: label });
@@ -2051,7 +1785,7 @@ function runAudit(selection, options) {
                     }
                 }
             }
-            catch (_a) {
+            catch (_b) {
                 // ignore per-node errors to keep scan going
             }
             processed += 1;
@@ -2309,7 +2043,7 @@ function handleMessage(msg) {
             }
             try {
                 const varsApi = figma.variables;
-                if (!varsApi || (typeof varsApi.getVariablesAsync !== "function" && typeof varsApi.getLocalVariablesAsync !== "function")) {
+                if (!varsApi || typeof varsApi.getLocalVariablesAsync !== "function") {
                     reply({ candidates: [], recommendedId: null });
                     return;
                 }
@@ -2335,7 +2069,7 @@ function handleMessage(msg) {
                 const { candidates, recommendedId, debug } = yield findColorCandidates(color, node, kind);
                 reply({ candidates, recommendedId, debug });
             }
-            catch (e) {
+            catch (_h) {
                 reply({ candidates: [], recommendedId: null });
             }
             return;
@@ -2343,7 +2077,8 @@ function handleMessage(msg) {
         if (msg.type === "pro:autofix:apply") {
             const allowed = hasFeature(entitlements, "autofix");
             const id = String(msg.id || "");
-            const kind = ["fill", "stroke", "text", "detached"].indexOf(msg.kind) >= 0 ? msg.kind : "fill";
+            const rawKind = String(msg.kind || "");
+            const kind = ["fill", "stroke", "text", "detached"].indexOf(rawKind) >= 0 ? rawKind : "fill";
             const candidateId = String(msg.candidateId || "");
             const issueType = String(msg.issueType || "");
             const reply = (ok, error) => figma.ui.postMessage({ type: "pro:autofix:result", id, issueType, kind, ok, error });
@@ -2613,7 +2348,7 @@ function handleMessage(msg) {
                         continue;
                     }
                 }
-                catch (_h) {
+                catch (_j) {
                     resolvedIds.push(id);
                 }
             }
@@ -2631,7 +2366,7 @@ function handleMessage(msg) {
                     node.setPluginData(ignoreDataKey(issueType), "1");
                 }
             }
-            catch (_j) {
+            catch (_k) {
                 // ignore — worst case the issue just isn't marked and reappears next scan
             }
             // Reuse the UI's existing issues:resolved handling to drop the row without a full re-scan.
@@ -2648,7 +2383,7 @@ function handleMessage(msg) {
                         try {
                             node.setPluginData(ignoreDataKey(type), "");
                         }
-                        catch (_k) {
+                        catch (_l) {
                             /* ignore */
                         }
                     }
