@@ -26,14 +26,16 @@ window.addEventListener("message", (e) => {
       check2();
       return;
     }
-    setTimeout(() => send({ type: "audit-result", issues: sc.issues || [], summary: sc.summary || { total: (sc.issues||[]).length, scannedElements: 10, elementsWithIssues: (sc.issues||[]).length, ignored: 0 } }), 20);
+    setTimeout(() => send({ type: "audit-result", issues: sc.issues || [], ignoredIssues: sc.ignoredIssues || [], summary: sc.summary || { total: (sc.issues||[]).length, scannedElements: 10, elementsWithIssues: (sc.issues||[]).length, ignored: (sc.ignoredIssues||[]).length } }), 20);
   } else if (m.type === "pro:autofix:candidates") {
     const r = sc.candidates ? sc.candidates(m) : { candidates: [], recommendedId: null };
     setTimeout(() => send(Object.assign({ type: "pro:autofix:candidates", key: m.key }, r)), 2);
   } else if (m.type === "issue:ignore") {
-    setTimeout(() => send({ type: "issues:resolved", resolvedIds: [m.id], ignoredDelta: 1 }), 2);
+    setTimeout(() => send({ type: "issues:resolved", resolvedIds: [m.id], ignoredDelta: 1, issueType: m.issueType }), 2);
+  } else if (m.type === "issue:unignore") {
+    setTimeout(() => send({ type: "issue:unignored", id: m.id, issueType: m.issueType, ok: sc.unignoreOk !== false }), 2);
   } else if (m.type === "issue:unignoreAll") {
-    setTimeout(() => send({ type: "audit-result", issues: sc.afterUnignore || [], summary: sc.afterUnignoreSummary || { total: 0, scannedElements: 10, elementsWithIssues: 0, ignored: 0 } }), 2);
+    setTimeout(() => send({ type: "audit-result", issues: sc.afterUnignore || [], ignoredIssues: [], summary: sc.afterUnignoreSummary || { total: 0, scannedElements: 10, elementsWithIssues: 0, ignored: 0 } }), 2);
   } else if (m.type === "select-nodes") {
     setTimeout(() => send({ type: "select-nodes:status", status: "done", count: m.ids.length }), 2);
   } else if (m.type === "get-saved-options") {
@@ -117,19 +119,50 @@ T.all = async function () {
 
   await section("4. Ignore-list", async () => {
     await load(); await proOn();
-    scenario = { issues: [mkIssue("4:1","ROGUE_FILL"), mkIssue("4:2","ROGUE_STROKE")], summary: { total: 2, rogueFills: 1, rogueStrokes: 1, scannedElements: 10, elementsWithIssues: 2, ignored: 0 }, candidates: (m) => rec(m.id) };
+    // 4:1 carries BOTH a fill and a stroke issue; ignoring one must not hide the other.
+    scenario = { issues: [mkIssue("4:1","ROGUE_FILL","Card"), mkIssue("4:1","ROGUE_STROKE","Card"), mkIssue("4:2","ROGUE_FILL","Other")], candidates: (m) => rec(m.id) };
     await scan();
-    const ignoreBtn = Q('.row[data-issue-id="4:1"] .ignoreBtn') || QA(".ignoreBtn")[0];
+    const rowCount = () => D().querySelectorAll("#list .row").length;
+    check("3 issues rendered", rowCount() === 3, "rows=" + rowCount());
+    const ignoreBtn = Q('.row[data-issue-id="4:1"] .ignoreBtn');
     check("ignore button exists on the row", !!ignoreBtn, "");
     ignoreBtn.click();
-    await waitFor(() => D().querySelectorAll("#list .row").length === 1);
-    check("ignoring a row removes it and posts issue:ignore", sent("issue:ignore").length === 1 && D().querySelectorAll("#list .row").length === 1, "rows=" + D().querySelectorAll("#list .row").length);
-    check("'N ignored' link appears", $("ignoredLink").style.display !== "none" && /1 issue ignored/.test($("ignoredLink").textContent), $("ignoredLink").textContent);
-    scenario.afterUnignore = [mkIssue("4:1","ROGUE_FILL"), mkIssue("4:2","ROGUE_STROKE")];
-    scenario.afterUnignoreSummary = { total: 2, rogueFills: 1, rogueStrokes: 1, scannedElements: 10, elementsWithIssues: 2, ignored: 0 };
+    await waitFor(() => rowCount() === 2);
+    check("ignoring one issue removes only that issue (the node's other issue stays)", rowCount() === 2 && sent("issue:ignore").length === 1, "rows=" + rowCount());
+    check("issue:ignore carries the issue type", sent("issue:ignore")[0].issueType === "ROGUE_FILL", JSON.stringify(sent("issue:ignore")[0]));
+    check("'N ignored' toggle appears, panel starts collapsed", $("ignoredLink").style.display !== "none" && /^1 ignored$/.test($("ignoredLink").textContent) && $("ignoredPanel").hidden === true, $("ignoredLink").textContent);
     $("ignoredLink").click();
-    await waitFor(() => D().querySelectorAll("#list .row").length === 2);
-    check("un-ignore-all restores the row and hides the link", D().querySelectorAll("#list .row").length === 2 && $("ignoredLink").style.display === "none", "");
+    await sleep(30);
+    check("clicking the toggle opens the panel listing the ignored issue", $("ignoredPanel").hidden === false && D().querySelectorAll("#ignoredList .ignoredRow").length === 1 && /Card/.test($("ignoredList").textContent) && /Fill/.test($("ignoredList").textContent) && $("ignoredLink").getAttribute("aria-expanded") === "true", $("ignoredList").textContent);
+    Q("#ignoredList .ignoredRestore").click();
+    await waitFor(() => rowCount() === 3);
+    check("Restore puts the issue back, hides toggle + panel, posts issue:unignore", rowCount() === 3 && sent("issue:unignore").length === 1 && $("ignoredLink").style.display === "none" && $("ignoredPanel").hidden === true, "rows=" + rowCount());
+    check("stat cards reflect the restored issue (2 fills, 1 stroke)", $("statFills").textContent === "2" && $("statStrokes").textContent === "1", $("statFills").textContent + "/" + $("statStrokes").textContent);
+
+    // Restore-all path: panel populated straight from the scan's ignoredIssues, then re-scan on restore all.
+    scenario.ignoredIssues = [mkIssue("4:3","UNSTYLED_TEXT","Title"), mkIssue("4:4","ROGUE_STROKE","Divider")];
+    scenario.afterUnignore = [mkIssue("4:3","UNSTYLED_TEXT","Title"), mkIssue("4:4","ROGUE_STROKE","Divider")];
+    scenario.afterUnignoreSummary = { total: 2, unstyledText: 1, rogueStrokes: 1, scannedElements: 10, elementsWithIssues: 2, ignored: 0 };
+    scenario.issues = [];
+    await scan();
+    check("scan result's ignoredIssues populate the toggle count", /^2 ignored$/.test($("ignoredLink").textContent), $("ignoredLink").textContent);
+    $("ignoredLink").click();
+    await sleep(30);
+    check("panel lists both ignored issues", D().querySelectorAll("#ignoredList .ignoredRow").length === 2, "");
+    $("ignoredRestoreAll").click();
+    await waitFor(() => rowCount() === 2);
+    check("Restore all re-scans and brings everything back", rowCount() === 2 && sent("issue:unignoreAll").length === 1 && $("ignoredLink").style.display === "none", "rows=" + rowCount());
+  });
+
+  await section("4b. Restore of a deleted layer", async () => {
+    await load(); await proOn();
+    scenario = { issues: [], ignoredIssues: [mkIssue("4b:1","ROGUE_FILL","Gone")], unignoreOk: false };
+    await scan();
+    $("ignoredLink").click();
+    await sleep(30);
+    Q("#ignoredList .ignoredRestore").click();
+    await sleep(150);
+    check("restoring a missing layer drops it from the panel without adding an issue", D().querySelectorAll("#list .row").length === 0 && $("ignoredLink").style.display === "none", "");
   });
 
   await section("5. Cancel a running scan", async () => {

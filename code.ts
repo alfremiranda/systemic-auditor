@@ -351,6 +351,11 @@ async function clearStoredLicenseKey(): Promise<void> {
 
 type IssueType = "ROGUE_FILL" | "ROGUE_STROKE" | "UNSTYLED_TEXT" | "DETACHED_INSTANCE";
 
+const ISSUE_TYPES: readonly IssueType[] = ["ROGUE_FILL", "ROGUE_STROKE", "UNSTYLED_TEXT", "DETACHED_INSTANCE"];
+function isIssueType(value: string): value is IssueType {
+  return (ISSUE_TYPES as readonly string[]).indexOf(value) >= 0;
+}
+
 type Issue = {
   id: string;
   name: string;
@@ -1859,6 +1864,8 @@ async function activateLicenseWithWorker(licenseKey: string, instanceId: string)
 async function runAudit(selection: readonly SceneNode[], options: AuditOptions) {
   const nodes = collectNodes(selection, options.scanChildren);
   const issues: Issue[] = [];
+  // Issues the user marked "not a problem": kept (not counted) so the UI can list and restore them.
+  const ignoredIssues: Issue[] = [];
   const totalNodes = nodes.length;
   let processed = 0;
   let lastProgress = 0;
@@ -1881,11 +1888,13 @@ async function runAudit(selection: readonly SceneNode[], options: AuditOptions) 
   let ignored = 0;
 
   const addIssue = (node: SceneNode, type: IssueType, extra: Partial<Issue> = {}) => {
+    const issue: Issue = { id: node.id, name: node.name, type, path: getNodePath(node), ...extra };
     if (isIssueIgnored(node, type)) {
       ignored++;
+      ignoredIssues.push(issue);
       return;
     }
-    issues.push({ id: node.id, name: node.name, type, path: getNodePath(node), ...extra });
+    issues.push(issue);
     elementsWithIssuesSet.add(node.id);
   };
 
@@ -1968,7 +1977,7 @@ async function runAudit(selection: readonly SceneNode[], options: AuditOptions) 
     elementsWithIssues,
   };
 
-  return { issues, summary, canceled };
+  return { issues, ignoredIssues, summary, canceled };
 }
 
 // Nodes the last scan covered, so a re-audit keeps its scope even if the user has since
@@ -2155,12 +2164,13 @@ async function handleMessage(msg: UiMessage): Promise<void> {
       // Re-audit the area the user originally scanned, not whatever "locate" last selected.
       const auditTargets = await resolveAuditTargets();
       if (lastAuditOptions && auditTargets.length > 0) {
-        const { issues, summary } = await runAudit(auditTargets, lastAuditOptions);
-        figma.ui.postMessage({ type: "audit-result", issues, summary });
+        const { issues, ignoredIssues, summary } = await runAudit(auditTargets, lastAuditOptions);
+        figma.ui.postMessage({ type: "audit-result", issues, ignoredIssues, summary });
       } else if (lastAuditOptions && lastAuditSelectionIds.length > 0) {
         figma.ui.postMessage({
           type: "audit-result",
           issues: [],
+          ignoredIssues: [],
           summary: {
             total: 0,
             detached: 0,
@@ -2381,8 +2391,8 @@ async function handleMessage(msg: UiMessage): Promise<void> {
     scanCancelRequested = false;
 
     try {
-      const { issues, summary, canceled } = await runAudit(selection, options);
-      figma.ui.postMessage({ type: "audit-result", issues, summary, canceled });
+      const { issues, ignoredIssues, summary, canceled } = await runAudit(selection, options);
+      figma.ui.postMessage({ type: "audit-result", issues, ignoredIssues, summary, canceled });
       if (canceled) {
         figma.notify("Scan canceled.");
       } else {
@@ -2539,8 +2549,8 @@ async function handleMessage(msg: UiMessage): Promise<void> {
 
   if (msg.type === "issue:ignore") {
     const id = String(msg.id || "");
-    const issueType = String(msg.issueType || "") as IssueType;
-    if (!id || !issueType) return;
+    const issueType = String(msg.issueType || "");
+    if (!id || !isIssueType(issueType)) return;
     try {
       const node = await figma.getNodeByIdAsync(id);
       if (node && "setPluginData" in node) {
@@ -2550,7 +2560,26 @@ async function handleMessage(msg: UiMessage): Promise<void> {
       // ignore — worst case the issue just isn't marked and reappears next scan
     }
     // Reuse the UI's existing issues:resolved handling to drop the row without a full re-scan.
-    figma.ui.postMessage({ type: "issues:resolved", resolvedIds: [id], ignoredDelta: 1 });
+    // issueType scopes the removal to this one issue (a node can carry a fill AND a stroke issue).
+    figma.ui.postMessage({ type: "issues:resolved", resolvedIds: [id], ignoredDelta: 1, issueType });
+    return;
+  }
+
+  if (msg.type === "issue:unignore") {
+    const id = String(msg.id || "");
+    const issueType = String(msg.issueType || "");
+    if (!id || !isIssueType(issueType)) return;
+    let ok = false;
+    try {
+      const node = await figma.getNodeByIdAsync(id);
+      if (node && "setPluginData" in node) {
+        (node as SceneNode).setPluginData(ignoreDataKey(issueType), "");
+        ok = true;
+      }
+    } catch {
+      ok = false;
+    }
+    figma.ui.postMessage({ type: "issue:unignored", id, issueType, ok });
     return;
   }
 
@@ -2558,9 +2587,8 @@ async function handleMessage(msg: UiMessage): Promise<void> {
     try {
       const targets = await resolveAuditTargets();
       const nodes = collectNodes(targets, true);
-      const types: IssueType[] = ["ROGUE_FILL", "ROGUE_STROKE", "UNSTYLED_TEXT", "DETACHED_INSTANCE"];
       for (const node of nodes) {
-        for (const type of types) {
+        for (const type of ISSUE_TYPES) {
           try {
             node.setPluginData(ignoreDataKey(type), "");
           } catch {
@@ -2569,8 +2597,8 @@ async function handleMessage(msg: UiMessage): Promise<void> {
         }
       }
       if (lastAuditOptions && targets.length > 0) {
-        const { issues, summary, canceled } = await runAudit(targets, lastAuditOptions);
-        figma.ui.postMessage({ type: "audit-result", issues, summary, canceled });
+        const { issues, ignoredIssues, summary, canceled } = await runAudit(targets, lastAuditOptions);
+        figma.ui.postMessage({ type: "audit-result", issues, ignoredIssues, summary, canceled });
       }
     } catch (e) {
       figma.notify("Couldn't clear ignored issues: " + (stringifyMessage(e) || "unknown error"));

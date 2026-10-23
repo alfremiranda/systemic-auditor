@@ -223,6 +223,42 @@ const solid = (r, g, b) => ({ type: "SOLID", color: { r, g, b }, opacity: 1, vis
     assert.ok(/empty response/.test(empty.error), empty.error);
   });
 
+  await test("runAudit returns the ignored issues themselves (with extras), consistent with summary.ignored", async () => {
+    const a = makeNode({ id: "u:1", type: "RECTANGLE", name: "Card", fills: [solid(1, 0, 0)], strokes: [solid(0, 0, 1)], fillStyleId: "", strokeStyleId: "" });
+    a.setPluginData("systemic:ignore:ROGUE_STROKE", "1");
+    const b = boot({ nodes: { "u:1": a } });
+    const { issues, ignoredIssues, summary } = await b.get("runAudit")([a], { scanChildren: false, checkRogueFills: true, checkRogueStrokes: true, checkDetached: false, checkTextStyles: false });
+    eq(issues.map(i => i.type), ["ROGUE_FILL"]);
+    eq(ignoredIssues.map(i => [i.id, i.type, i.name]), [["u:1", "ROGUE_STROKE", "Card"]]);
+    assert.strictEqual(summary.ignored, ignoredIssues.length);
+    assert.strictEqual(summary.total, 1, "ignored issues are not counted in total");
+  });
+
+  await test("issue:ignore is scoped by type; issue:unignore clears only that type and acks", async () => {
+    const a = makeNode({ id: "u:2", type: "RECTANGLE", fills: [solid(1, 0, 0)], strokes: [solid(0, 0, 1)] });
+    const b = boot({ nodes: { "u:2": a } });
+    await b.send({ type: "issue:ignore", id: "u:2", issueType: "ROGUE_FILL" });
+    await b.send({ type: "issue:ignore", id: "u:2", issueType: "ROGUE_STROKE" });
+    const resolved = b.posted.filter(m => m.type === "issues:resolved");
+    eq(resolved.map(m => m.issueType), ["ROGUE_FILL", "ROGUE_STROKE"]);
+    await b.send({ type: "issue:unignore", id: "u:2", issueType: "ROGUE_FILL" });
+    assert.strictEqual(a.getPluginData("systemic:ignore:ROGUE_FILL"), "");
+    assert.strictEqual(a.getPluginData("systemic:ignore:ROGUE_STROKE"), "1", "other type stays ignored");
+    const ack = b.posted.find(m => m.type === "issue:unignored");
+    eq([ack.id, ack.issueType, ack.ok], ["u:2", "ROGUE_FILL", true]);
+    await b.send({ type: "issue:unignore", id: "missing", issueType: "ROGUE_FILL" });
+    assert.strictEqual(b.posted.filter(m => m.type === "issue:unignored").pop().ok, false);
+  });
+
+  await test("ignore/unignore reject unknown issue types (no arbitrary pluginData keys)", async () => {
+    const a = makeNode({ id: "u:3", type: "RECTANGLE", fills: [solid(1, 0, 0)] });
+    const b = boot({ nodes: { "u:3": a } });
+    await b.send({ type: "issue:ignore", id: "u:3", issueType: "EVIL_KEY" });
+    await b.send({ type: "issue:unignore", id: "u:3", issueType: "EVIL_KEY" });
+    eq(Object.keys(a._pd), []);
+    assert.strictEqual(b.posted.filter(m => m.type === "issues:resolved" || m.type === "issue:unignored").length, 0);
+  });
+
   await test("nested instance swap is replayed when the original had a different component", async () => {
     const nestedInstance = makeNode({
       id: "d2:nested", type: "INSTANCE", name: "Icon",

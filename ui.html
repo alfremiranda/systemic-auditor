@@ -1945,6 +1945,71 @@
       }
       .ignoredLink:hover{ color: rgba(255,255,255,.9); }
 
+      .ignoredPanel{
+        border: 1px solid var(--stroke);
+        background: rgba(255,255,255,.03);
+        border-radius: 8px;
+        padding: 6px 8px 4px;
+        margin-bottom: 8px;
+      }
+      .ignoredPanel[hidden]{ display: none; }
+      .ignoredPanelHead{
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        padding: 2px 0 6px;
+        font-family: var(--font-sans);
+        font-size: 11px;
+        font-weight: 700;
+        color: var(--muted);
+      }
+      .ignoredList{ max-height: 132px; overflow-y: auto; }
+      .ignoredRow{
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 5px 0;
+        border-top: 1px solid var(--stroke);
+        font-family: var(--font-sans);
+      }
+      .ignoredType{
+        flex: 0 0 auto;
+        font-size: 10px;
+        font-weight: 700;
+        padding: 2px 6px;
+        border-radius: 999px;
+        border: 1px solid currentColor;
+      }
+      .ignoredType[data-type="ROGUE_FILL"]{ color: var(--red); }
+      .ignoredType[data-type="ROGUE_STROKE"]{ color: var(--orange); }
+      .ignoredType[data-type="UNSTYLED_TEXT"]{ color: var(--cyan); }
+      .ignoredType[data-type="DETACHED_INSTANCE"]{ color: var(--violet); }
+      .ignoredText{ flex: 1 1 auto; min-width: 0; }
+      .ignoredName, .ignoredPath{
+        display: block;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .ignoredName{ font-size: 12px; font-weight: 600; color: rgba(255,255,255,.88); }
+      .ignoredPath{ font-size: 10px; color: var(--muted-2); }
+      .ignoredRestore, .ignoredRestoreAll{
+        flex: 0 0 auto;
+        border: none;
+        background: none;
+        color: var(--muted);
+        font-family: var(--font-sans);
+        font-size: 11px;
+        font-weight: 600;
+        cursor: pointer;
+        padding: 2px 4px;
+        text-decoration: underline;
+        text-underline-offset: 2px;
+      }
+      .ignoredRestore:hover, .ignoredRestoreAll:hover{ color: rgba(255,255,255,.95); }
+      .ignoredRestore:disabled, .ignoredRestoreAll:disabled{ opacity: .5; cursor: default; }
+
       .matchingIndicator{
         display: inline-flex;
         align-items: center;
@@ -2301,7 +2366,14 @@
                     <span id="matchingIndicatorText">Matching…</span>
                   </div>
                 </div>
-                <button class="ignoredLink" id="ignoredLink" type="button" style="display:none;"></button>
+                <button class="ignoredLink" id="ignoredLink" type="button" style="display:none;" aria-expanded="false" aria-controls="ignoredPanel"></button>
+              </div>
+              <div class="ignoredPanel" id="ignoredPanel" role="region" aria-label="Ignored issues" hidden>
+                <div class="ignoredPanelHead">
+                  <span>Ignored issues</span>
+                  <button class="ignoredRestoreAll" id="ignoredRestoreAll" type="button">Restore all</button>
+                </div>
+                <div class="ignoredList" id="ignoredList"></div>
               </div>
               <div class="issuesBox" id="issuesBox">
                 <div class="issuesScroll scrollY" id="list" role="list">
@@ -3518,6 +3590,8 @@
 
       const state = {
         isScanning: false,
+        ignoredIssues: [],
+        ignoredOpen: false,
         scanComplete: false,
         // Set of active type filters (DETACHED_INSTANCE | UNSTYLED_TEXT | ROGUE_FILL | ROGUE_STROKE).
         // Empty set == "all" — several can be active together (e.g. Fills + Strokes).
@@ -4585,6 +4659,7 @@
         state.scanComplete = false;
         state.activeFilter.clear();
         state.issues = [];
+        state.ignoredIssues = [];
         state.summary = { total: 0, detached: 0, unstyledText: 0, rogueFills: 0, rogueStrokes: 0, ignored: 0 };
         setDataLoading(false);
         const isNoSelectionView = document.body.dataset.view === "no-selection";
@@ -4747,23 +4822,77 @@
         if (ignoredLink) {
           ignoredLink.addEventListener("click", (e) => {
             e.preventDefault();
-            ignoredLink.disabled = true;
+            state.ignoredOpen = !state.ignoredOpen;
+            updateIgnoredLink();
+            scheduleResizeToFit(80);
+          });
+        }
+        const restoreAll = $("ignoredRestoreAll");
+        if (restoreAll) {
+          restoreAll.addEventListener("click", (e) => {
+            e.preventDefault();
+            restoreAll.disabled = true;
             parent.postMessage({ pluginMessage: { type: "issue:unignoreAll" } }, "*");
           });
         }
       }
 
+      // The "N ignored" toggle and the panel listing what's ignored (each with a Restore button).
       function updateIgnoredLink(){
         const link = $("ignoredLink");
         if (!link) return;
         const n = Number(state.summary.ignored || 0);
-        link.disabled = false;
-        if (n > 0) {
-          link.style.display = "";
-          link.textContent = `${plural(n, "issue")} ignored — show all`;
-        } else {
-          link.style.display = "none";
+        if (n === 0) state.ignoredOpen = false;
+        link.style.display = n > 0 ? "" : "none";
+        link.textContent = `${n} ignored`;
+        link.setAttribute("aria-expanded", String(!!state.ignoredOpen));
+        renderIgnoredPanel();
+      }
+
+      function renderIgnoredPanel(){
+        const panel = $("ignoredPanel");
+        const list = $("ignoredList");
+        if (!panel || !list) return;
+        const items = Array.isArray(state.ignoredIssues) ? state.ignoredIssues : [];
+        panel.hidden = !state.ignoredOpen || items.length === 0;
+        const restoreAll = $("ignoredRestoreAll");
+        if (restoreAll) restoreAll.disabled = false;
+        list.textContent = "";
+        for (const issue of items) {
+          const row = document.createElement("div");
+          row.className = "ignoredRow";
+          row.setAttribute("role", "listitem");
+          const type = document.createElement("span");
+          type.className = "ignoredType";
+          type.dataset.type = issue.type;
+          type.textContent = typeToLabel(issue.type);
+          const text = document.createElement("span");
+          text.className = "ignoredText";
+          const name = document.createElement("span");
+          name.className = "ignoredName";
+          name.textContent = issue.name || "Unnamed";
+          name.title = issue.name || "";
+          const path = document.createElement("span");
+          path.className = "ignoredPath";
+          path.textContent = issue.path || "";
+          path.title = issue.path || "";
+          text.appendChild(name);
+          text.appendChild(path);
+          const btn = document.createElement("button");
+          btn.type = "button";
+          btn.className = "ignoredRestore";
+          btn.textContent = "Restore";
+          btn.setAttribute("aria-label", `Restore ${typeToLabel(issue.type)} issue on ${issue.name || "layer"}`);
+          btn.addEventListener("click", () => {
+            btn.disabled = true;
+            parent.postMessage({ pluginMessage: { type: "issue:unignore", id: issue.id, issueType: issue.type } }, "*");
+          });
+          row.appendChild(type);
+          row.appendChild(text);
+          row.appendChild(btn);
+          list.appendChild(row);
         }
+        list.setAttribute("role", "list");
       }
 
       function csvField(value){
@@ -5218,8 +5347,12 @@
           const ignoredDelta = Number(msg.ignoredDelta || 0);
           if (!resolvedIds.length && !ignoredDelta) return;
           const resolvedSet = new Set(resolvedIds);
+          // An ignore is scoped to one issue type: a node can also carry a fill AND a stroke issue.
+          const scopedType = ignoredDelta && msg.issueType ? String(msg.issueType) : "";
+          const isTarget = (issue) => resolvedSet.has(String(issue.id)) && (!scopedType || issue.type === scopedType);
           const before = state.issues.length;
-          state.issues = state.issues.filter((issue) => !resolvedSet.has(String(issue.id)));
+          if (ignoredDelta) state.ignoredIssues = state.ignoredIssues.concat(state.issues.filter(isTarget));
+          state.issues = state.issues.filter((issue) => !isTarget(issue));
           if (state.issues.length !== before || ignoredDelta) {
             state.summary = recalcSummaryFromIssues(state.issues, state.summary);
             if (ignoredDelta) state.summary.ignored = Number(state.summary.ignored || 0) + ignoredDelta;
@@ -5227,6 +5360,24 @@
             updateIgnoredLink();
             renderList(true);
           }
+          return;
+        }
+
+        if (msg.type === "issue:unignored") {
+          const id = String(msg.id || "");
+          const issueType = String(msg.issueType || "");
+          const idx = state.ignoredIssues.findIndex((i) => String(i.id) === id && i.type === issueType);
+          if (idx < 0) return;
+          const [issue] = state.ignoredIssues.splice(idx, 1);
+          // Node gone (ok:false): nothing to restore, but it's no longer ignored either.
+          if (msg.ok && !state.issues.some((i) => String(i.id) === id && i.type === issueType)) {
+            state.issues.push(issue);
+          }
+          state.summary = recalcSummaryFromIssues(state.issues, state.summary);
+          state.summary.ignored = Math.max(0, Number(state.summary.ignored || 0) - 1);
+          setStats(state.summary);
+          updateIgnoredLink();
+          renderList(true);
           return;
         }
 
@@ -5244,6 +5395,7 @@
           showNoSelection();
           // Clear any previous scan data (even though it’s hidden)
           state.issues = [];
+          state.ignoredIssues = [];
           state.summary = { total: 0, detached: 0, unstyledText: 0, rogueFills: 0, rogueStrokes: 0, ignored: 0 };
           state.activeFilter.clear();
           setStats(state.summary);
@@ -5277,6 +5429,7 @@
           state.activeFilter.clear();
           state.scanCanceled = !!msg.canceled;
           state.issues = msg.issues || [];
+          state.ignoredIssues = Array.isArray(msg.ignoredIssues) ? msg.ignoredIssues : [];
 
           const s = msg.summary || { total: 0, detached: 0, unstyledText: 0, rogueFills: 0, rogueStrokes: 0, ignored: 0 };
           // Preserve any additional summary fields coming from code.ts

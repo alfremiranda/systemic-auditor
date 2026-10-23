@@ -345,6 +345,10 @@ function clearStoredLicenseKey() {
         figma.ui.postMessage(buildEntitlementsMessage());
     }
 }))();
+const ISSUE_TYPES = ["ROGUE_FILL", "ROGUE_STROKE", "UNSTYLED_TEXT", "DETACHED_INSTANCE"];
+function isIssueType(value) {
+    return ISSUE_TYPES.indexOf(value) >= 0;
+}
 let lastAuditOptions = null;
 let lastAuditSelectionIds = [];
 function isMixed(value) {
@@ -1715,6 +1719,8 @@ function runAudit(selection, options) {
         var _a;
         const nodes = collectNodes(selection, options.scanChildren);
         const issues = [];
+        // Issues the user marked "not a problem": kept (not counted) so the UI can list and restore them.
+        const ignoredIssues = [];
         const totalNodes = nodes.length;
         let processed = 0;
         let lastProgress = 0;
@@ -1732,11 +1738,13 @@ function runAudit(selection, options) {
         let detached = 0;
         let ignored = 0;
         const addIssue = (node, type, extra = {}) => {
+            const issue = Object.assign({ id: node.id, name: node.name, type, path: getNodePath(node) }, extra);
             if (isIssueIgnored(node, type)) {
                 ignored++;
+                ignoredIssues.push(issue);
                 return;
             }
-            issues.push(Object.assign({ id: node.id, name: node.name, type, path: getNodePath(node) }, extra));
+            issues.push(issue);
             elementsWithIssuesSet.add(node.id);
         };
         for (const node of nodes) {
@@ -1815,7 +1823,7 @@ function runAudit(selection, options) {
             scannedElements,
             elementsWithIssues,
         };
-        return { issues, summary, canceled };
+        return { issues, ignoredIssues, summary, canceled };
     });
 }
 // Nodes the last scan covered, so a re-audit keeps its scope even if the user has since
@@ -2000,13 +2008,14 @@ function handleMessage(msg) {
                 // Re-audit the area the user originally scanned, not whatever "locate" last selected.
                 const auditTargets = yield resolveAuditTargets();
                 if (lastAuditOptions && auditTargets.length > 0) {
-                    const { issues, summary } = yield runAudit(auditTargets, lastAuditOptions);
-                    figma.ui.postMessage({ type: "audit-result", issues, summary });
+                    const { issues, ignoredIssues, summary } = yield runAudit(auditTargets, lastAuditOptions);
+                    figma.ui.postMessage({ type: "audit-result", issues, ignoredIssues, summary });
                 }
                 else if (lastAuditOptions && lastAuditSelectionIds.length > 0) {
                     figma.ui.postMessage({
                         type: "audit-result",
                         issues: [],
+                        ignoredIssues: [],
                         summary: {
                             total: 0,
                             detached: 0,
@@ -2205,8 +2214,8 @@ function handleMessage(msg) {
             // cancellation meant for this user-initiated scan.
             scanCancelRequested = false;
             try {
-                const { issues, summary, canceled } = yield runAudit(selection, options);
-                figma.ui.postMessage({ type: "audit-result", issues, summary, canceled });
+                const { issues, ignoredIssues, summary, canceled } = yield runAudit(selection, options);
+                figma.ui.postMessage({ type: "audit-result", issues, ignoredIssues, summary, canceled });
                 if (canceled) {
                     figma.notify("Scan canceled.");
                 }
@@ -2358,7 +2367,7 @@ function handleMessage(msg) {
         if (msg.type === "issue:ignore") {
             const id = String(msg.id || "");
             const issueType = String(msg.issueType || "");
-            if (!id || !issueType)
+            if (!id || !isIssueType(issueType))
                 return;
             try {
                 const node = yield figma.getNodeByIdAsync(id);
@@ -2370,27 +2379,46 @@ function handleMessage(msg) {
                 // ignore — worst case the issue just isn't marked and reappears next scan
             }
             // Reuse the UI's existing issues:resolved handling to drop the row without a full re-scan.
-            figma.ui.postMessage({ type: "issues:resolved", resolvedIds: [id], ignoredDelta: 1 });
+            // issueType scopes the removal to this one issue (a node can carry a fill AND a stroke issue).
+            figma.ui.postMessage({ type: "issues:resolved", resolvedIds: [id], ignoredDelta: 1, issueType });
+            return;
+        }
+        if (msg.type === "issue:unignore") {
+            const id = String(msg.id || "");
+            const issueType = String(msg.issueType || "");
+            if (!id || !isIssueType(issueType))
+                return;
+            let ok = false;
+            try {
+                const node = yield figma.getNodeByIdAsync(id);
+                if (node && "setPluginData" in node) {
+                    node.setPluginData(ignoreDataKey(issueType), "");
+                    ok = true;
+                }
+            }
+            catch (_l) {
+                ok = false;
+            }
+            figma.ui.postMessage({ type: "issue:unignored", id, issueType, ok });
             return;
         }
         if (msg.type === "issue:unignoreAll") {
             try {
                 const targets = yield resolveAuditTargets();
                 const nodes = collectNodes(targets, true);
-                const types = ["ROGUE_FILL", "ROGUE_STROKE", "UNSTYLED_TEXT", "DETACHED_INSTANCE"];
                 for (const node of nodes) {
-                    for (const type of types) {
+                    for (const type of ISSUE_TYPES) {
                         try {
                             node.setPluginData(ignoreDataKey(type), "");
                         }
-                        catch (_l) {
+                        catch (_m) {
                             /* ignore */
                         }
                     }
                 }
                 if (lastAuditOptions && targets.length > 0) {
-                    const { issues, summary, canceled } = yield runAudit(targets, lastAuditOptions);
-                    figma.ui.postMessage({ type: "audit-result", issues, summary, canceled });
+                    const { issues, ignoredIssues, summary, canceled } = yield runAudit(targets, lastAuditOptions);
+                    figma.ui.postMessage({ type: "audit-result", issues, ignoredIssues, summary, canceled });
                 }
             }
             catch (e) {
