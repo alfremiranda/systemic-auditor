@@ -97,16 +97,6 @@ const solid = (r, g, b) => ({ type: "SOLID", color: { r, g, b }, opacity: 1, vis
   });
 
   // ---------- 2. Export (ProFeature trim) ----------
-  await test("ProFeature only has autofix + export in entitlements", async () => {
-    const b = boot({ fetchImpl: undefined });
-    await tick(20);
-    const m = b.posted.filter(x => x.type === "pro:entitlements").pop();
-    assert.ok(m, "no entitlements posted");
-    // default (no license key) entitlements.pro is false, features not sent on the wire (only pro flag is) — check via debug toggle path instead
-    assert.strictEqual(typeof m.isPro, "boolean");
-  });
-
-  // ---------- 3. Detached relink override replay (fills/strokes/effects/cornerRadius/visible/opacity/swap) ----------
   await test("detached relink replays fills/strokes/effects/cornerRadius/visible/opacity on a nested descendant", async () => {
     const nestedInDetached = makeNode({
       id: "d:nested", type: "RECTANGLE", name: "Nested",
@@ -199,28 +189,6 @@ const solid = (r, g, b) => ({ type: "SOLID", color: { r, g, b }, opacity: 1, vis
     assert.strictEqual(rogue(hidden), false, "invisible fill");
     const strokeBound = makeNode({ id: "f:7", type: "RECTANGLE", strokes: [{ ...solid(0, 0, 1), boundVariables: { color: { id: "V:2" } } }], strokeStyleId: "" });
     assert.strictEqual(rogueS(strokeBound), false, "stroke paint binding");
-  });
-
-  await test("license verify parses the Worker reply (pro granted, failure keeps free, bad JSON surfaces an error)", async () => {
-    const reply = (status, body) => async () => ({ ok: status >= 200 && status < 300, status, text: async () => body });
-    const run = async (fetchImpl) => {
-      const b = boot({ fetchImpl });
-      await b.send({ type: "pro:verify", key: "KEY-1234" });
-      return b.posted.find(m => m.type === "pro:verify:result");
-    };
-    const good = await run(reply(200, JSON.stringify({ ok: true, valid: true, status: "active", daysLeft: 12, entitlements: { pro: true } })));
-    assert.strictEqual(good.ok, true, JSON.stringify(good));
-    assert.strictEqual(good.isPro, true);
-    const denied = await run(reply(200, JSON.stringify({ ok: false, valid: false, status: "expired", error: "License expired", entitlements: { pro: false } })));
-    assert.strictEqual(denied.ok, false);
-    assert.strictEqual(denied.status, "expired");
-    assert.strictEqual(denied.error, "License expired");
-    const server500 = await run(reply(500, "<html>Bad gateway</html>"));
-    assert.strictEqual(server500.ok, false);
-    assert.ok(/Verify failed \(500\)/.test(server500.error), server500.error);
-    const empty = await run(reply(200, ""));
-    assert.strictEqual(empty.ok, false);
-    assert.ok(/empty response/.test(empty.error), empty.error);
   });
 
   await test("runAudit returns the ignored issues themselves (with extras), consistent with summary.ignored", async () => {
@@ -338,14 +306,14 @@ const solid = (r, g, b) => ({ type: "SOLID", color: { r, g, b }, opacity: 1, vis
     assert.strictEqual(status.status, "error");
   });
 
-  // ---------- 6. Free-tier candidate preview ----------
-  await test("pro:autofix:candidates computes real candidates for a non-Pro user and marks them locked", async () => {
+  // ---------- 6. Candidate preview ----------
+  await test("autofix:candidates computes real candidates", async () => {
     const node = makeNode({ id: "f:1", type: "TEXT", fontName: { family: "Inter", style: "Regular" }, fontSize: 14, characters: "hi", textStyleId: "", lineHeight: { unit: "AUTO" }, letterSpacing: { unit: "PIXELS", value: 0 } });
     const b = boot({ nodes: { "f:1": node } });
     b.figma.getLocalTextStylesAsync = async () => [{ id: "S1", name: "Body", fontName: { family: "Inter", style: "Regular" }, fontSize: 14, lineHeight: { unit: "AUTO" }, letterSpacing: { unit: "PIXELS", value: 0 } }];
-    await b.send({ type: "pro:autofix:candidates", id: "f:1", kind: "text", key: "f:1:text" });
-    const m = b.posted.find(x => x.type === "pro:autofix:candidates");
-    assert.strictEqual(m.locked, true);
+    await b.send({ type: "autofix:candidates", id: "f:1", kind: "text", key: "f:1:text" });
+    const m = b.posted.find(x => x.type === "autofix:candidates");
+    assert.strictEqual("locked" in m, false, "no entitlement flag on the wire anymore");
     assert.strictEqual(m.candidates.length, 1, "free user did not receive real candidates");
     assert.strictEqual(m.recommendedId, "textstyle:S1");
   });

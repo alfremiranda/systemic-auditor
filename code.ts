@@ -16,41 +16,7 @@ figma.showUI(__html__, { width: DEFAULT_W, height: DEFAULT_H, title: "Systemic A
   }
 })();
 
-// =======================
-// PRO / LICENSE GATING
-// =======================
-
-type ProFeature = "autofix" | "export";
-
-type Entitlements = {
-  pro: boolean;
-  source: "none" | "dev" | "license";
-  features: Record<ProFeature, boolean>;
-  expiresAt?: number; // epoch ms
-  licenseKeyLast4?: string;
-};
-
-const ENTITLEMENTS_STORAGE_KEY = "systemic_entitlements_v1";
-const LICENSE_KEY_STORAGE_KEY = "systemic_license_key_v1";
-const INSTANCE_ID_STORAGE_KEY = "systemic_instance_id";
-const DEBUG_PRO_STORAGE_KEY = "systemic_debug_pro_override";
 const SCANNER_OPTIONS_STORAGE_KEY = "systemic_scanner_options_v1";
-
-// ✅ DEV OVERRIDE (set true locally when testing Pro features)
-const DEV_PRO = false;
-// ✅ DEV license state override for UI testing ("expired" | "trial" | "pro" | null)
-const DEV_FORCE_LICENSE_STATUS: "expired" | "trial" | "pro" | null = null;
-
-// ✅ Cloudflare Worker (License server)
-const LICENSE_WORKER_BASE = "https://systemic-license.im-94e.workers.dev";
-const WORKER_VERIFY_URL = `${LICENSE_WORKER_BASE}/verify`;
-const WORKER_ACTIVATE_URL = `${LICENSE_WORKER_BASE}/activate`;
-
-// ✅ Secret header to protect the Worker (matches env.SYSTEMIC_TOKEN)
-// NOTE: This is still visible in the plugin bundle; later we can harden this.
-const SYSTEMIC_TOKEN = "rK8pVt_3Qm7nZx2Lh6YbW9cD1sF4aJ0uN5gHkP2eT8vXqM3iR7wS1yU6oC9lB4d";
-
-const ALL_PRO_FEATURES: ProFeature[] = ["autofix", "export"];
 
 function stringifyMessage(value: unknown): string {
   if (typeof value === "string") return value;
@@ -68,54 +34,6 @@ function stringifyMessage(value: unknown): string {
   } catch {
     return String(value);
   }
-}
-
-function makeDefaultEntitlements(): Entitlements {
-  return {
-    pro: false,
-    source: "none",
-    features: {
-      autofix: false,
-      export: false,
-    },
-  };
-}
-
-function makeDevEntitlements(): Entitlements {
-  const features = ALL_PRO_FEATURES.reduce((acc, f) => {
-    acc[f] = true;
-    return acc;
-  }, {} as Record<ProFeature, boolean>);
-  return { pro: true, source: "dev", features };
-}
-
-function makeDebugEntitlements(isPro: boolean): Entitlements {
-  if (!isPro) return makeDefaultEntitlements();
-  const features = ALL_PRO_FEATURES.reduce((acc, f) => {
-    acc[f] = true;
-    return acc;
-  }, {} as Record<ProFeature, boolean>);
-  return { pro: true, source: "dev", features };
-}
-
-async function loadDebugProOverride(): Promise<boolean | null> {
-  const saved = await figma.clientStorage.getAsync(DEBUG_PRO_STORAGE_KEY);
-  return typeof saved === "boolean" ? saved : null;
-}
-
-function isExpired(ent: Entitlements): boolean {
-  if (!ent.expiresAt) return false;
-  return Date.now() > ent.expiresAt;
-}
-
-async function loadEntitlements(): Promise<Entitlements> {
-  if (DEV_PRO) return makeDevEntitlements();
-  // Always start fresh each launch; do not persist Pro status across sessions.
-  return makeDefaultEntitlements();
-}
-
-function hasFeature(ent: Entitlements, feature: ProFeature): boolean {
-  return !!ent.pro && !!ent.features?.[feature] && !isExpired(ent);
 }
 
 async function loadLibraryVariables(varsApi: typeof figma.variables, force = false): Promise<Variable[]> {
@@ -182,7 +100,6 @@ async function importLibraryVariables(varsApi: typeof figma.variables): Promise<
   return Array.from(libraryVariableCache.values());
 }
 
-let entitlements: Entitlements = makeDefaultEntitlements();
 let autofixCancelRequested = false;
 let scanCancelRequested = false;
 
@@ -215,139 +132,7 @@ const variableColorCache = new Map<string, RGBA | null>();
 let localColorVariablesCache: { collections: VariableCollection[]; vars: Variable[]; ts: number } | null = null;
 let localColorVariablesLoadPromise: Promise<{ collections: VariableCollection[]; vars: Variable[] }> | null = null;
 const LOCAL_COLOR_VARS_CACHE_TTL_MS = 5000;
-let storedLicenseKey = "";
 let autofixRunning = false;
-
-// Last license answer from the Worker. Kept in memory so every "pro:entitlements"
-// reply carries the same status/valid/daysLeft fields.
-type LicenseInfo = { status: string | null; valid?: boolean; daysLeft?: number; offline?: boolean };
-let licenseInfo: LicenseInfo = { status: null };
-
-const LAST_VERIFIED_STORAGE_KEY = "systemic_last_verified_v1";
-const OFFLINE_GRACE_MS = 7 * 24 * 60 * 60 * 1000;
-
-function buildEntitlementsMessage(extra: Record<string, unknown> = {}) {
-  const isPro = !!entitlements.pro && !isExpired(entitlements);
-  return {
-    type: "pro:entitlements",
-    isPro,
-    entitlements: { pro: isPro },
-    source: entitlements.source,
-    expiresAt: entitlements.expiresAt,
-    licenseKeyLast4: entitlements.licenseKeyLast4,
-    licenseKey: storedLicenseKey,
-    status: licenseInfo.status,
-    valid: licenseInfo.valid,
-    daysLeft: licenseInfo.daysLeft,
-    offline: licenseInfo.offline,
-    ...extra,
-  };
-}
-
-async function rememberSuccessfulVerify(status: string | null): Promise<void> {
-  try {
-    await figma.clientStorage.setAsync(LAST_VERIFIED_STORAGE_KEY, { at: Date.now(), status });
-  } catch {
-    /* ignore storage failures */
-  }
-}
-
-async function forgetLastVerified(): Promise<void> {
-  try {
-    await figma.clientStorage.deleteAsync(LAST_VERIFIED_STORAGE_KEY);
-  } catch {
-    /* ignore storage failures */
-  }
-}
-
-// Returns true when a previous non-trial verification is recent enough to keep Pro offline.
-async function withinOfflineGrace(): Promise<{ ok: boolean; status: string | null }> {
-  try {
-    const saved = await figma.clientStorage.getAsync(LAST_VERIFIED_STORAGE_KEY);
-    if (!saved || typeof saved.at !== "number") return { ok: false, status: null };
-    const status = typeof saved.status === "string" ? saved.status : null;
-    if (status === "trial") return { ok: false, status };
-    return { ok: Date.now() - saved.at < OFFLINE_GRACE_MS, status };
-  } catch {
-    return { ok: false, status: null };
-  }
-}
-
-async function loadStoredLicenseKey(): Promise<string> {
-  const key = await figma.clientStorage.getAsync(LICENSE_KEY_STORAGE_KEY);
-  storedLicenseKey = typeof key === "string" ? key : "";
-  return storedLicenseKey;
-}
-
-async function saveStoredLicenseKey(key: string): Promise<void> {
-  storedLicenseKey = key;
-  await figma.clientStorage.setAsync(LICENSE_KEY_STORAGE_KEY, key);
-}
-
-async function clearStoredLicenseKey(): Promise<void> {
-  storedLicenseKey = "";
-  await figma.clientStorage.deleteAsync(LICENSE_KEY_STORAGE_KEY);
-}
-
-
-// Initialize entitlements and send to UI
-(async () => {
-  entitlements = await loadEntitlements();
-  await loadStoredLicenseKey();
-
-  if (DEV_PRO) {
-    const debugOverride = await loadDebugProOverride();
-    if (debugOverride !== null) {
-      entitlements = makeDebugEntitlements(debugOverride);
-    }
-  }
-
-  if (storedLicenseKey) {
-    figma.ui.postMessage({ type: "pro:verify:state", state: "verifying", source: "startup" });
-    // Network failures and 5xx answers are "transient": a paying user who is offline keeps Pro
-    // for OFFLINE_GRACE_MS after their last successful (non-trial) verification. An explicit
-    // denial from the Worker downgrades immediately.
-    let result: LicenseResult | null = null;
-    let failure = "";
-    try {
-      const instanceId = await getOrCreateInstanceId();
-      result = await verifyLicenseWithWorker(storedLicenseKey, instanceId);
-    } catch (e) {
-      failure = stringifyMessage(e) || "Verify failed.";
-    }
-
-    if (result && !result.transient) {
-      const isPro = !!result.entitlements?.pro && !!result.ok;
-      licenseInfo = {
-        status: result.status ?? null,
-        valid: typeof result.valid === "boolean" ? result.valid : undefined,
-        daysLeft: typeof result.daysLeft === "number" ? result.daysLeft : undefined,
-      };
-      if (isPro) {
-        entitlements = makeLicenseEntitlements(storedLicenseKey);
-        if (licenseInfo.status !== "trial") await rememberSuccessfulVerify(licenseInfo.status);
-      } else {
-        entitlements = makeDefaultEntitlements();
-        await forgetLastVerified();
-      }
-      figma.ui.postMessage(buildEntitlementsMessage({ error: result.error }));
-    } else {
-      // Could not reach the Worker (fetch threw, or HTTP 5xx/429).
-      const grace = await withinOfflineGrace();
-      const error = (result && result.error) || failure || "Verify failed.";
-      if (grace.ok) {
-        entitlements = makeLicenseEntitlements(storedLicenseKey);
-        licenseInfo = { status: grace.status, offline: true };
-      } else {
-        entitlements = makeDefaultEntitlements();
-        licenseInfo = { status: null };
-      }
-      figma.ui.postMessage(buildEntitlementsMessage({ error }));
-    }
-  } else {
-    figma.ui.postMessage(buildEntitlementsMessage());
-  }
-})();
 
 type IssueType = "ROGUE_FILL" | "ROGUE_STROKE" | "UNSTYLED_TEXT" | "DETACHED_INSTANCE";
 
@@ -1702,165 +1487,6 @@ async function findColorCandidates(target: RGBA, consumer: SceneNode, kind: "fil
   };
 }
 
-async function getOrCreateInstanceId(): Promise<string> {
-  const existing = await figma.clientStorage.getAsync(INSTANCE_ID_STORAGE_KEY);
-  if (existing && typeof existing === "string") return existing;
-
-  // Stable per-machine (plugin install) id, no PII
-  const id = "inst_" + Math.random().toString(16).slice(2) + Date.now().toString(16);
-  await figma.clientStorage.setAsync(INSTANCE_ID_STORAGE_KEY, id);
-  return id;
-}
-
-function makeProFeaturesAllEnabled(): Record<ProFeature, boolean> {
-  return ALL_PRO_FEATURES.reduce((acc, f) => {
-    acc[f] = true;
-    return acc;
-  }, {} as Record<ProFeature, boolean>);
-}
-
-function makeLicenseEntitlements(licenseKey: string): Entitlements {
-  return {
-    ...makeDefaultEntitlements(),
-    pro: true,
-    source: "license",
-    features: makeProFeaturesAllEnabled(),
-    expiresAt: undefined,
-    licenseKeyLast4: licenseKey.slice(-4),
-  };
-}
-
-type LicenseResult = {
-  ok: boolean;
-  valid?: boolean;
-  status?: string | null;
-  daysLeft?: number;
-  activated?: boolean;
-  entitlements: { pro: boolean };
-  error?: string;
-  // True when the Worker could not be reached or answered 5xx/429, as opposed to an explicit denial.
-  transient?: boolean;
-};
-
-const MAX_SERVER_MESSAGE_LENGTH = 200;
-
-// Fields read from the Worker's JSON reply; everything is `unknown` and narrowed where used.
-type LicenseResponseBody = {
-  ok?: unknown;
-  error?: unknown;
-  message?: unknown;
-  status?: unknown;
-  valid?: unknown;
-  activated?: unknown;
-  daysLeft?: unknown;
-  entitlements?: { pro?: unknown };
-};
-
-async function callLicenseEndpoint(
-  url: string,
-  licenseKey: string,
-  instanceId: string
-): Promise<LicenseResult> {
-  if (DEV_FORCE_LICENSE_STATUS) {
-    if (DEV_FORCE_LICENSE_STATUS === "trial") {
-      return {
-        ok: true,
-        valid: true,
-        status: "trial",
-        daysLeft: 5,
-        entitlements: { pro: true },
-      };
-    }
-    if (DEV_FORCE_LICENSE_STATUS === "pro") {
-      return {
-        ok: true,
-        valid: true,
-        status: "pro",
-        entitlements: { pro: true },
-      };
-    }
-    return {
-      ok: true,
-      valid: false,
-      status: "expired",
-      daysLeft: 0,
-      entitlements: { pro: false },
-    };
-  }
-  // Worker response example:
-  // { ok:true, valid:true, status:"active", entitlements:{pro:true} }
-  let res: Awaited<ReturnType<typeof fetch>>;
-  try {
-    res = await fetch(url, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Systemic-Token": SYSTEMIC_TOKEN,
-      },
-      body: JSON.stringify({ licenseKey, installationId: instanceId }),
-    });
-  } catch (e) {
-    return {
-      ok: false,
-      entitlements: { pro: false },
-      transient: true,
-      error: `Could not reach the license server: ${stringifyMessage(e) || "network error"}`,
-    };
-  }
-
-  const rawText = await res.text();
-  let data: LicenseResponseBody | null = null;
-  try {
-    data = rawText ? JSON.parse(rawText) : null;
-  } catch {
-    data = null;
-  }
-
-  // Provide a readable message for UI (a proxy error page must not flood the toast)
-  let serverMessage =
-    stringifyMessage(data && (data.error || data.message)) ||
-    (typeof rawText === "string" && rawText.trim() ? rawText.trim() : null) ||
-    `HTTP ${res.status}`;
-  if (serverMessage.length > MAX_SERVER_MESSAGE_LENGTH) {
-    serverMessage = serverMessage.slice(0, MAX_SERVER_MESSAGE_LENGTH) + "…";
-  }
-
-  if (!res.ok) {
-    return {
-      ok: false,
-      entitlements: { pro: false },
-      transient: res.status >= 500 || res.status === 429,
-      error: `Verify failed (${res.status}): ${serverMessage}`,
-    };
-  }
-
-  if (!data) {
-    return { ok: false, entitlements: { pro: false }, error: "Verify failed: empty response." };
-  }
-
-  const isPro = !!data.entitlements?.pro;
-  const activated = typeof data.activated === "boolean" ? data.activated : undefined;
-  const valid = typeof data.valid === "boolean" ? data.valid : undefined;
-  const daysLeft = typeof data.daysLeft === "number" ? data.daysLeft : undefined;
-  return {
-    ok: !!data.ok,
-    valid,
-    status: typeof data.status === "string" ? data.status : null,
-    daysLeft,
-    activated,
-    entitlements: { pro: isPro },
-    error: stringifyMessage(data.error) || stringifyMessage(data.message) || undefined,
-  };
-}
-
-async function verifyLicenseWithWorker(licenseKey: string, instanceId: string): Promise<LicenseResult> {
-  return callLicenseEndpoint(WORKER_VERIFY_URL, licenseKey, instanceId);
-}
-
-async function activateLicenseWithWorker(licenseKey: string, instanceId: string): Promise<LicenseResult> {
-  return callLicenseEndpoint(WORKER_ACTIVATE_URL, licenseKey, instanceId);
-}
-
 async function runAudit(selection: readonly SceneNode[], options: AuditOptions) {
   const nodes = collectNodes(selection, options.scanChildren);
   const issues: Issue[] = [];
@@ -2054,51 +1680,14 @@ async function handleMessage(msg: UiMessage): Promise<void> {
     return;
   }
 
-  // -----------------------
-  // PRO / LICENSE messages
-  // -----------------------
-  if (msg.type === "pro:get-entitlements") {
-    figma.ui.postMessage(buildEntitlementsMessage());
-    return;
-  }
-
-  if (msg.type === "pro:clearLicense") {
-    entitlements = makeDefaultEntitlements();
-    licenseInfo = { status: null };
-    await figma.clientStorage.deleteAsync(ENTITLEMENTS_STORAGE_KEY);
-    await figma.clientStorage.deleteAsync(DEBUG_PRO_STORAGE_KEY);
-    await forgetLastVerified();
-    await clearStoredLicenseKey();
-    figma.ui.postMessage(buildEntitlementsMessage());
-    return;
-  }
-
-  if (msg.type === "pro:debug:set") {
-    if (!DEV_PRO) return;
-    const isPro = !!msg.isPro;
-    await figma.clientStorage.setAsync(DEBUG_PRO_STORAGE_KEY, isPro);
-    entitlements = makeDebugEntitlements(isPro);
-    figma.ui.postMessage(buildEntitlementsMessage());
-    return;
-  }
-
-  if (msg.type === "pro:autofix") {
-    // Pro-only feature: UI sends this when Pro is verified.
-    const allowed = hasFeature(entitlements, "autofix");
+  if (msg.type === "autofix") {
     const skipped = msg.skipped || {};
     if (autofixRunning) return;
     autofixCancelRequested = false;
 
-    if (!allowed) {
-      figma.notify("Auto-fix is a Pro feature. Please activate Systemic Pro.");
-      // Tell the UI so it leaves its "fixing" state instead of waiting forever.
-      figma.ui.postMessage({ type: "pro:autofix:done", total: 0, resolved: 0, failed: 0, skipped, resolvedItems: [] });
-      return;
-    }
-
     const items = Array.isArray(msg.items) ? msg.items as AutofixAllItem[] : [];
     if (!items.length) {
-      figma.ui.postMessage({ type: "pro:autofix:done", total: 0, resolved: 0, failed: 0, skipped, resolvedItems: [] });
+      figma.ui.postMessage({ type: "autofix:done", total: 0, resolved: 0, failed: 0, skipped, resolvedItems: [] });
       return;
     }
     autofixRunning = true;
@@ -2115,9 +1704,9 @@ async function handleMessage(msg: UiMessage): Promise<void> {
     let canceled = false;
     const resolvedItems: Array<{ id: string; issueType: IssueType }> = [];
 
-    figma.ui.postMessage({ type: "pro:autofix:progress", phase: "start", total });
+    figma.ui.postMessage({ type: "autofix:progress", phase: "start", total });
     await new Promise((r) => setTimeout(r, 0));
-    figma.ui.postMessage({ type: "pro:autofix:progress", phase: "batch", processed, total, resolved, failed });
+    figma.ui.postMessage({ type: "autofix:progress", phase: "batch", processed, total, resolved, failed });
 
     try {
       batchLoop: for (let i = 0; i < ordered.length; i += 50) {
@@ -2145,17 +1734,17 @@ async function handleMessage(msg: UiMessage): Promise<void> {
           }
           processed += 1;
           if (processed % 10 === 0) {
-            figma.ui.postMessage({ type: "pro:autofix:progress", phase: "batch", processed, total, resolved, failed });
+            figma.ui.postMessage({ type: "autofix:progress", phase: "batch", processed, total, resolved, failed });
             await new Promise((r) => setTimeout(r, 0));
           }
         }
-        figma.ui.postMessage({ type: "pro:autofix:progress", phase: "batch", processed, total, resolved, failed });
+        figma.ui.postMessage({ type: "autofix:progress", phase: "batch", processed, total, resolved, failed });
         await new Promise((r) => setTimeout(r, 20));
       }
     } catch {
       failed += Math.max(0, total - processed);
     } finally {
-      figma.ui.postMessage({ type: "pro:autofix:done", total, resolved, failed, skipped, resolvedItems, canceled });
+      figma.ui.postMessage({ type: "autofix:done", total, resolved, failed, skipped, resolvedItems, canceled });
       if (canceled) {
         figma.notify("Auto-fix canceled. Press Cmd+Z to undo any changes.");
       }
@@ -2186,7 +1775,7 @@ async function handleMessage(msg: UiMessage): Promise<void> {
     return;
   }
 
-  if (msg.type === "pro:autofix:cancel") {
+  if (msg.type === "autofix:cancel") {
     autofixCancelRequested = true;
     return;
   }
@@ -2196,15 +1785,12 @@ async function handleMessage(msg: UiMessage): Promise<void> {
     return;
   }
 
-  if (msg.type === "pro:autofix:candidates") {
-    // Computing candidates is read-only (nothing is mutated), so free users get them too —
-    // as a preview of what Pro would do. Only the actual apply (below) stays gated.
-    const allowed = hasFeature(entitlements, "autofix");
+  if (msg.type === "autofix:candidates") {
     const id = String(msg.id || "");
     const kind = msg.kind === "stroke" ? "strokes" : (msg.kind === "text" ? "text" : "fills");
     const key = String(msg.key || "");
     const reply = (extra: Record<string, unknown>) =>
-      figma.ui.postMessage({ type: "pro:autofix:candidates", key, locked: !allowed, ...extra });
+      figma.ui.postMessage({ type: "autofix:candidates", key, ...extra });
 
     if (!id) {
       reply({ candidates: [], recommendedId: null });
@@ -2248,17 +1834,16 @@ async function handleMessage(msg: UiMessage): Promise<void> {
     return;
   }
 
-  if (msg.type === "pro:autofix:apply") {
-    const allowed = hasFeature(entitlements, "autofix");
+  if (msg.type === "autofix:apply") {
     const id = String(msg.id || "");
     const rawKind = String(msg.kind || "");
     const kind = ["fill", "stroke", "text", "detached"].indexOf(rawKind) >= 0 ? rawKind : "fill";
     const candidateId = String(msg.candidateId || "");
     const issueType = String(msg.issueType || "");
     const reply = (ok: boolean, error?: string) =>
-      figma.ui.postMessage({ type: "pro:autofix:result", id, issueType, kind, ok, error });
+      figma.ui.postMessage({ type: "autofix:result", id, issueType, kind, ok, error });
 
-    if (!allowed || !id || (!candidateId && issueType !== "DETACHED_INSTANCE")) {
+    if (!id || (!candidateId && issueType !== "DETACHED_INSTANCE")) {
       reply(false, "Auto-fix is not available.");
       return;
     }
@@ -2275,80 +1860,6 @@ async function handleMessage(msg: UiMessage): Promise<void> {
     } catch (e) {
       reply(false, stringifyMessage(e) || "Auto-fix failed.");
     }
-    return;
-  }
-
-  if (msg.type === "pro:verify" || msg.type === "pro:activate") {
-    const activating = msg.type === "pro:activate";
-    const licenseKey = String(msg.key || "").trim();
-    const failText = activating
-      ? "Could not activate license. Please try again."
-      : "Could not verify license. Please try again.";
-
-    if (!licenseKey) {
-      figma.ui.postMessage({
-        type: "pro:verify:result",
-        ok: false,
-        entitlements: { pro: false },
-        error: "Please enter a license key.",
-      });
-      return;
-    }
-
-    // Notify UI that verification is in progress
-    figma.ui.postMessage({ type: "pro:verify:state", state: "verifying" });
-
-    try {
-      const instanceId = await getOrCreateInstanceId();
-      const result = activating
-        ? await activateLicenseWithWorker(licenseKey, instanceId)
-        : await verifyLicenseWithWorker(licenseKey, instanceId);
-      const isPro = !!result.entitlements?.pro && !!result.ok && result.activated !== false;
-
-      if (!isPro) {
-        // A failed attempt must not change what the plugin already granted (e.g. a running trial).
-        figma.ui.postMessage({
-          type: "pro:verify:result",
-          ok: false,
-          entitlements: { pro: false },
-          status: result.status ?? null,
-          valid: typeof result.valid === "boolean" ? result.valid : undefined,
-          daysLeft: typeof result.daysLeft === "number" ? result.daysLeft : undefined,
-          error: result.error || failText,
-        });
-        return;
-      }
-
-      entitlements = makeLicenseEntitlements(licenseKey);
-      licenseInfo = {
-        status: result.status ?? null,
-        valid: typeof result.valid === "boolean" ? result.valid : undefined,
-        daysLeft: typeof result.daysLeft === "number" ? result.daysLeft : undefined,
-      };
-      await saveStoredLicenseKey(licenseKey);
-      if (licenseInfo.status !== "trial") await rememberSuccessfulVerify(licenseInfo.status);
-
-      figma.ui.postMessage(buildEntitlementsMessage());
-      figma.ui.postMessage({
-        type: "pro:verify:result",
-        ok: true,
-        isPro: true,
-        entitlements: { pro: true },
-        status: licenseInfo.status,
-        valid: licenseInfo.valid,
-        daysLeft: licenseInfo.daysLeft,
-        licenseKey: storedLicenseKey,
-      });
-    } catch (e) {
-      const message = stringifyMessage(e);
-      figma.ui.postMessage({
-        type: "pro:verify:result",
-        ok: false,
-        entitlements: { pro: false },
-        error: message && message.trim() ? message : failText,
-      });
-    }
-
     return;
   }
 

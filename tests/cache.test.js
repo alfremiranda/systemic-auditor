@@ -70,10 +70,10 @@ const solid = (r, g, b) => ({ type: "SOLID", color: { r, g, b }, opacity: 1, vis
     const b = boot({ nodes, collections: [collection], vars: [colorVar] });
     // Fire 20 concurrent candidate requests (simulating 20 rows all matching in the background).
     await Promise.all(Object.keys(nodes).map(id =>
-      b.send({ type: "pro:autofix:candidates", id, kind: "fill", key: id + ":fill" })
+      b.send({ type: "autofix:candidates", id, kind: "fill", key: id + ":fill" })
     ));
     await tick(10);
-    const replies = b.posted.filter(m => m.type === "pro:autofix:candidates");
+    const replies = b.posted.filter(m => m.type === "autofix:candidates");
     assert.strictEqual(replies.length, 20, "all 20 requests got a reply");
     for (const r of replies) {
       assert.ok(r.candidates.length >= 1, "each reply found the matching variable: " + JSON.stringify(r));
@@ -92,12 +92,12 @@ const solid = (r, g, b) => ({ type: "SOLID", color: { r, g, b }, opacity: 1, vis
     const n1 = makeNode({ id: "n1", type: "RECTANGLE", fills: [solid(1, 0, 0)] });
     const n2 = makeNode({ id: "n2", type: "RECTANGLE", fills: [solid(1, 0, 0)] });
     const b = boot({ nodes: { n1, n2 }, selection: [n1, n2], collections: [collection], vars: [colorVar] });
-    await b.send({ type: "pro:autofix:candidates", id: "n1", kind: "fill", key: "n1:fill" });
+    await b.send({ type: "autofix:candidates", id: "n1", kind: "fill", key: "n1:fill" });
     await tick(5);
     assert.strictEqual(b.callCounts.collections, 1);
     await b.send({ type: "run-audit", options: { scanChildren: false, checkRogueFills: true, checkRogueStrokes: false, checkDetached: false, checkTextStyles: false } });
     await tick(5);
-    await b.send({ type: "pro:autofix:candidates", id: "n2", kind: "fill", key: "n2:fill" });
+    await b.send({ type: "autofix:candidates", id: "n2", kind: "fill", key: "n2:fill" });
     await tick(5);
     assert.strictEqual(b.callCounts.collections, 2, "cache invalidated by run-audit, refetched once for the new scan");
   });

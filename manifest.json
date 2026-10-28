@@ -16,10 +16,7 @@
   "networkAccess": {
     "allowedDomains": [
       "https://fonts.googleapis.com",
-      "https://fonts.gstatic.com",
-      "https://systemicauditor.com",
-      "https://shop.systemicauditor.com",
-      "https://systemic-license.im-94e.workers.dev"
+      "https://fonts.gstatic.com"
     ]
   }
 }

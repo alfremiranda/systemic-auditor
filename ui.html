@@ -67,14 +67,13 @@
       @media (prefers-reduced-motion: reduce){
         .confettiWrap span{ animation: none; display: none; }
       }
-      .proTease{
+      .autofixAll{
         padding: 10px 12px;
         border-top: 1px solid rgba(255,255,255,.06);
         background: rgba(255,255,255,.02);
       }
-      .proBtn{
+      .autofixAllBtn{
         width: 100%;
-        position: relative;
       }
 
       .tooltip{
@@ -103,11 +102,6 @@
         transform: translateX(-50%);
         border: 6px solid transparent;
         border-top-color: rgba(15,23,42,.92);
-      }
-      .proBtnWrap{ position: relative; }
-      .proBtnWrap:hover .tooltip{
-        opacity: 1;
-        transform: translateX(-50%) translateY(-2px);
       }
       @media (prefers-reduced-motion: reduce){
         .tooltip{ transition: none; }
@@ -221,34 +215,7 @@
         padding-bottom: 6px;
         gap: 12px;
       }
-      .trialBanner{
-        margin-top: 8px;
-        padding: 6px 10px;
-        border-radius: 10px;
-        border: 1px solid rgba(163,230,53,.25);
-        background: rgba(24,34,14,.6);
-        color: rgba(248,250,252,.9);
-        display: none;
-        align-items: center;
-        justify-content: space-between;
-        gap: 10px;
-        font-size: 12px;
-        line-height: 16px;
-      }
-      .trialBannerText{
-        font-weight: 600;
-      }
-      .trialBannerLink{
-        border: none;
-        background: none;
-        color: var(--lime);
-        font-weight: 700;
-        font-size: 12px;
-        cursor: pointer;
-        padding: 0;
-      }
-      .trialBannerLink:hover{ text-decoration: underline; }
-      .licenseBtn{
+      .supportBtn{
         height: 32px;
         padding: 0 12px;
         border-radius: 999px;
@@ -258,411 +225,16 @@
         font-family: var(--font-sans);
         font-size: 12px;
         font-weight: 700;
-        letter-spacing: 0.2px;
-        display: inline-flex;
-        align-items: center;
-        gap: 8px;
-        cursor: pointer;
-      }
-      .licenseBtn:hover{ border-color: rgba(255,255,255,.18); background: rgba(255,255,255,.06); }
-      .licenseBtn:active{ transform: translateY(1px); }
-      .licenseDot{
-        width: 6px;
-        height: 6px;
-        border-radius: 999px;
-        background: rgba(255,255,255,.45);
-      }
-      .devToggleRow{
-        margin-top: 8px;
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        font-size: 11px;
-        color: var(--muted-2);
-      }
-      .devToggleLabel{
-        font-weight: 600;
-        letter-spacing: 0.2px;
-      }
-      .devToggleRow .switch{
-        width: 18px;
-        height: 18px;
-        border-radius: 6px;
-        border-width: 1px;
-        margin-top: 0;
-      }
-      .licenseBtn[data-pro="true"]{
-        color: rgba(163,230,53,.95);
-        border-color: rgba(163,230,53,.35);
-        background: rgba(163,230,53,.08);
-      }
-      .licenseBtn[data-pro="true"] .licenseDot{
-        background: rgba(163,230,53,.95);
-      }
-
-      /* Pro modal */
-      .modalOverlay{
-        position: fixed;
-        inset: 0;
-        background: rgba(2,6,23,.55);
-        backdrop-filter: blur(8px);
-        -webkit-backdrop-filter: blur(8px);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        padding: 16px;
-        z-index: 100; /* above the resize handles (40) */
-        opacity: 0;
-        pointer-events: none;
-        transition: opacity 180ms var(--ease);
-      }
-      .modalOverlay.isOpen{
-        opacity: 1;
-        pointer-events: auto;
-      }
-      .modalDialog{
-        width: 100%;
-        max-width: 380px;
-        transform: translateY(8px) scale(0.98);
-        opacity: 0;
-        transition: transform 220ms var(--ease), opacity 220ms var(--ease);
-        border-radius: 14px;
-        border: 1px solid rgba(99,116,139,.55);
-        background: #0c1116;
-        box-shadow: 0 18px 40px rgba(0,0,0,.55), inset 0 0 0 1px rgba(255,255,255,.04);
-        padding: 16px;
-        position: relative;
-      }
-      .modalOverlay.isOpen .modalDialog{
-        transform: translateY(0) scale(1);
-        opacity: 1;
-      }
-      @media (prefers-reduced-motion: reduce){
-        .modalOverlay,
-        .modalDialog{
-          transition: none;
-        }
-      }
-      .proPanel{
-        border: none;
-        background: transparent;
-        border-radius: 12px;
-        padding: 0;
-        display: flex;
-        flex-direction: column;
-        gap: 10px;
-        box-shadow: none;
-        position: relative;
-      }
-      .proModalHeader{
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 12px;
-        padding-right: 28px;
-      }
-      .proModalTitleRow{
-        display: flex;
-        align-items: center;
-        gap: 8px;
-      }
-      .proModalTitle{
-        font-size: 18px;
-        font-family: "Funnel Display", var(--font-sans);
-        font-weight: 800;
-        color: rgba(255,255,255,.92);
-        letter-spacing: -0.2px;
-        line-height: 18px;
-      }
-      .proPill{
-        height: 20px;
-        padding: 0 8px;
-        border-radius: 999px;
-        border: 1px solid rgba(163,230,53,.35);
-        color: rgba(163,230,53,.95);
-        background: rgba(163,230,53,.08);
-        font-weight: 800;
-        font-size: 10px;
-        letter-spacing: 0.6px;
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        line-height: 1;
-      }
-      .proClose{
-        border: none;
-        background: transparent;
-        color: rgba(255,255,255,.7);
-        cursor: pointer;
-        padding: 4px;
-        position: absolute;
-        top: 8px;
-        right: 8px;
-      }
-      .proClose svg{
-        width: 18px;
-        height: 18px;
-        stroke: currentColor;
-        stroke-width: 2;
-        stroke-linecap: round;
-      }
-      .proModalSub{
-        margin-top: 4px;
-        margin-bottom: 20px;
-        font-size: 12px;
-        font-weight: 500;
-        color: rgba(255,255,255,.55);
-        line-height: 16px;
-      }
-      .proFormRow{
-        display: grid;
-        grid-template-columns: 1fr auto;
-        gap: 10px;
-        align-items: center;
-        padding-bottom: 6px;
-      }
-      .proKeyInput{
-        width: 100%;
-        height: 40px;
-        border-radius: 10px;
-        border: 1px solid rgba(255,255,255,.10);
-        background: rgba(255,255,255,.02);
-        color: rgba(255,255,255,.92);
-        padding: 0 12px;
-        font-family: var(--font-sans);
-        font-weight: 600;
-        font-size: 13px;
-        outline: none;
-      }
-      .proKeyInput::placeholder{ color: rgba(255,255,255,.50); font-weight: 600; }
-      .proKeyInput:focus{
-        border-color: rgba(34,211,238,.22);
-        box-shadow: 0 0 0 3px rgba(34,211,238,.12);
-      }
-      .proKeyRow{
-        display: none;
-        align-items: center;
-        gap: 10px;
-      }
-      .proKeyGroup{
-        display: flex;
-        flex-direction: column;
-        gap: 4px;
-        padding-bottom: 6px;
-      }
-      #proPanel[data-state="verified"] .proFormRow{
-        display: none;
-      }
-      .proKeyLabel{
-        font-size: 12px;
-        color: rgba(226,232,240,0.78);
-      }
-      #proPanel[data-state="verified"] .proKeyRow{
-        display: flex;
-      }
-      .proKeyDisplay{
-        height: 40px;
-        border-radius: 10px;
-        border: 1px solid rgba(255,255,255,.10);
-        background: rgba(255,255,255,.02);
-        color: rgba(255,255,255,.92);
-        padding: 0 12px;
-        font-family: var(--font-mono);
-        font-weight: 600;
-        font-size: 12px;
-        outline: none;
-        flex: 1;
-      }
-      .proKeyToggle{
-        width: 40px;
-        height: 40px;
-        border-radius: 10px;
-        border: 1px solid rgba(255,255,255,.12);
-        background: rgba(255,255,255,.06);
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        color: rgba(248,250,252,.9);
-        cursor: pointer;
-      }
-      .proKeyToggle svg{
-        width: 16px;
-        height: 16px;
-      }
-      .proKeyToggle .eyeOn{ display: none; }
-      .proKeyToggle[data-visible="true"] .eyeOn{ display: block; }
-      .proKeyToggle[data-visible="true"] .eyeOff{ display: none; }
-      .proKeyClear{
-        height: 40px;
-        border-radius: 10px;
-        border: 1px solid rgba(255,255,255,.12);
-        background: rgba(255,255,255,.06);
-        color: rgba(255,255,255,.82);
-        font-family: var(--font-sans);
-        font-weight: 700;
-        font-size: 12px;
-        padding: 0 12px;
-        cursor: pointer;
-        width: 100%;
-        display: none;
-        align-items: center;
-        justify-content: center;
-      }
-      #proPanel[data-state="verified"] .proKeyClear{
-        display: inline-flex;
-      }
-      .proVerifyBtn{
-        height: 40px;
-        border-radius: 10px;
-        border: 1px solid rgba(248,250,252,.22);
-        background: #A3E635;
-        color: #0f172a;
-        font-family: var(--font-sans);
-        font-weight: 800;
-        font-size: 13px;
-        letter-spacing: 0.1px;
-        cursor: pointer;
-        padding: 0 14px;
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        gap: 8px;
-      }
-      .proVerifyBtn:hover{ box-shadow: 0 10px 15px -3px rgba(247, 254, 231, 0.15), 0 4px 6px 1px rgba(163, 230, 53, 0.10); }
-      .proVerifyBtn:active{ transform: translateY(1px); }
-      .proVerifyBtn:disabled{
-        opacity: 1;
-        cursor: not-allowed;
-        background: rgba(255,255,255,.06);
-        color: rgba(255,255,255,.62);
-        border-color: rgba(255,255,255,.14);
-        box-shadow: none;
-        transform: none;
-      }
-      .proVerifyBtn .miniSpinner{
-        width: 12px;
-        height: 12px;
-        border-radius: 999px;
-        border: 2px solid rgba(15,23,42,.25);
-        border-top-color: rgba(15,23,42,.85);
-        animation: spin 0.8s linear infinite;
-      }
-      .proVerifyBtn:disabled .miniSpinner{
-        border-color: rgba(255,255,255,.25);
-        border-top-color: rgba(255,255,255,.8);
-      }
-      .proStateRow{
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        font-size: 12px;
-        color: rgba(255,255,255,.55);
-      }
-      .proStateDot{
-        width: 8px;
-        height: 8px;
-        border-radius: 999px;
-        background: rgba(255,255,255,.22);
-        box-shadow: 0 0 0 3px rgba(255,255,255,.06);
-      }
-      .proStateText{
-        font-size: 12px;
-        font-weight: 600;
-        color: rgba(255,255,255,.55);
-        line-height: 16px;
-      }
-      #proPanel[data-state="verifying"] .proStateDot{
-        background: rgba(34,211,238,.90);
-        box-shadow: 0 0 0 3px rgba(34,211,238,.12);
-      }
-      #proPanel[data-state="verified"] .proStateDot{
-        background: rgba(163,230,53,.95);
-        box-shadow: 0 0 0 3px rgba(163,230,53,.12);
-      }
-      #proPanel[data-state="verified"] .proStateRow{
-        margin-top: 12px;
-        margin-bottom: 12px;
-        padding: 12px 14px;
-        border-radius: 12px;
-        background: rgba(163,230,53,.12);
-        border: 1px solid rgba(163,230,53,.45);
-      }
-      #proPanel[data-state="verified"] .proStateText{
-        color: rgba(232,255,206,.92);
-        font-size: 13px;
-        font-weight: 700;
-        letter-spacing: -0.1px;
-      }
-      #proPanel[data-state="verified"] .proStateDot{
-        width: 10px;
-        height: 10px;
-        box-shadow: 0 0 0 4px rgba(163,230,53,.16);
-      }
-      #proPanel[data-state="trial"] .proStateDot{
-        background: rgba(163,230,53,.95);
-        box-shadow: 0 0 0 3px rgba(163,230,53,.12);
-      }
-      #proPanel[data-state="trial"] .proStateRow{
-        margin-top: 12px;
-        margin-bottom: 12px;
-        padding: 12px 14px;
-        border-radius: 12px;
-        background: rgba(163,230,53,.12);
-        border: 1px solid rgba(163,230,53,.45);
-      }
-      #proPanel[data-state="trial"] .proStateText{
-        color: rgba(232,255,206,.92);
-        font-size: 13px;
-        font-weight: 700;
-        letter-spacing: -0.1px;
-      }
-      #proPanel[data-state="trial"] .proStateDot{
-        width: 10px;
-        height: 10px;
-        box-shadow: 0 0 0 4px rgba(163,230,53,.16);
-      }
-      #proPanel[data-state="error"] .proStateDot{
-        background: rgba(248,113,113,.95);
-        box-shadow: 0 0 0 3px rgba(248,113,113,.12);
-      }
-      #proPanel[data-state="verified"] .proFormRow{ display: none; }
-      .proUpsell{
-        margin-top: 6px;
-        padding-top: 12px;
-        border-top: 1px solid rgba(255,255,255,.10);
-        display: flex;
-        flex-direction: column;
-        gap: 8px;
-      }
-      .proUpsellHeader{
-        font-size: 13px;
-        font-weight: 800;
-        color: rgba(255,255,255,.92);
-        letter-spacing: -0.1px;
-        line-height: 16px;
-      }
-      .proUpsellCopy{
-        font-size: 12px;
-        font-weight: 500;
-        color: rgba(255,255,255,.58);
-        line-height: 16px;
-      }
-      .proUpsellCta{
-        margin-top: 4px;
-        height: 36px;
-        border-radius: 8px;
-        border: 1px solid rgba(255,255,255,.14);
-        background: rgba(255,255,255,.05);
-        color: rgba(255,255,255,.92);
-        font-family: var(--font-sans);
-        font-weight: 800;
-        font-size: 12px;
         cursor: pointer;
         display: inline-flex;
         align-items: center;
-        justify-content: center;
+        gap: 6px;
+        white-space: nowrap;
       }
-      #proPanel[data-state="verified"] #proUpsell{ display: none; }
+      .supportBtn[hidden]{ display: none; }
+      .supportBtn svg{ width: 14px; height: 14px; color: var(--red); }
+      .supportBtn:hover{ border-color: rgba(255,255,255,.18); background: rgba(255,255,255,.07); color: #fff; }
+      .supportBtn:active{ transform: translateY(1px); }
 
       /* Buttons */
       .actions {
@@ -785,12 +357,7 @@
       .fixBtn:focus-visible,
       .fixTrigger:focus-visible,
       .fixOption:focus-visible,
-      .proKeyDisplay:focus-visible,
-      .proKeyToggle:focus-visible,
-      .proKeyClear:focus-visible,
-      .proVerifyBtn:focus-visible,
-      .proUpsellCta:focus-visible,
-      .proClose:focus-visible,
+      .supportBtn:focus-visible,
       .statCard:focus-visible,
       .sectionHeader:focus-visible,
       .row:focus-visible,
@@ -2120,23 +1687,12 @@
         <div class="header">
           <div class="headerBar">
             <h1>Systemic Auditor</h1>
-            <button class="licenseBtn" id="openLicenseBtn" type="button" data-pro="false" title="Manage Systemic Pro">
-              <span class="licenseDot" aria-hidden="true"></span>
-              <span id="openLicenseBtnLabel">Activate Pro</span>
+            <button class="supportBtn" id="supportBtn" type="button" hidden>
+              <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 21s-7.5-4.6-9.6-9.2C1 8.4 3 5 6.4 5c1.9 0 3.2 1 3.6 1.7C10.4 6 11.7 5 13.6 5 17 5 19 8.4 17.6 11.8 15.5 16.4 12 21 12 21z"/></svg>
+              <span>Support</span>
             </button>
           </div>
           <p>Scan your selection for design-system debt.</p>
-          <div class="devToggleRow" id="proDebugRow" title="Toggle Pro for testing" style="display:none;">
-            <span class="devToggleLabel">Test Pro</span>
-            <label class="switch" id="proDebugSwitch" data-on="false">
-              <input type="checkbox" id="proDebugToggle" />
-              <span class="knob"></span>
-            </label>
-          </div>
-        </div>
-        <div class="trialBanner" id="trialBanner" aria-live="polite">
-          <span class="trialBannerText" id="trialBannerText">Trial Active: 7 days remaining.</span>
-          <button class="trialBannerLink" id="trialBannerLink" type="button">Upgrade to Pro</button>
         </div>
 
         <div class="actions">
@@ -2389,11 +1945,8 @@
                 </div>
                 <button class="autofixInlineCancel" id="autofixInlineCancel" type="button">Cancel Auto-fix</button>
               </div>
-                <div class="proTease">
-                  <div class="proBtnWrap">
-                    <button class="btn btnPrimary proBtn" type="button" aria-disabled="true" id="proAutofixBtn"><span class="btnIcon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2L14.2 9.8L22 12L14.2 14.2L12 22L9.8 14.2L2 12L9.8 9.8Z"/></svg></span><span class="btnLabel">Auto-fix all issues</span></button>
-                    <div class="tooltip">Unlock Auto-fix with Systemic Pro.</div>
-                  </div>
+                <div class="autofixAll">
+                  <button class="btn btnPrimary autofixAllBtn" type="button" id="autofixAllBtn"><span class="btnIcon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2L14.2 9.8L22 12L14.2 14.2L12 22L9.8 14.2L2 12L9.8 9.8Z"/></svg></span><span class="btnLabel">Auto-fix all issues</span></button>
                 </div>
               </div>
             </div>
@@ -2411,75 +1964,6 @@
     <div class="resize-handle corner" data-dir="ne" title="Resize"></div>
     <div class="resize-handle corner" data-dir="sw" title="Resize"></div>
     <div class="resize-handle corner" data-dir="se" title="Resize"></div>
-
-    <!-- Pro license modal -->
-    <div class="modalOverlay" id="proModal" style="display:none;" aria-hidden="true">
-      <div class="modalDialog" role="dialog" aria-modal="true" aria-label="Systemic Pro license">
-        <div class="proPanel" id="proPanel" data-state="idle">
-          <div class="proModalHeader">
-            <div>
-              <div class="proModalTitleRow">
-                <div class="proModalTitle">Systemic Auditor</div>
-                <div class="proPill" title="Pro">PRO</div>
-              </div>
-              <div class="proModalSub" id="proPanelSub">Pro features are unlocked.</div>
-            </div>
-          </div>
-
-          <div class="proKeyGroup">
-            <label class="proKeyLabel" for="proKeyInput">License Key</label>
-            <div class="proFormRow" id="proFormRow">
-              <input
-                class="proKeyInput"
-                id="proKeyInput"
-                type="password"
-                placeholder="Enter License Key"
-                autocomplete="off"
-                spellcheck="false"
-              />
-              <button class="proVerifyBtn" id="proVerifyBtn" type="button">
-                <span class="btnLabel">Activate</span>
-              </button>
-            </div>
-            <div class="proKeyRow" id="proKeyRow" data-has-key="false">
-              <input
-                class="proKeyDisplay"
-                id="proKeyDisplay"
-                type="password"
-                aria-label="License key"
-                readonly
-                spellcheck="false"
-              />
-              <button class="proKeyToggle" id="proKeyToggle" type="button" aria-label="Show license key" aria-pressed="false" data-visible="false">
-                <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
-                  <path class="eyeOff" d="M10.1167 5.5499C10.4389 5.87212 10.675 6.23879 10.825 6.6499C10.975 7.06101 11.0278 7.48324 10.9834 7.91657C10.9834 8.08324 10.9223 8.2249 10.8 8.34157C10.6778 8.45824 10.5334 8.51657 10.3667 8.51657C10.2 8.51657 10.0584 8.45824 9.94171 8.34157C9.82504 8.2249 9.76671 8.08324 9.76671 7.91657C9.82226 7.62768 9.8056 7.3499 9.71671 7.08324C9.62782 6.81657 9.48893 6.58879 9.30004 6.3999C9.11115 6.21101 8.88338 6.06657 8.61671 5.96657C8.35004 5.86657 8.06671 5.84435 7.76671 5.8999C7.60004 5.8999 7.45837 5.83879 7.34171 5.71657C7.22504 5.59435 7.16671 5.4499 7.16671 5.28324C7.16671 5.11657 7.22504 4.9749 7.34171 4.85824C7.45837 4.74157 7.60004 4.68324 7.76671 4.68324C8.18893 4.63879 8.6056 4.69157 9.01671 4.84157C9.42782 4.99157 9.79449 5.22768 10.1167 5.5499ZM8.00004 3.9999C7.78893 3.9999 7.58337 4.00824 7.38337 4.0249C7.18337 4.04157 6.98337 4.07212 6.78337 4.11657C6.59449 4.1499 6.42504 4.12212 6.27504 4.03324C6.12504 3.94435 6.02226 3.81101 5.96671 3.63324C5.91115 3.45546 5.9306 3.28324 6.02504 3.11657C6.11949 2.9499 6.2556 2.8499 6.43337 2.81657C6.68893 2.76101 6.94726 2.72212 7.20837 2.6999C7.46949 2.67768 7.73337 2.66657 8.00004 2.66657C9.52226 2.66657 10.9139 3.06657 12.175 3.86657C13.4362 4.66657 14.4 5.74435 15.0667 7.0999C15.1112 7.18879 15.1445 7.28046 15.1667 7.3749C15.1889 7.46935 15.2 7.56657 15.2 7.66657C15.2 7.76657 15.1917 7.86379 15.175 7.95824C15.1584 8.05268 15.1278 8.14435 15.0834 8.23324C14.8834 8.67768 14.6362 9.09435 14.3417 9.48324C14.0473 9.87212 13.7223 10.2277 13.3667 10.5499C13.2334 10.6721 13.0778 10.7221 12.9 10.6999C12.7223 10.6777 12.5778 10.5888 12.4667 10.4332C12.3556 10.2777 12.3084 10.1082 12.325 9.9249C12.3417 9.74157 12.4167 9.58879 12.55 9.46657C12.8167 9.21101 13.0612 8.93324 13.2834 8.63324C13.5056 8.33324 13.7 8.01101 13.8667 7.66657C13.3112 6.54435 12.5084 5.65268 11.4584 4.99157C10.4084 4.33046 9.2556 3.9999 8.00004 3.9999ZM8.00004 12.6666C6.51115 12.6666 5.15004 12.2638 3.91671 11.4582C2.68337 10.6527 1.71115 9.59435 1.00004 8.28324C0.944485 8.19435 0.902818 8.09712 0.875041 7.99157C0.847263 7.88601 0.833374 7.77768 0.833374 7.66657C0.833374 7.55546 0.844485 7.4499 0.866707 7.3499C0.88893 7.2499 0.927818 7.1499 0.983374 7.0499C1.2056 6.60546 1.46393 6.18046 1.75837 5.7749C2.05282 5.36935 2.38893 4.9999 2.76671 4.66657L1.38337 3.26657C1.26115 3.13324 1.20282 2.9749 1.20837 2.79157C1.21393 2.60824 1.27782 2.45546 1.40004 2.33324C1.52226 2.21101 1.67782 2.1499 1.86671 2.1499C2.0556 2.1499 2.21115 2.21101 2.33337 2.33324L13.6667 13.6666C13.7889 13.7888 13.8528 13.9416 13.8584 14.1249C13.8639 14.3082 13.8 14.4666 13.6667 14.5999C13.5445 14.7221 13.3889 14.7832 13.2 14.7832C13.0112 14.7832 12.8556 14.7221 12.7334 14.5999L10.4 12.2999C10.0112 12.4221 9.61671 12.5138 9.21671 12.5749C8.81671 12.636 8.41115 12.6666 8.00004 12.6666ZM3.70004 5.5999C3.37782 5.88879 3.08337 6.20546 2.81671 6.5499C2.55004 6.89435 2.32226 7.26657 2.13337 7.66657C2.68893 8.78879 3.49171 9.68046 4.54171 10.3416C5.59171 11.0027 6.74449 11.3332 8.00004 11.3332C8.22226 11.3332 8.43893 11.3193 8.65004 11.2916C8.86115 11.2638 9.07782 11.2332 9.30004 11.1999L8.70004 10.5666C8.57782 10.5999 8.46115 10.6249 8.35004 10.6416C8.23893 10.6582 8.12226 10.6666 8.00004 10.6666C7.16671 10.6666 6.45837 10.3749 5.87504 9.79157C5.29171 9.20824 5.00004 8.4999 5.00004 7.66657C5.00004 7.54435 5.00837 7.42768 5.02504 7.31657C5.04171 7.20546 5.06671 7.08879 5.10004 6.96657L3.70004 5.5999Z" fill="#F8FAFC"/>
-                  <path class="eyeOn" d="M7.99998 10.6667C8.83331 10.6667 9.54164 10.3751 10.125 9.79175C10.7083 9.20841 11 8.50008 11 7.66675C11 6.83341 10.7083 6.12508 10.125 5.54175C9.54164 4.95841 8.83331 4.66675 7.99998 4.66675C7.16664 4.66675 6.45831 4.95841 5.87498 5.54175C5.29164 6.12508 4.99998 6.83341 4.99998 7.66675C4.99998 8.50008 5.29164 9.20841 5.87498 9.79175C6.45831 10.3751 7.16664 10.6667 7.99998 10.6667ZM7.99998 9.46675C7.49998 9.46675 7.07498 9.29175 6.72498 8.94175C6.37498 8.59175 6.19998 8.16675 6.19998 7.66675C6.19998 7.16675 6.37498 6.74175 6.72498 6.39175C7.07498 6.04175 7.49998 5.86675 7.99998 5.86675C8.49998 5.86675 8.92497 6.04175 9.27497 6.39175C9.62497 6.74175 9.79998 7.16675 9.79998 7.66675C9.79998 8.16675 9.62497 8.59175 9.27497 8.94175C8.92497 9.29175 8.49998 9.46675 7.99998 9.46675ZM7.99998 12.6667C6.51109 12.6667 5.15275 12.2667 3.92498 11.4667C2.6972 10.6667 1.72775 9.61119 1.01664 8.30008C0.961087 8.20008 0.91942 8.0973 0.891642 7.99175C0.863864 7.88619 0.849976 7.77786 0.849976 7.66675C0.849976 7.55564 0.863864 7.4473 0.891642 7.34175C0.91942 7.23619 0.961087 7.13341 1.01664 7.03341C1.72775 5.7223 2.6972 4.66675 3.92498 3.86675C5.15275 3.06675 6.51109 2.66675 7.99998 2.66675C9.48886 2.66675 10.8472 3.06675 12.075 3.86675C13.3028 4.66675 14.2722 5.7223 14.9833 7.03341C15.0389 7.13341 15.0805 7.23619 15.1083 7.34175C15.1361 7.4473 15.15 7.55564 15.15 7.66675C15.15 7.77786 15.1361 7.88619 15.1083 7.99175C15.0805 8.0973 15.0389 8.20008 14.9833 8.30008C14.2722 9.61119 13.3028 10.6667 12.075 11.4667C10.8472 12.2667 9.48886 12.6667 7.99998 12.6667ZM7.99998 11.3334C9.25553 11.3334 10.4083 11.0029 11.4583 10.3417C12.5083 9.68064 13.3111 8.78897 13.8666 7.66675C13.3111 6.54453 12.5083 5.65286 11.4583 4.99175C10.4083 4.33064 9.25553 4.00008 7.99998 4.00008C6.74442 4.00008 5.59164 4.33064 4.54164 4.99175C3.49164 5.65286 2.68886 6.54453 2.13331 7.66675C2.68886 8.78897 3.49164 9.68064 4.54164 10.3417C5.59164 11.0029 6.74442 11.3334 7.99998 11.3334Z" fill="#F8FAFC"/>
-                </svg>
-              </button>
-            </div>
-            <button class="proKeyClear" id="proKeyClear" type="button">Remove license from this device</button>
-            <div class="proStateRow" id="proVerifyState" data-state="idle" role="status">
-              <span class="proStateDot" aria-hidden="true"></span>
-              <span class="proStateText" id="proStateText">Not verified</span>
-            </div>
-          </div>
-
-          <div class="proUpsell" id="proUpsell">
-            <div class="proUpsellHeader">Upgrade to Systemic Pro</div>
-            <div class="proUpsellCopy">Stop fixing design errors manually. Unlock the Auto-fix engine to resolve systemic inconsistencies and compliance issues in a single click.</div>
-            <button class="proUpsellCta" id="proUpsellCta" type="button">
-              <span class="btnLabel">Get Pro Access</span>
-            </button>
-          </div>
-        </div>
-
-        <button class="proClose" id="closeProModal" type="button" aria-label="Close">
-          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-            <path d="M6 6L18 18M18 6L6 18"/>
-          </svg>
-        </button>
-      </div>
-    </div>
 
     <script>
       const $ = (id) => document.getElementById(id);
@@ -2504,27 +1988,14 @@
 
       // The Auto-fix button's sparkle icon only makes sense in its idle "Auto-fix all N issues" state —
       // hide it whenever the label switches to a progress/confirm string (those already say what's happening).
-      function setAutofixBtnIcon(proBtn, show){
-        const icon = proBtn && proBtn.querySelector(".btnIcon");
+      function setAutofixBtnIcon(allBtn, show){
+        const icon = allBtn && allBtn.querySelector(".btnIcon");
         if (icon) icon.style.display = show ? "inline-flex" : "none";
       }
 
-      const PRO_BUY_URL = "https://www.systemicauditor.com/";
-      const PRO_CHECKOUT_URL = "https://shop.systemicauditor.com/checkout/buy/ed3ae526-aaf8-482d-a0de-d12852511261";
+      // Donation link for the header "Support" button. Leave empty to hide the button.
+      const SUPPORT_URL = "https://ko-fi.com/alfremiranda";
 
-      const proState = {
-        entitlements: {},
-        verified: false,
-        verifying: false,
-        checking: false,
-        error: null,
-        licenseKey: "",
-        pendingLicenseKey: "",
-        licenseKeyLast4: "",
-        status: null,
-        valid: null,
-        daysLeft: null,
-      };
       const autofixState = {
         candidatesByKey: {},
         recommendedByKey: {},
@@ -2663,74 +2134,10 @@
         return summary;
       }
 
-      function setProDebugToggle(isPro){
-        const toggle = document.getElementById("proDebugToggle");
-        const switchEl = document.getElementById("proDebugSwitch");
-        if (!toggle || !switchEl) return;
-        toggle.checked = !!isPro;
-        switchEl.dataset.on = String(!!isPro);
-      }
-
-      function openProPurchasePage(url){
-        // Open via the plugin host so it opens only once and works consistently.
-        // (Avoid window.open fallback, which can cause double-open when host also opens.)
-        const target = url || PRO_BUY_URL;
-        parent.postMessage({ pluginMessage: { type: "open-external", url: target } }, "*");
-      }
-
-      let _proModalOpener = null;
-
-      function openProModal(){
-        const modal = document.getElementById("proModal");
-        if (!modal) return;
-        _proModalOpener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-        // Everything behind the dialog stops receiving focus/clicks while it is open (focus trap).
-        const shell = document.querySelector(".shell");
-        if (shell) shell.inert = true;
-        modal.style.display = "flex";
-        modal.setAttribute("aria-hidden", "false");
-        requestAnimationFrame(() => {
-          modal.classList.add("isOpen");
-        });
-        const input = document.getElementById("proKeyInput");
-        if (input) {
-          try { input.focus(); } catch (e) {}
-        }
-        scheduleResizeToFit(60);
-      }
-
-      function closeProModal(){
-        const modal = document.getElementById("proModal");
-        if (!modal) return;
-        if (modal.getAttribute("aria-hidden") === "true" || modal.style.display === "none") return;
-        modal.classList.remove("isOpen");
-        modal.setAttribute("aria-hidden", "true");
-        const shell = document.querySelector(".shell");
-        if (shell) shell.inert = false;
-        if (_proModalOpener && document.contains(_proModalOpener)) {
-          try { _proModalOpener.focus(); } catch (e) {}
-        }
-        _proModalOpener = null;
-        window.setTimeout(() => {
-          if (!modal.classList.contains("isOpen")) {
-            modal.style.display = "none";
-            scheduleResizeToFit(80);
-          }
-        }, 220);
-      }
-
-      function setProHeaderButton(isPro, isChecking = false){
-        const btn = document.getElementById("openLicenseBtn");
-        const label = document.getElementById("openLicenseBtnLabel");
-        const isTrial = proState.status === "trial" && isPro;
-        const labelText = isChecking
-          ? "Checking..."
-          : (isTrial ? "Free Trial: ON" : (isPro ? "Pro active" : "Activate Pro"));
-        if (btn) {
-          btn.dataset.pro = String(!!isPro);
-          btn.disabled = !!isChecking;
-        }
-        if (label) label.textContent = labelText;
+      function openExternalUrl(url){
+        if (!url) return;
+        // Open via the plugin host (figma.openExternal) so it opens exactly once.
+        parent.postMessage({ pluginMessage: { type: "open-external", url } }, "*");
       }
 
       function updateAutofixRow(key, dropdownEl, triggerEl, menuEl, fixBtnEl){
@@ -2761,12 +2168,10 @@
 
         const prevScrollTop = wasOpen ? menu.scrollTop : 0;
         menu.innerHTML = "";
-        // Free users see the real recommendation, read-only — the trigger/Fix button just stay
-        // disabled (below) rather than hiding the candidate behind a generic "Unlock Pro" string.
-        trigger.disabled = !proState.verified;
+        trigger.disabled = false;
 
         if (!candidates.length) {
-          if (valueEl) valueEl.textContent = !proState.verified ? "Unlock Pro to auto-fix" : (kind === "text" ? "No matching styles" : "No matching variables");
+          if (valueEl) valueEl.textContent = kind === "text" ? "No matching styles" : "No matching variables";
           if (swatchEl) {
             swatchEl.style.background = "";
             swatchEl.style.display = "none";
@@ -2879,7 +2284,7 @@
           swatchEl.style.background = color;
           swatchEl.style.display = color ? "inline-block" : "none";
         }
-        fixBtn.disabled = !selectedId || !proState.verified;
+        fixBtn.disabled = !selectedId;
         if (wasOpen) {
           dropdown.classList.add("isOpen");
           if (rowEl) rowEl.classList.add("isOpen");
@@ -3020,8 +2425,7 @@
         });
       }
 
-      // Candidate lookup is read-only (nothing is applied), so free users get it too — as a
-      // preview of what Pro would fix. Only the "Fix"/"Auto-fix all" mutations stay Pro-gated.
+      // Candidate lookup is read-only; nothing is applied until the row's Fix or "Auto-fix all".
       function scheduleAutofixQueue(){
         if (autofixQueue.timer) clearTimeout(autofixQueue.timer);
         autofixQueue.timer = window.setTimeout(rebuildAutofixQueue, 80);
@@ -3076,12 +2480,12 @@
         const done = Math.min(autofixState.preloadDone || 0, total);
         const pct = total > 0 ? Math.round((done / total) * 100) : 0;
         setAutofixInline(true, `Preparing fixes ${done}/${total}...`, pct);
-        const proBtn = document.getElementById('proAutofixBtn');
-        if (proBtn) {
-          const label = proBtn.querySelector('.btnLabel');
+        const allBtn = document.getElementById('autofixAllBtn');
+        if (allBtn) {
+          const label = allBtn.querySelector('.btnLabel');
           if (label) label.textContent = "⏳ Preparing fixes...";
-          setAutofixBtnIcon(proBtn, false);
-          proBtn.disabled = true;
+          setAutofixBtnIcon(allBtn, false);
+          allBtn.disabled = true;
         }
       }
 
@@ -3150,7 +2554,7 @@
           }
           autofixState.requestedByKey[key] = true;
           autofixState.preloadInFlight += 1;
-          parent.postMessage({ pluginMessage: { type: "pro:autofix:candidates", id: issueId, kind, key } }, "*");
+          parent.postMessage({ pluginMessage: { type: "autofix:candidates", id: issueId, kind, key } }, "*");
         }
         if (autofixState.preloadInFlight === 0 && autofixState.preloadRemaining.size === 0) {
           autofixState.preloadingAll = false;
@@ -3208,7 +2612,7 @@
           autofixQueue.inFlight.add(key);
           markCandidatePending(key);
           setAutofixLoading(key, dropdown, trigger, menu, fixBtn);
-          parent.postMessage({ pluginMessage: { type: "pro:autofix:candidates", id: issueId, kind, key } }, "*");
+          parent.postMessage({ pluginMessage: { type: "autofix:candidates", id: issueId, kind, key } }, "*");
         }
       }
 
@@ -3276,249 +2680,14 @@
         menu.style.top = `${Math.max(8, Math.round(top))}px`;
       }
 
-      function setVerifyUI(stateKey, msg){
-        const panel = document.getElementById("proPanel");
-        const st = document.getElementById("proVerifyState");
-        const tx = document.getElementById("proStateText");
-        const btn = document.getElementById("proVerifyBtn");
-        const input = document.getElementById("proKeyInput");
-
-        const safeText = (value) => {
-          if (typeof value === "string") {
-            return value === "[object Object]" ? "Could not verify license. Please try again." : value;
-          }
-          if (value == null) return "";
-          try { return JSON.stringify(value); } catch (e) { return String(value); }
-        };
-
-        if (panel) panel.dataset.state = stateKey;
-        if (st) st.dataset.state = stateKey;
-        if (tx) tx.textContent = safeText(msg);
-
-        if (btn) {
-          if (stateKey === "verifying") {
-            btn.disabled = true;
-            btn.innerHTML = `<span class="miniSpinner" aria-hidden="true"></span><span class="btnLabel">Verifying</span>`;
-          } else {
-            btn.disabled = false;
-            btn.innerHTML = `<span class="btnLabel">Activate</span>`;
-          }
-        }
-
-        if (input) input.disabled = (stateKey === "verifying");
-      }
-
-      function updateTrialBanner(){
-        const banner = document.getElementById("trialBanner");
-        const text = document.getElementById("trialBannerText");
-        const isTrial = proState.status === "trial" && proState.verified;
-        if (banner) banner.style.display = isTrial ? "flex" : "none";
-        if (text && isTrial) {
-          const days = typeof proState.daysLeft === "number" ? proState.daysLeft : 0;
-          const unit = days === 1 ? "day" : "days";
-          text.textContent = `Trial active: ${days} ${unit} remaining.`;
-        }
-      }
-
-      function updateTrialMessaging(){
-        const sub = document.getElementById("proPanelSub");
-        if (!sub) return;
-        if (proState.status === "trial") {
-          sub.textContent = "Your free trial is active.";
-        } else if (proState.verified) {
-          sub.textContent = "Pro features are unlocked.";
-        } else {
-          sub.textContent = "Activate a license key to unlock Pro features.";
-        }
-      }
-
-      function setProKeyDisplay(key, last4){
-        const row = document.getElementById("proKeyRow");
-        const input = document.getElementById("proKeyDisplay");
-        const toggle = document.getElementById("proKeyToggle");
-        const inputFallback = document.getElementById("proKeyInput");
-        const inputValue = inputFallback && inputFallback.value ? String(inputFallback.value).trim() : "";
-        const fallback = proState && proState.pendingLicenseKey ? String(proState.pendingLicenseKey) : inputValue;
-        const value = key ? String(key) : fallback;
-        const hasKey = !!value;
-        if (row) row.dataset.hasKey = String(hasKey);
-        if (input) {
-          input.value = value;
-          input.dataset.full = value;
-          input.placeholder = value ? "" : "License key unavailable";
-          input.type = "password"; // stays masked until the eye button is used
-        }
-        if (toggle) {
-          toggle.dataset.visible = "false";
-          toggle.setAttribute("aria-pressed", "false");
-          toggle.setAttribute("aria-label", "Show license key");
-          toggle.disabled = !hasKey;
-        }
-      }
-
-      function setProLockedUI(isPro){
-        const proBtn = document.getElementById("proAutofixBtn");
-        if (proBtn) {
-          proBtn.setAttribute("aria-disabled", String(!isPro));
-          proBtn.disabled = false;
-        }
-
-        const tip = document.querySelector(".proBtnWrap .tooltip");
-        if (tip) tip.style.display = isPro ? "none" : "";
-
-        const upsell = document.getElementById("proUpsell");
-        if (upsell) {
-          const showUpsell = !isPro || proState.status === "trial";
-          upsell.style.display = showUpsell ? "" : "none";
-        }
-
-        if (!proState.checking) setProHeaderButton(!!isPro, false);
-      }
-
-      function requestVerifyLicense(){
-        const input = document.getElementById("proKeyInput");
-        const btn = document.getElementById("proVerifyBtn");
-        const key = (input && input.value ? String(input.value).trim() : "");
-
-        if (!key) {
-          setVerifyUI("error", "Enter a license key.");
-          return;
-        }
-
-        proState.pendingLicenseKey = key;
-        proState.verifying = true;
-        proState.error = null;
-        if (btn) btn.disabled = true;
-        setVerifyUI("verifying", "Activating…");
-
-        parent.postMessage({ pluginMessage: { type: "pro:activate", key } }, "*");
-      }
-
-      function bindProModalUI(){
-        const openBtn = document.getElementById("openLicenseBtn");
-        const closeBtn = document.getElementById("closeProModal");
-        const modal = document.getElementById("proModal");
-        const verifyBtn = document.getElementById("proVerifyBtn");
-        const keyInput = document.getElementById("proKeyInput");
-        const keyDisplay = document.getElementById("proKeyDisplay");
-        const keyToggle = document.getElementById("proKeyToggle");
-        const keyClear = document.getElementById("proKeyClear");
-        const upsellCta = document.getElementById("proUpsellCta");
-
-        if (openBtn && !openBtn.dataset.bound){
-          openBtn.addEventListener("click", (e) => {
-            e.preventDefault();
-            openProModal();
-          });
-          openBtn.dataset.bound = "true";
-        }
-
-        if (closeBtn && !closeBtn.dataset.bound){
-          closeBtn.addEventListener("click", (e) => {
-            e.preventDefault();
-            closeProModal();
-          });
-          closeBtn.dataset.bound = "true";
-        }
-
-        if (modal && !modal.dataset.bound){
-          modal.addEventListener("click", (e) => {
-            if (e.target === modal) closeProModal();
-          });
-          modal.dataset.bound = "true";
-        }
-
-        if (!window.__proEscBound){
-          window.addEventListener("keydown", (e) => {
-            if (e.key === "Escape") closeProModal();
-          });
-          window.__proEscBound = true;
-        }
-
-        if (verifyBtn && !verifyBtn.dataset.bound){
-          verifyBtn.addEventListener("click", (e) => {
-            e.preventDefault();
-            requestVerifyLicense();
-          });
-          verifyBtn.dataset.bound = "true";
-        }
-
-        if (upsellCta && !upsellCta.dataset.bound){
-          upsellCta.addEventListener("click", (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            openProPurchasePage(PRO_CHECKOUT_URL);
-          });
-          upsellCta.dataset.bound = "true";
-        }
-
-        if (keyInput && !keyInput.dataset.bound){
-          keyInput.addEventListener("keydown", (e) => {
-            if (e.key === "Enter") {
-              e.preventDefault();
-              requestVerifyLicense();
-            }
-          });
-          keyInput.dataset.bound = "true";
-        }
-
-        if (keyToggle && !keyToggle.dataset.bound){
-          keyToggle.addEventListener("click", (e) => {
-            e.preventDefault();
-            if (!keyDisplay) return;
-            const isVisible = keyToggle.dataset.visible === "true";
-            const nextVisible = !isVisible;
-            keyDisplay.value = keyDisplay.dataset.full || keyDisplay.value;
-            keyDisplay.type = nextVisible ? "text" : "password";
-            keyToggle.dataset.visible = String(nextVisible);
-            keyToggle.setAttribute("aria-pressed", String(nextVisible));
-            keyToggle.setAttribute("aria-label", nextVisible ? "Hide license key" : "Show license key");
-          });
-          keyToggle.dataset.bound = "true";
-        }
-
-        if (keyClear && !keyClear.dataset.bound){
-          keyClear.addEventListener("click", (e) => {
-            e.preventDefault();
-            if (keyInput) keyInput.value = "";
-            proState.pendingLicenseKey = "";
-            proState.licenseKey = "";
-            proState.licenseKeyLast4 = "";
-            proState.verified = false;
-            proState.verifying = false;
-            proState.error = null;
-            setVerifyUI("idle", "");
-            setProKeyDisplay("", "");
-            parent.postMessage({ pluginMessage: { type: "pro:clearLicense" } }, "*");
-          });
-          keyClear.dataset.bound = "true";
-        }
-
-        setProHeaderButton(!!proState.verified, proState.checking);
-      }
-
-      function bindTrialBannerLink(){
-        const link = document.getElementById("trialBannerLink");
-        if (!link || link.dataset.bound) return;
-        link.addEventListener("click", (e) => {
+      function bindSupportLink(){
+        const btn = document.getElementById("supportBtn");
+        if (!btn) return;
+        btn.hidden = !SUPPORT_URL;
+        btn.addEventListener("click", (e) => {
           e.preventDefault();
-          openProPurchasePage(PRO_BUY_URL);
+          openExternalUrl(SUPPORT_URL);
         });
-        link.dataset.bound = "true";
-      }
-
-      function bindProDebugToggle(){
-        const toggle = document.getElementById("proDebugToggle");
-        const switchEl = document.getElementById("proDebugSwitch");
-        if (!toggle || !switchEl || switchEl.dataset.bound) return;
-
-        toggle.addEventListener("change", () => {
-          const isPro = !!toggle.checked;
-          switchEl.dataset.on = String(isPro);
-          parent.postMessage({ pluginMessage: { type: "pro:debug:set", isPro } }, "*");
-        });
-
-        switchEl.dataset.bound = "true";
       }
 
       // --- Auto-resize UI window to fit visible content ---
@@ -3864,10 +3033,6 @@
           fixBtn.addEventListener("click", (e) => {
             e.preventDefault();
             e.stopPropagation();
-            if (!proState.verified) {
-              openProPurchasePage(PRO_CHECKOUT_URL);
-              return;
-            }
             if (!isDetached) {
               const value = dropdown ? dropdown.dataset.value || "" : "";
               if (!value) return;
@@ -3877,7 +3042,7 @@
             fixBtn.textContent = isDetached ? "Relinking…" : "Fixing…";
             parent.postMessage({
               pluginMessage: {
-                type: "pro:autofix:apply",
+                type: "autofix:apply",
                 id: issue.id,
                 issueType: issue.type,
                 candidateId: isDetached ? "" : (dropdown ? dropdown.dataset.value || "" : ""),
@@ -3886,9 +3051,7 @@
             }, "*");
           });
 
-          // Build the dropdown/relink-pill for everyone now — free users see the real
-          // recommendation read-only (updateAutofixRow / the fixBtn Pro-gate below still block
-          // the actual mutation). Kept as a named flag since several checks below read it.
+          // Kept as a named flag since several checks below read it.
           const showAutofixUI = true;
           const fixRow = document.createElement("div");
           fixRow.className = "fixRow";
@@ -4010,8 +3173,6 @@
               dropdown.dataset.value = "";
               fixBtn.disabled = true;
             } else {
-              // Free and Pro both request/show the real candidate; updateAutofixRow() and the
-              // fixBtn gate above keep it read-only (disabled trigger, disabled Fix) when free.
               const cached = autofixState.candidatesByKey[issueKey];
               if (Array.isArray(cached)) {
                 updateAutofixRow(issueKey, dropdown, trigger, menu, fixBtn);
@@ -4022,25 +3183,13 @@
             }
           }
 
-          if (!proState.verified) {
-            fixBtn.disabled = true;
-          } else if (isDetached) {
+          if (isDetached) {
             fixBtn.disabled = !canAutofix;
           }
 
           const fixWrap = document.createElement("div");
           fixWrap.className = "fixBtnWrap";
-          fixWrap.dataset.locked = String(!proState.verified);
-          const tip = document.createElement("div");
-          tip.className = "tooltip";
-          tip.textContent = "Unlock with Pro";
-          tip.style.display = proState.verified ? "none" : "";
           fixWrap.appendChild(fixBtn);
-          fixWrap.appendChild(tip);
-          if (!proState.verified) {
-            fixWrap.addEventListener("mouseenter", () => showFixTooltip(fixWrap, tip));
-            fixWrap.addEventListener("mouseleave", () => hideFixTooltip(fixWrap, tip));
-          }
           actions.appendChild(fixWrap);
 
           const ignoreWrap = document.createElement("div");
@@ -4136,43 +3285,43 @@
         if (!autofixState.allActive) {
           setAutofixProgressUI(false, "", 0);
           setAutofixInline(false, "", 0);
-          const proBtn = document.getElementById('proAutofixBtn');
-          if (proBtn) {
+          const allBtn = document.getElementById('autofixAllBtn');
+          if (allBtn) {
             const n = Number(summary.total || 0);
-            const label = proBtn.querySelector('.btnLabel');
+            const label = allBtn.querySelector('.btnLabel');
             if (label) label.textContent = `Auto-fix all ${plural(n, "issue")}`;
-            setAutofixBtnIcon(proBtn, true);
-            proBtn.disabled = false;
+            setAutofixBtnIcon(allBtn, true);
+            allBtn.disabled = false;
           }
         }
 
-        // Update Pro button label and visibility, and bind click
-        const proBtn = document.getElementById('proAutofixBtn');
-        if (proBtn) {
+        // Update the Auto-fix all button label and visibility, and bind click
+        const allBtn = document.getElementById('autofixAllBtn');
+        if (allBtn) {
           const n = Number(summary.total || 0);
-          const label = proBtn.querySelector('.btnLabel');
+          const label = allBtn.querySelector('.btnLabel');
           if (!autofixState.allActive) {
             if (label) label.textContent = `Auto-fix all ${plural(n, "issue")}`;
-            setAutofixBtnIcon(proBtn, true);
+            setAutofixBtnIcon(allBtn, true);
           }
           if (autofixState.allActive) {
-            proBtn.disabled = true;
+            allBtn.disabled = true;
           } else {
-            proBtn.disabled = false;
+            allBtn.disabled = false;
           }
 
           // Ensure the button is bound once
-          if (!proBtn.dataset.bound) {
-            proBtn.addEventListener('click', (e) => {
+          if (!allBtn.dataset.bound) {
+            allBtn.addEventListener('click', (e) => {
               e.preventDefault();
               e.stopPropagation();
               handleAutofixAll();
             });
-            proBtn.dataset.bound = 'true';
+            allBtn.dataset.bound = 'true';
           }
 
           // Hide tease when there are no issues
-          const tease = proBtn.closest('.proTease');
+          const tease = allBtn.closest(".autofixAll");
           if (tease) tease.style.display = n > 0 ? 'block' : 'none';
         }
 
@@ -4215,30 +3364,26 @@
       }
 
       function restoreAutofixButton(){
-        const proBtn = document.getElementById('proAutofixBtn');
-        if (!proBtn) return;
-        const label = proBtn.querySelector('.btnLabel');
+        const allBtn = document.getElementById('autofixAllBtn');
+        if (!allBtn) return;
+        const label = allBtn.querySelector('.btnLabel');
         if (label) label.textContent = `Auto-fix all ${plural(Number(state.summary.total || 0), "issue")}`;
-        setAutofixBtnIcon(proBtn, true);
-        proBtn.disabled = false;
+        setAutofixBtnIcon(allBtn, true);
+        allBtn.disabled = false;
       }
 
       async function handleAutofixAll(){
-        if (!proState.verified) {
-          openProPurchasePage(PRO_CHECKOUT_URL);
-          return;
-        }
         if (autofixState.preloadingAll) return;
         // Second click of the >1000 layers confirmation: candidates are already loaded, don't refetch them.
         const confirming = autofixState.confirmTotal > 0;
         if (autofixState.confirmTimer) clearTimeout(autofixState.confirmTimer);
         autofixState.confirmTimer = null;
-        const proBtn = document.getElementById('proAutofixBtn');
-        if (proBtn) {
-          const label = proBtn.querySelector('.btnLabel');
+        const allBtn = document.getElementById('autofixAllBtn');
+        if (allBtn) {
+          const label = allBtn.querySelector('.btnLabel');
           if (label) label.textContent = "⏳ Preparing fixes...";
-          setAutofixBtnIcon(proBtn, false);
-          proBtn.disabled = true;
+          setAutofixBtnIcon(allBtn, false);
+          allBtn.disabled = true;
         }
         setAutofixInline(true, "Preparing fixes...", 0);
         setStatusTitle("Auto-fix: preparing fixes…");
@@ -4264,10 +3409,10 @@
           // window.confirm() is blocked inside the plugin iframe, so confirm inline with a second click.
           autofixState.confirmTotal = plan.total;
           afterPreload();
-          const label = proBtn && proBtn.querySelector('.btnLabel');
-          if (proBtn) proBtn.disabled = false;
+          const label = allBtn && allBtn.querySelector('.btnLabel');
+          if (allBtn) allBtn.disabled = false;
           if (label) label.textContent = `Click again to modify ${plural(plan.total, "layer")}`;
-          setAutofixBtnIcon(proBtn, false);
+          setAutofixBtnIcon(allBtn, false);
           autofixState.confirmTimer = setTimeout(() => {
             autofixState.confirmTimer = null;
             autofixState.confirmTotal = 0;
@@ -4288,13 +3433,13 @@
         if (state.lastStatusSub) {
           $("statusSub").textContent = state.lastStatusSub;
         }
-        if (proBtn) {
-          const label = proBtn.querySelector('.btnLabel');
+        if (allBtn) {
+          const label = allBtn.querySelector('.btnLabel');
           if (label) label.textContent = `⏳ Auto-fixing ${plural(plan.total, "issue")}...`;
-          setAutofixBtnIcon(proBtn, false);
-          proBtn.disabled = true;
+          setAutofixBtnIcon(allBtn, false);
+          allBtn.disabled = true;
         }
-        parent.postMessage({ pluginMessage: { type: "pro:autofix", items: plan.items, skipped: plan.skipped } }, "*");
+        parent.postMessage({ pluginMessage: { type: "autofix", items: plan.items, skipped: plan.skipped } }, "*");
       }
 
       function pickAutofixCandidate(key){
@@ -4394,13 +3539,13 @@
         autofixState.baseScore = null;
         autofixState.baseTotal = null;
         autofixState.canceling = false;
-        const proBtn = document.getElementById('proAutofixBtn');
-        if (proBtn) {
+        const allBtn = document.getElementById('autofixAllBtn');
+        if (allBtn) {
           const n = Number(state.summary.total || 0);
-          const label = proBtn.querySelector('.btnLabel');
+          const label = allBtn.querySelector('.btnLabel');
           if (label) label.textContent = `Auto-fix all ${plural(n, "issue")}`;
-          setAutofixBtnIcon(proBtn, true);
-          proBtn.disabled = false;
+          setAutofixBtnIcon(allBtn, true);
+          allBtn.disabled = false;
         }
       }
 
@@ -4810,10 +3955,6 @@
         if (exportBtn) {
           exportBtn.addEventListener("click", (e) => {
             e.preventDefault();
-            if (!proState.verified) {
-              openProPurchasePage(PRO_CHECKOUT_URL);
-              return;
-            }
             exportScanCsv();
           });
         }
@@ -5035,151 +4176,9 @@
           return;
         }
 
-        if (msg.type === "pro:verify:state") {
-          if (msg.state === "verifying") {
-            proState.verifying = true;
-            if (msg.source === "startup") {
-              proState.checking = true;
-              setProHeaderButton(false, true);
-            }
-            setVerifyUI("verifying", "Verifying…");
-          }
-          return;
-        }
-
-        if (msg.type === "pro:entitlements") {
-          const isPro = !!(msg.entitlements && msg.entitlements.pro) || !!msg.isPro;
-          const status = typeof msg.status === "string" ? msg.status : null;
-          const valid = typeof msg.valid === "boolean" ? msg.valid : null;
-          const daysLeft = typeof msg.daysLeft === "number" ? msg.daysLeft : null;
-          proState.entitlements = msg.entitlements || {};
-          proState.verified = isPro;
-          proState.verifying = false;
-          proState.checking = false;
-          proState.status = status;
-          proState.valid = valid;
-          proState.daysLeft = daysLeft;
-          if (typeof msg.licenseKey === "string" && msg.licenseKey) {
-            proState.licenseKey = msg.licenseKey;
-          }
-          if (typeof msg.licenseKeyLast4 === "string" && msg.licenseKeyLast4) {
-            proState.licenseKeyLast4 = msg.licenseKeyLast4;
-          }
-          const isExpired = status === "expired";
-          const errorText = typeof msg.error === "string" && msg.error ? msg.error : "";
-          if (isExpired) {
-            setVerifyUI("error", "Your 7-day trial has ended. Upgrade to Pro to keep using the Auto-fix engine.");
-          } else if (!isPro && valid === false) {
-            setVerifyUI("error", errorText || "This license key isn't valid.");
-          } else if (!isPro && errorText) {
-            setVerifyUI("error", errorText);
-          } else if (isPro && msg.offline) {
-            setVerifyUI("verified", "License verified (offline)");
-          } else if (status === "trial" && isPro) {
-            const days = typeof daysLeft === "number" ? daysLeft : 0;
-            const unit = days === 1 ? "day" : "days";
-            setVerifyUI("trial", `Trial active: ${days} ${unit} remaining`);
-            const input = document.getElementById("proKeyInput");
-            if (input) input.value = "";
-            proState.pendingLicenseKey = "";
-            proState.licenseKey = "";
-            proState.licenseKeyLast4 = "";
-          } else {
-            setVerifyUI(isPro ? "verified" : "idle", isPro ? "License key verified" : "Not verified");
-          }
-          setProLockedUI(isPro);
-          setProHeaderButton(isPro, false);
-          setProDebugToggle(isPro);
-          if (status === "trial") {
-            setProKeyDisplay("", "");
-          } else {
-            setProKeyDisplay(proState.licenseKey, proState.licenseKeyLast4);
-          }
-          updateTrialMessaging();
-          updateTrialBanner();
-          if (!isPro) {
-            resetAutofixState();
-          }
-          renderList();
-          return;
-        }
-
-          if (msg.type === "pro:verify:result") {
-            const isPro = !!(msg.entitlements && msg.entitlements.pro) || !!msg.isPro || msg.activated === true;
-            const errorText = typeof msg.error === "string" ? msg.error : null;
-            const statusText = typeof msg.status === "string" ? msg.status : null;
-            const status = typeof msg.status === "string" ? msg.status : null;
-            const valid = typeof msg.valid === "boolean" ? msg.valid : null;
-            const daysLeft = typeof msg.daysLeft === "number" ? msg.daysLeft : null;
-            proState.verifying = false;
-            proState.checking = false;
-            proState.status = status;
-            proState.valid = valid;
-            proState.daysLeft = daysLeft;
-            if (msg.ok && isPro) {
-              proState.verified = true;
-            const inputFallback = document.getElementById("proKeyInput");
-            const inputValue = inputFallback && inputFallback.value ? String(inputFallback.value).trim() : "";
-            if (!proState.pendingLicenseKey && inputValue) {
-              proState.pendingLicenseKey = inputValue;
-            }
-            proState.licenseKey = typeof msg.licenseKey === "string"
-              ? msg.licenseKey
-              : (proState.pendingLicenseKey || proState.licenseKey);
-            proState.licenseKeyLast4 = typeof msg.licenseKeyLast4 === "string" ? msg.licenseKeyLast4 : proState.licenseKeyLast4;
-              const okText = msg.activated === true ? "License activated" : "License key verified";
-              if (status === "trial") {
-                const days = typeof daysLeft === "number" ? daysLeft : 0;
-                const unit = days === 1 ? "day" : "days";
-                setVerifyUI("trial", `Trial active: ${days} ${unit} remaining`);
-                const input = document.getElementById("proKeyInput");
-                if (input) input.value = "";
-                proState.pendingLicenseKey = "";
-                proState.licenseKey = "";
-                proState.licenseKeyLast4 = "";
-              } else {
-                setVerifyUI("verified", okText);
-              }
-              setProLockedUI(true);
-              setProHeaderButton(true, false);
-            if (status === "trial") {
-              setProKeyDisplay("", "");
-            } else {
-              setProKeyDisplay(proState.licenseKey, proState.licenseKeyLast4);
-            }
-            } else {
-            // A failed attempt only reports the error. What the plugin already granted (a running
-            // trial or an active license) stays as the backend left it.
-            const isExpired = status === "expired";
-            if (isExpired) {
-              setVerifyUI("error", "Your 7-day trial has ended. Upgrade to Pro to keep using the Auto-fix engine.");
-            } else if (valid === false && !errorText) {
-              setVerifyUI("error", "This license key isn't valid.");
-            } else {
-              setVerifyUI("error", errorText || statusText || "Could not verify license. Please try again.");
-            }
-            if (!proState.verified) {
-              setProLockedUI(false);
-              setProHeaderButton(false, false);
-              setProKeyDisplay("", "");
-            }
-          }
-          proState.pendingLicenseKey = "";
-          updateTrialMessaging();
-          updateTrialBanner();
-          if (!proState.verified) {
-            resetAutofixState();
-          }
-          renderList(true);
-          return;
-        }
-
-        if (msg.type === "pro:autofix:candidates") {
+        if (msg.type === "autofix:candidates") {
           const key = String(msg.key || "");
           if (!key) return;
-          // "locked" (backend's word for it) or !proState.verified: still store the candidates so
-          // the row can show the real recommendation read-only — updateAutofixRow() below decides
-          // whether the trigger/fix button stay disabled.
           if (autofixState.pendingTimers[key]) {
             clearTimeout(autofixState.pendingTimers[key]);
             delete autofixState.pendingTimers[key];
@@ -5241,7 +4240,7 @@
           return;
         }
 
-        if (msg.type === "pro:autofix:result") {
+        if (msg.type === "autofix:result") {
           const id = String(msg.id || "");
           const issueType = String(msg.issueType || "");
           const kind = String(msg.kind || "");
@@ -5276,7 +4275,7 @@
           return;
         }
 
-        if (msg.type === "pro:autofix:progress") {
+        if (msg.type === "autofix:progress") {
           if (!autofixState.allActive) return;
           const total = Number(msg.total || 0);
           const processed = Number(msg.processed || 0);
@@ -5311,7 +4310,7 @@
           return;
         }
 
-        if (msg.type === "pro:autofix:done") {
+        if (msg.type === "autofix:done") {
           autofixState.allActive = false;
           autofixState.canceling = false;
           const total = Number(msg.total || 0);
@@ -5522,20 +4521,12 @@
       setupFilters();
       setupIssuesToolbar();
       setupOptionCards();
-      bindProModalUI();
-      bindTrialBannerLink();
-      bindProDebugToggle();
+      bindSupportLink();
       bindFixDropdownClose();
       bindAutofixQueueScroll();
       updateSwitchUI();
-      setProLockedUI(false);
-      setProHeaderButton(false, false);
-      setVerifyUI("idle", "Not verified");
-      updateTrialMessaging();
-      updateTrialBanner();
       setFiltersActive();
       resetAll();
-      parent.postMessage({ pluginMessage: { type: "pro:get-entitlements" } }, "*");
       parent.postMessage({ pluginMessage: { type: "get-saved-options" } }, "*");
 
       const cancelBtn = document.getElementById("autofixInlineCancel");
@@ -5546,7 +4537,7 @@
           autofixState.canceling = true;
           cancelBtn.textContent = "Canceling...";
           cancelBtn.disabled = true;
-          parent.postMessage({ pluginMessage: { type: "pro:autofix:cancel" } }, "*");
+          parent.postMessage({ pluginMessage: { type: "autofix:cancel" } }, "*");
         });
         cancelBtn.dataset.bound = "true";
       }

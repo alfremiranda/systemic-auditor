@@ -23,23 +23,7 @@ figma.showUI(__html__, { width: DEFAULT_W, height: DEFAULT_H, title: "Systemic A
         figma.ui.resize(width, height);
     }
 }))();
-const ENTITLEMENTS_STORAGE_KEY = "systemic_entitlements_v1";
-const LICENSE_KEY_STORAGE_KEY = "systemic_license_key_v1";
-const INSTANCE_ID_STORAGE_KEY = "systemic_instance_id";
-const DEBUG_PRO_STORAGE_KEY = "systemic_debug_pro_override";
 const SCANNER_OPTIONS_STORAGE_KEY = "systemic_scanner_options_v1";
-// ✅ DEV OVERRIDE (set true locally when testing Pro features)
-const DEV_PRO = false;
-// ✅ DEV license state override for UI testing ("expired" | "trial" | "pro" | null)
-const DEV_FORCE_LICENSE_STATUS = null;
-// ✅ Cloudflare Worker (License server)
-const LICENSE_WORKER_BASE = "https://systemic-license.im-94e.workers.dev";
-const WORKER_VERIFY_URL = `${LICENSE_WORKER_BASE}/verify`;
-const WORKER_ACTIVATE_URL = `${LICENSE_WORKER_BASE}/activate`;
-// ✅ Secret header to protect the Worker (matches env.SYSTEMIC_TOKEN)
-// NOTE: This is still visible in the plugin bundle; later we can harden this.
-const SYSTEMIC_TOKEN = "rK8pVt_3Qm7nZx2Lh6YbW9cD1sF4aJ0uN5gHkP2eT8vXqM3iR7wS1yU6oC9lB4d";
-const ALL_PRO_FEATURES = ["autofix", "export"];
 function stringifyMessage(value) {
     if (typeof value === "string")
         return value;
@@ -61,55 +45,6 @@ function stringifyMessage(value) {
     catch (_a) {
         return String(value);
     }
-}
-function makeDefaultEntitlements() {
-    return {
-        pro: false,
-        source: "none",
-        features: {
-            autofix: false,
-            export: false,
-        },
-    };
-}
-function makeDevEntitlements() {
-    const features = ALL_PRO_FEATURES.reduce((acc, f) => {
-        acc[f] = true;
-        return acc;
-    }, {});
-    return { pro: true, source: "dev", features };
-}
-function makeDebugEntitlements(isPro) {
-    if (!isPro)
-        return makeDefaultEntitlements();
-    const features = ALL_PRO_FEATURES.reduce((acc, f) => {
-        acc[f] = true;
-        return acc;
-    }, {});
-    return { pro: true, source: "dev", features };
-}
-function loadDebugProOverride() {
-    return __awaiter(this, void 0, void 0, function* () {
-        const saved = yield figma.clientStorage.getAsync(DEBUG_PRO_STORAGE_KEY);
-        return typeof saved === "boolean" ? saved : null;
-    });
-}
-function isExpired(ent) {
-    if (!ent.expiresAt)
-        return false;
-    return Date.now() > ent.expiresAt;
-}
-function loadEntitlements() {
-    return __awaiter(this, void 0, void 0, function* () {
-        if (DEV_PRO)
-            return makeDevEntitlements();
-        // Always start fresh each launch; do not persist Pro status across sessions.
-        return makeDefaultEntitlements();
-    });
-}
-function hasFeature(ent, feature) {
-    var _a;
-    return !!ent.pro && !!((_a = ent.features) === null || _a === void 0 ? void 0 : _a[feature]) && !isExpired(ent);
 }
 function loadLibraryVariables(varsApi_1) {
     return __awaiter(this, arguments, void 0, function* (varsApi, force = false) {
@@ -185,7 +120,6 @@ function importLibraryVariables(varsApi) {
         return Array.from(libraryVariableCache.values());
     });
 }
-let entitlements = makeDefaultEntitlements();
 let autofixCancelRequested = false;
 let scanCancelRequested = false;
 // Ignore-list: stored on each node itself (travels with the file, visible to teammates),
@@ -218,133 +152,7 @@ const variableColorCache = new Map();
 let localColorVariablesCache = null;
 let localColorVariablesLoadPromise = null;
 const LOCAL_COLOR_VARS_CACHE_TTL_MS = 5000;
-let storedLicenseKey = "";
 let autofixRunning = false;
-let licenseInfo = { status: null };
-const LAST_VERIFIED_STORAGE_KEY = "systemic_last_verified_v1";
-const OFFLINE_GRACE_MS = 7 * 24 * 60 * 60 * 1000;
-function buildEntitlementsMessage(extra = {}) {
-    const isPro = !!entitlements.pro && !isExpired(entitlements);
-    return Object.assign({ type: "pro:entitlements", isPro, entitlements: { pro: isPro }, source: entitlements.source, expiresAt: entitlements.expiresAt, licenseKeyLast4: entitlements.licenseKeyLast4, licenseKey: storedLicenseKey, status: licenseInfo.status, valid: licenseInfo.valid, daysLeft: licenseInfo.daysLeft, offline: licenseInfo.offline }, extra);
-}
-function rememberSuccessfulVerify(status) {
-    return __awaiter(this, void 0, void 0, function* () {
-        try {
-            yield figma.clientStorage.setAsync(LAST_VERIFIED_STORAGE_KEY, { at: Date.now(), status });
-        }
-        catch (_a) {
-            /* ignore storage failures */
-        }
-    });
-}
-function forgetLastVerified() {
-    return __awaiter(this, void 0, void 0, function* () {
-        try {
-            yield figma.clientStorage.deleteAsync(LAST_VERIFIED_STORAGE_KEY);
-        }
-        catch (_a) {
-            /* ignore storage failures */
-        }
-    });
-}
-// Returns true when a previous non-trial verification is recent enough to keep Pro offline.
-function withinOfflineGrace() {
-    return __awaiter(this, void 0, void 0, function* () {
-        try {
-            const saved = yield figma.clientStorage.getAsync(LAST_VERIFIED_STORAGE_KEY);
-            if (!saved || typeof saved.at !== "number")
-                return { ok: false, status: null };
-            const status = typeof saved.status === "string" ? saved.status : null;
-            if (status === "trial")
-                return { ok: false, status };
-            return { ok: Date.now() - saved.at < OFFLINE_GRACE_MS, status };
-        }
-        catch (_a) {
-            return { ok: false, status: null };
-        }
-    });
-}
-function loadStoredLicenseKey() {
-    return __awaiter(this, void 0, void 0, function* () {
-        const key = yield figma.clientStorage.getAsync(LICENSE_KEY_STORAGE_KEY);
-        storedLicenseKey = typeof key === "string" ? key : "";
-        return storedLicenseKey;
-    });
-}
-function saveStoredLicenseKey(key) {
-    return __awaiter(this, void 0, void 0, function* () {
-        storedLicenseKey = key;
-        yield figma.clientStorage.setAsync(LICENSE_KEY_STORAGE_KEY, key);
-    });
-}
-function clearStoredLicenseKey() {
-    return __awaiter(this, void 0, void 0, function* () {
-        storedLicenseKey = "";
-        yield figma.clientStorage.deleteAsync(LICENSE_KEY_STORAGE_KEY);
-    });
-}
-// Initialize entitlements and send to UI
-(() => __awaiter(void 0, void 0, void 0, function* () {
-    var _a, _b;
-    entitlements = yield loadEntitlements();
-    yield loadStoredLicenseKey();
-    if (DEV_PRO) {
-        const debugOverride = yield loadDebugProOverride();
-        if (debugOverride !== null) {
-            entitlements = makeDebugEntitlements(debugOverride);
-        }
-    }
-    if (storedLicenseKey) {
-        figma.ui.postMessage({ type: "pro:verify:state", state: "verifying", source: "startup" });
-        // Network failures and 5xx answers are "transient": a paying user who is offline keeps Pro
-        // for OFFLINE_GRACE_MS after their last successful (non-trial) verification. An explicit
-        // denial from the Worker downgrades immediately.
-        let result = null;
-        let failure = "";
-        try {
-            const instanceId = yield getOrCreateInstanceId();
-            result = yield verifyLicenseWithWorker(storedLicenseKey, instanceId);
-        }
-        catch (e) {
-            failure = stringifyMessage(e) || "Verify failed.";
-        }
-        if (result && !result.transient) {
-            const isPro = !!((_a = result.entitlements) === null || _a === void 0 ? void 0 : _a.pro) && !!result.ok;
-            licenseInfo = {
-                status: (_b = result.status) !== null && _b !== void 0 ? _b : null,
-                valid: typeof result.valid === "boolean" ? result.valid : undefined,
-                daysLeft: typeof result.daysLeft === "number" ? result.daysLeft : undefined,
-            };
-            if (isPro) {
-                entitlements = makeLicenseEntitlements(storedLicenseKey);
-                if (licenseInfo.status !== "trial")
-                    yield rememberSuccessfulVerify(licenseInfo.status);
-            }
-            else {
-                entitlements = makeDefaultEntitlements();
-                yield forgetLastVerified();
-            }
-            figma.ui.postMessage(buildEntitlementsMessage({ error: result.error }));
-        }
-        else {
-            // Could not reach the Worker (fetch threw, or HTTP 5xx/429).
-            const grace = yield withinOfflineGrace();
-            const error = (result && result.error) || failure || "Verify failed.";
-            if (grace.ok) {
-                entitlements = makeLicenseEntitlements(storedLicenseKey);
-                licenseInfo = { status: grace.status, offline: true };
-            }
-            else {
-                entitlements = makeDefaultEntitlements();
-                licenseInfo = { status: null };
-            }
-            figma.ui.postMessage(buildEntitlementsMessage({ error }));
-        }
-    }
-    else {
-        figma.ui.postMessage(buildEntitlementsMessage());
-    }
-}))();
 const ISSUE_TYPES = ["ROGUE_FILL", "ROGUE_STROKE", "UNSTYLED_TEXT", "DETACHED_INSTANCE"];
 function isIssueType(value) {
     return ISSUE_TYPES.indexOf(value) >= 0;
@@ -1592,128 +1400,6 @@ function findColorCandidates(target, consumer, kind) {
         };
     });
 }
-function getOrCreateInstanceId() {
-    return __awaiter(this, void 0, void 0, function* () {
-        const existing = yield figma.clientStorage.getAsync(INSTANCE_ID_STORAGE_KEY);
-        if (existing && typeof existing === "string")
-            return existing;
-        // Stable per-machine (plugin install) id, no PII
-        const id = "inst_" + Math.random().toString(16).slice(2) + Date.now().toString(16);
-        yield figma.clientStorage.setAsync(INSTANCE_ID_STORAGE_KEY, id);
-        return id;
-    });
-}
-function makeProFeaturesAllEnabled() {
-    return ALL_PRO_FEATURES.reduce((acc, f) => {
-        acc[f] = true;
-        return acc;
-    }, {});
-}
-function makeLicenseEntitlements(licenseKey) {
-    return Object.assign(Object.assign({}, makeDefaultEntitlements()), { pro: true, source: "license", features: makeProFeaturesAllEnabled(), expiresAt: undefined, licenseKeyLast4: licenseKey.slice(-4) });
-}
-const MAX_SERVER_MESSAGE_LENGTH = 200;
-function callLicenseEndpoint(url, licenseKey, instanceId) {
-    return __awaiter(this, void 0, void 0, function* () {
-        var _a;
-        if (DEV_FORCE_LICENSE_STATUS) {
-            if (DEV_FORCE_LICENSE_STATUS === "trial") {
-                return {
-                    ok: true,
-                    valid: true,
-                    status: "trial",
-                    daysLeft: 5,
-                    entitlements: { pro: true },
-                };
-            }
-            if (DEV_FORCE_LICENSE_STATUS === "pro") {
-                return {
-                    ok: true,
-                    valid: true,
-                    status: "pro",
-                    entitlements: { pro: true },
-                };
-            }
-            return {
-                ok: true,
-                valid: false,
-                status: "expired",
-                daysLeft: 0,
-                entitlements: { pro: false },
-            };
-        }
-        // Worker response example:
-        // { ok:true, valid:true, status:"active", entitlements:{pro:true} }
-        let res;
-        try {
-            res = yield fetch(url, {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                    "X-Systemic-Token": SYSTEMIC_TOKEN,
-                },
-                body: JSON.stringify({ licenseKey, installationId: instanceId }),
-            });
-        }
-        catch (e) {
-            return {
-                ok: false,
-                entitlements: { pro: false },
-                transient: true,
-                error: `Could not reach the license server: ${stringifyMessage(e) || "network error"}`,
-            };
-        }
-        const rawText = yield res.text();
-        let data = null;
-        try {
-            data = rawText ? JSON.parse(rawText) : null;
-        }
-        catch (_b) {
-            data = null;
-        }
-        // Provide a readable message for UI (a proxy error page must not flood the toast)
-        let serverMessage = stringifyMessage(data && (data.error || data.message)) ||
-            (typeof rawText === "string" && rawText.trim() ? rawText.trim() : null) ||
-            `HTTP ${res.status}`;
-        if (serverMessage.length > MAX_SERVER_MESSAGE_LENGTH) {
-            serverMessage = serverMessage.slice(0, MAX_SERVER_MESSAGE_LENGTH) + "…";
-        }
-        if (!res.ok) {
-            return {
-                ok: false,
-                entitlements: { pro: false },
-                transient: res.status >= 500 || res.status === 429,
-                error: `Verify failed (${res.status}): ${serverMessage}`,
-            };
-        }
-        if (!data) {
-            return { ok: false, entitlements: { pro: false }, error: "Verify failed: empty response." };
-        }
-        const isPro = !!((_a = data.entitlements) === null || _a === void 0 ? void 0 : _a.pro);
-        const activated = typeof data.activated === "boolean" ? data.activated : undefined;
-        const valid = typeof data.valid === "boolean" ? data.valid : undefined;
-        const daysLeft = typeof data.daysLeft === "number" ? data.daysLeft : undefined;
-        return {
-            ok: !!data.ok,
-            valid,
-            status: typeof data.status === "string" ? data.status : null,
-            daysLeft,
-            activated,
-            entitlements: { pro: isPro },
-            error: stringifyMessage(data.error) || stringifyMessage(data.message) || undefined,
-        };
-    });
-}
-function verifyLicenseWithWorker(licenseKey, instanceId) {
-    return __awaiter(this, void 0, void 0, function* () {
-        return callLicenseEndpoint(WORKER_VERIFY_URL, licenseKey, instanceId);
-    });
-}
-function activateLicenseWithWorker(licenseKey, instanceId) {
-    return __awaiter(this, void 0, void 0, function* () {
-        return callLicenseEndpoint(WORKER_ACTIVATE_URL, licenseKey, instanceId);
-    });
-}
 function runAudit(selection, options) {
     return __awaiter(this, void 0, void 0, function* () {
         var _a;
@@ -1858,7 +1544,7 @@ figma.ui.onmessage = (msg) => __awaiter(void 0, void 0, void 0, function* () {
 });
 function handleMessage(msg) {
     return __awaiter(this, void 0, void 0, function* () {
-        var _a, _b, _c, _d;
+        var _a;
         if (!msg || typeof msg !== "object")
             return;
         if (msg.type === "resize") {
@@ -1901,48 +1587,14 @@ function handleMessage(msg) {
             figma.ui.postMessage({ type: "saved-options", options: saved && typeof saved === "object" ? saved : null });
             return;
         }
-        // -----------------------
-        // PRO / LICENSE messages
-        // -----------------------
-        if (msg.type === "pro:get-entitlements") {
-            figma.ui.postMessage(buildEntitlementsMessage());
-            return;
-        }
-        if (msg.type === "pro:clearLicense") {
-            entitlements = makeDefaultEntitlements();
-            licenseInfo = { status: null };
-            yield figma.clientStorage.deleteAsync(ENTITLEMENTS_STORAGE_KEY);
-            yield figma.clientStorage.deleteAsync(DEBUG_PRO_STORAGE_KEY);
-            yield forgetLastVerified();
-            yield clearStoredLicenseKey();
-            figma.ui.postMessage(buildEntitlementsMessage());
-            return;
-        }
-        if (msg.type === "pro:debug:set") {
-            if (!DEV_PRO)
-                return;
-            const isPro = !!msg.isPro;
-            yield figma.clientStorage.setAsync(DEBUG_PRO_STORAGE_KEY, isPro);
-            entitlements = makeDebugEntitlements(isPro);
-            figma.ui.postMessage(buildEntitlementsMessage());
-            return;
-        }
-        if (msg.type === "pro:autofix") {
-            // Pro-only feature: UI sends this when Pro is verified.
-            const allowed = hasFeature(entitlements, "autofix");
+        if (msg.type === "autofix") {
             const skipped = msg.skipped || {};
             if (autofixRunning)
                 return;
             autofixCancelRequested = false;
-            if (!allowed) {
-                figma.notify("Auto-fix is a Pro feature. Please activate Systemic Pro.");
-                // Tell the UI so it leaves its "fixing" state instead of waiting forever.
-                figma.ui.postMessage({ type: "pro:autofix:done", total: 0, resolved: 0, failed: 0, skipped, resolvedItems: [] });
-                return;
-            }
             const items = Array.isArray(msg.items) ? msg.items : [];
             if (!items.length) {
-                figma.ui.postMessage({ type: "pro:autofix:done", total: 0, resolved: 0, failed: 0, skipped, resolvedItems: [] });
+                figma.ui.postMessage({ type: "autofix:done", total: 0, resolved: 0, failed: 0, skipped, resolvedItems: [] });
                 return;
             }
             autofixRunning = true;
@@ -1956,9 +1608,9 @@ function handleMessage(msg) {
             let processed = 0;
             let canceled = false;
             const resolvedItems = [];
-            figma.ui.postMessage({ type: "pro:autofix:progress", phase: "start", total });
+            figma.ui.postMessage({ type: "autofix:progress", phase: "start", total });
             yield new Promise((r) => setTimeout(r, 0));
-            figma.ui.postMessage({ type: "pro:autofix:progress", phase: "batch", processed, total, resolved, failed });
+            figma.ui.postMessage({ type: "autofix:progress", phase: "batch", processed, total, resolved, failed });
             try {
                 batchLoop: for (let i = 0; i < ordered.length; i += 50) {
                     if (autofixCancelRequested) {
@@ -1982,24 +1634,24 @@ function handleMessage(msg) {
                                 failed += 1;
                             }
                         }
-                        catch (_f) {
+                        catch (_b) {
                             failed += 1;
                         }
                         processed += 1;
                         if (processed % 10 === 0) {
-                            figma.ui.postMessage({ type: "pro:autofix:progress", phase: "batch", processed, total, resolved, failed });
+                            figma.ui.postMessage({ type: "autofix:progress", phase: "batch", processed, total, resolved, failed });
                             yield new Promise((r) => setTimeout(r, 0));
                         }
                     }
-                    figma.ui.postMessage({ type: "pro:autofix:progress", phase: "batch", processed, total, resolved, failed });
+                    figma.ui.postMessage({ type: "autofix:progress", phase: "batch", processed, total, resolved, failed });
                     yield new Promise((r) => setTimeout(r, 20));
                 }
             }
-            catch (_g) {
+            catch (_c) {
                 failed += Math.max(0, total - processed);
             }
             finally {
-                figma.ui.postMessage({ type: "pro:autofix:done", total, resolved, failed, skipped, resolvedItems, canceled });
+                figma.ui.postMessage({ type: "autofix:done", total, resolved, failed, skipped, resolvedItems, canceled });
                 if (canceled) {
                     figma.notify("Auto-fix canceled. Press Cmd+Z to undo any changes.");
                 }
@@ -2030,7 +1682,7 @@ function handleMessage(msg) {
             }
             return;
         }
-        if (msg.type === "pro:autofix:cancel") {
+        if (msg.type === "autofix:cancel") {
             autofixCancelRequested = true;
             return;
         }
@@ -2038,14 +1690,11 @@ function handleMessage(msg) {
             scanCancelRequested = true;
             return;
         }
-        if (msg.type === "pro:autofix:candidates") {
-            // Computing candidates is read-only (nothing is mutated), so free users get them too —
-            // as a preview of what Pro would do. Only the actual apply (below) stays gated.
-            const allowed = hasFeature(entitlements, "autofix");
+        if (msg.type === "autofix:candidates") {
             const id = String(msg.id || "");
             const kind = msg.kind === "stroke" ? "strokes" : (msg.kind === "text" ? "text" : "fills");
             const key = String(msg.key || "");
-            const reply = (extra) => figma.ui.postMessage(Object.assign({ type: "pro:autofix:candidates", key, locked: !allowed }, extra));
+            const reply = (extra) => figma.ui.postMessage(Object.assign({ type: "autofix:candidates", key }, extra));
             if (!id) {
                 reply({ candidates: [], recommendedId: null });
                 return;
@@ -2078,20 +1727,19 @@ function handleMessage(msg) {
                 const { candidates, recommendedId, debug } = yield findColorCandidates(color, node, kind);
                 reply({ candidates, recommendedId, debug });
             }
-            catch (_h) {
+            catch (_d) {
                 reply({ candidates: [], recommendedId: null });
             }
             return;
         }
-        if (msg.type === "pro:autofix:apply") {
-            const allowed = hasFeature(entitlements, "autofix");
+        if (msg.type === "autofix:apply") {
             const id = String(msg.id || "");
             const rawKind = String(msg.kind || "");
             const kind = ["fill", "stroke", "text", "detached"].indexOf(rawKind) >= 0 ? rawKind : "fill";
             const candidateId = String(msg.candidateId || "");
             const issueType = String(msg.issueType || "");
-            const reply = (ok, error) => figma.ui.postMessage({ type: "pro:autofix:result", id, issueType, kind, ok, error });
-            if (!allowed || !id || (!candidateId && issueType !== "DETACHED_INSTANCE")) {
+            const reply = (ok, error) => figma.ui.postMessage({ type: "autofix:result", id, issueType, kind, ok, error });
+            if (!id || (!candidateId && issueType !== "DETACHED_INSTANCE")) {
                 reply(false, "Auto-fix is not available.");
                 return;
             }
@@ -2107,74 +1755,6 @@ function handleMessage(msg) {
             }
             catch (e) {
                 reply(false, stringifyMessage(e) || "Auto-fix failed.");
-            }
-            return;
-        }
-        if (msg.type === "pro:verify" || msg.type === "pro:activate") {
-            const activating = msg.type === "pro:activate";
-            const licenseKey = String(msg.key || "").trim();
-            const failText = activating
-                ? "Could not activate license. Please try again."
-                : "Could not verify license. Please try again.";
-            if (!licenseKey) {
-                figma.ui.postMessage({
-                    type: "pro:verify:result",
-                    ok: false,
-                    entitlements: { pro: false },
-                    error: "Please enter a license key.",
-                });
-                return;
-            }
-            // Notify UI that verification is in progress
-            figma.ui.postMessage({ type: "pro:verify:state", state: "verifying" });
-            try {
-                const instanceId = yield getOrCreateInstanceId();
-                const result = activating
-                    ? yield activateLicenseWithWorker(licenseKey, instanceId)
-                    : yield verifyLicenseWithWorker(licenseKey, instanceId);
-                const isPro = !!((_a = result.entitlements) === null || _a === void 0 ? void 0 : _a.pro) && !!result.ok && result.activated !== false;
-                if (!isPro) {
-                    // A failed attempt must not change what the plugin already granted (e.g. a running trial).
-                    figma.ui.postMessage({
-                        type: "pro:verify:result",
-                        ok: false,
-                        entitlements: { pro: false },
-                        status: (_b = result.status) !== null && _b !== void 0 ? _b : null,
-                        valid: typeof result.valid === "boolean" ? result.valid : undefined,
-                        daysLeft: typeof result.daysLeft === "number" ? result.daysLeft : undefined,
-                        error: result.error || failText,
-                    });
-                    return;
-                }
-                entitlements = makeLicenseEntitlements(licenseKey);
-                licenseInfo = {
-                    status: (_c = result.status) !== null && _c !== void 0 ? _c : null,
-                    valid: typeof result.valid === "boolean" ? result.valid : undefined,
-                    daysLeft: typeof result.daysLeft === "number" ? result.daysLeft : undefined,
-                };
-                yield saveStoredLicenseKey(licenseKey);
-                if (licenseInfo.status !== "trial")
-                    yield rememberSuccessfulVerify(licenseInfo.status);
-                figma.ui.postMessage(buildEntitlementsMessage());
-                figma.ui.postMessage({
-                    type: "pro:verify:result",
-                    ok: true,
-                    isPro: true,
-                    entitlements: { pro: true },
-                    status: licenseInfo.status,
-                    valid: licenseInfo.valid,
-                    daysLeft: licenseInfo.daysLeft,
-                    licenseKey: storedLicenseKey,
-                });
-            }
-            catch (e) {
-                const message = stringifyMessage(e);
-                figma.ui.postMessage({
-                    type: "pro:verify:result",
-                    ok: false,
-                    entitlements: { pro: false },
-                    error: message && message.trim() ? message : failText,
-                });
             }
             return;
         }
@@ -2200,7 +1780,7 @@ function handleMessage(msg) {
                 figma.notify("Nothing selected. Choose a frame, layer, or element, then scan again.");
                 return;
             }
-            const options = (_d = msg.options) !== null && _d !== void 0 ? _d : {
+            const options = (_a = msg.options) !== null && _a !== void 0 ? _a : {
                 scanChildren: true,
                 checkRogueFills: true,
                 checkRogueStrokes: true,
@@ -2357,7 +1937,7 @@ function handleMessage(msg) {
                         continue;
                     }
                 }
-                catch (_j) {
+                catch (_f) {
                     resolvedIds.push(id);
                 }
             }
@@ -2375,7 +1955,7 @@ function handleMessage(msg) {
                     node.setPluginData(ignoreDataKey(issueType), "1");
                 }
             }
-            catch (_k) {
+            catch (_g) {
                 // ignore — worst case the issue just isn't marked and reappears next scan
             }
             // Reuse the UI's existing issues:resolved handling to drop the row without a full re-scan.
@@ -2396,7 +1976,7 @@ function handleMessage(msg) {
                     ok = true;
                 }
             }
-            catch (_l) {
+            catch (_h) {
                 ok = false;
             }
             figma.ui.postMessage({ type: "issue:unignored", id, issueType, ok });
@@ -2411,7 +1991,7 @@ function handleMessage(msg) {
                         try {
                             node.setPluginData(ignoreDataKey(type), "");
                         }
-                        catch (_m) {
+                        catch (_j) {
                             /* ignore */
                         }
                     }

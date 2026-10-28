@@ -27,9 +27,9 @@ window.addEventListener("message", (e) => {
       return;
     }
     setTimeout(() => send({ type: "audit-result", issues: sc.issues || [], ignoredIssues: sc.ignoredIssues || [], summary: sc.summary || { total: (sc.issues||[]).length, scannedElements: 10, elementsWithIssues: (sc.issues||[]).length, ignored: (sc.ignoredIssues||[]).length } }), 20);
-  } else if (m.type === "pro:autofix:candidates") {
+  } else if (m.type === "autofix:candidates") {
     const r = sc.candidates ? sc.candidates(m) : { candidates: [], recommendedId: null };
-    setTimeout(() => send(Object.assign({ type: "pro:autofix:candidates", key: m.key }, r)), 2);
+    setTimeout(() => send(Object.assign({ type: "autofix:candidates", key: m.key }, r)), 2);
   } else if (m.type === "issue:ignore") {
     setTimeout(() => send({ type: "issues:resolved", resolvedIds: [m.id], ignoredDelta: 1, issueType: m.issueType }), 2);
   } else if (m.type === "issue:unignore") {
@@ -56,7 +56,7 @@ async function load(file, sc) {
   F.contentDocument.head.appendChild(noMotion);
   await sleep(150);
 }
-const proOn = async (extra = {}) => { send(Object.assign({ type: "pro:entitlements", isPro: true, entitlements: { pro: true }, status: "active", licenseKey: "ABCD-1234-EFGH-5678" }, extra)); await sleep(60); };
+const proOn = async () => {}; // everything is free now; kept so older sections read the same
 const scan = async (wait = 300) => { $("scanBtn").click(); await sleep(wait); };
 const waitFor = async (fn, ms = 4000) => { const t = Date.now(); while (Date.now() - t < ms) { if (fn()) return true; await sleep(25); } return false; };
 const sent = t => log.filter(m => m.type === t);
@@ -103,18 +103,23 @@ T.all = async function () {
     check("sort by type groups DETACHED before TEXT before FILL", JSON.stringify(namesInOrder()) === JSON.stringify(["Apple","Mango","Zebra"]), namesInOrder().join(","));
   });
 
-  await section("3. Free-tier candidate preview", async () => {
-    await load(); // NOT pro
+  await section("3. Candidate preview and per-row Fix (free for everyone)", async () => {
+    await load();
     scenario = { issues: [mkIssue("3:1","ROGUE_FILL")], candidates: (m) => rec(m.id, "brand/primary") };
     await scan();
-    await waitFor(() => sent("pro:autofix:candidates").length >= 1);
-    check("free tier requests candidates (not gated client-side)", sent("pro:autofix:candidates").length >= 1, "");
+    await waitFor(() => sent("autofix:candidates").length >= 1);
+    check("rows request candidates without any entitlement handshake", sent("autofix:candidates").length >= 1 && sent("pro:get-entitlements").length === 0, "");
     await sleep(150);
     const trig = Q('.fixTrigger[data-issue-key="3:1:fill"]');
-    check("free row shows the real candidate name, not 'Unlock Pro to auto-fix'", trig && /brand\/primary/.test(trig.textContent), trig && trig.textContent);
-    check("free trigger stays disabled", trig && trig.disabled === true, "");
+    check("row shows the real candidate name", trig && /brand\/primary/.test(trig.textContent), trig && trig.textContent);
+    check("candidate trigger is enabled", trig && trig.disabled === false, "");
     const fixBtn3 = Q('.fixBtn[data-issue-key="3:1:fill"]');
-    check("free Fix button stays disabled", fixBtn3 && fixBtn3.disabled === true, "");
+    check("Fix button is enabled once a candidate is selected", fixBtn3 && fixBtn3.disabled === false, "");
+    fixBtn3.click();
+    await waitFor(() => sent("autofix:apply").length >= 1);
+    const apply = sent("autofix:apply")[0];
+    check("clicking Fix sends autofix:apply with the recommended candidate", apply && apply.id === "3:1" && apply.candidateId === "V:3:1", JSON.stringify(apply));
+    check("no purchase page is opened anywhere", sent("open-external").length === 0, "");
   });
 
   await section("4. Ignore-list", async () => {
