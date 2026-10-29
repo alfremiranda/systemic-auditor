@@ -1,0 +1,135 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>capture</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" />
+<style>
+  :root { --lime: #A3E635; --bg: #05080a; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); font-family: Manrope, system-ui, sans-serif; color: #f8fafc; }
+  body.hero { width: 1280px; height: 640px; overflow: hidden; position: relative;
+    background:
+      radial-gradient(900px 520px at 78% 18%, rgba(163,230,53,.20), transparent 60%),
+      radial-gradient(700px 420px at 8% 110%, rgba(163,230,53,.10), transparent 60%),
+      var(--bg); }
+  body.hero::before { content: ""; position: absolute; inset: 0;
+    background-image: linear-gradient(rgba(255,255,255,.035) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.035) 1px, transparent 1px);
+    background-size: 40px 40px; mask-image: radial-gradient(800px 500px at 60% 40%, #000 30%, transparent 75%); }
+  .copy { position: absolute; left: 80px; top: 0; bottom: 0; width: 620px; display: flex; flex-direction: column; justify-content: center; gap: 22px; }
+  .copy[hidden] { display: none; }
+  .brand { display: flex; align-items: center; gap: 16px; }
+  .brand img { width: 64px; height: 64px; border-radius: 16px; box-shadow: 0 10px 30px rgba(0,0,0,.4); }
+  .brand span { font-size: 15px; font-weight: 700; color: rgba(255,255,255,.6); letter-spacing: .3px; }
+  h1 { margin: 0; font-size: 60px; line-height: 1.02; font-weight: 800; letter-spacing: -1.5px; }
+  h1 em { font-style: normal; color: var(--lime); }
+  .lede { margin: 0; font-size: 20px; line-height: 1.5; color: rgba(255,255,255,.72); max-width: 520px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 10px; }
+  .chip { padding: 8px 14px; border-radius: 999px; border: 1px solid rgba(255,255,255,.14); background: rgba(255,255,255,.04); font-size: 14px; font-weight: 700; color: rgba(255,255,255,.86); }
+  .chip.lime { border-color: rgba(163,230,53,.45); color: var(--lime); background: rgba(163,230,53,.08); }
+  .win { position: absolute; border-radius: 14px; overflow: hidden; background: #0b0f14;
+    box-shadow: 0 40px 90px rgba(0,0,0,.65), 0 0 0 1px rgba(255,255,255,.08); }
+  .bar { height: 40px; display: flex; align-items: center; justify-content: space-between; padding: 0 14px;
+    background: #1f2328; font-size: 13px; font-weight: 700; color: rgba(255,255,255,.9); }
+  .bar .t { display: flex; align-items: center; gap: 8px; }
+  .bar .ic { width: 18px; height: 18px; border-radius: 4px; background: rgba(255,255,255,.9); color: #1f2328; font-size: 10px; display: grid; place-items: center; font-weight: 800; }
+  .bar .x { opacity: .7; font-size: 16px; }
+  iframe { display: block; border: 0; width: 420px; background: #05080a; }
+  body.hero .win { right: 80px; top: 44px; transform: scale(.78); transform-origin: top right;
+    -webkit-mask-image: linear-gradient(#000 80%, transparent 99%); mask-image: linear-gradient(#000 80%, transparent 99%); }
+  body.hero iframe { height: 1000px; }
+  body.panel { padding: 36px; background:
+      radial-gradient(500px 420px at 70% 10%, rgba(163,230,53,.16), transparent 60%), var(--bg); }
+  body.panel .win { position: relative; }
+</style></head>
+<body>
+<div class="copy" id="copy" hidden>
+  <div class="brand"><img src="../../Favicon.svg" alt=""><span>Figma plugin · free &amp; open source</span></div>
+  <h1>Find and fix<br><em>design-system drift.</em></h1>
+  <p class="lede">Audit a selection for detached instances, unstyled text and hardcoded colors, then snap them back to your variables and styles in one click.</p>
+  <div class="chips">
+    <span class="chip lime">Auto-fix to variables</span>
+    <span class="chip">ΔE 2000 matching</span>
+    <span class="chip">Detached relink</span>
+    <span class="chip">100% local</span>
+  </div>
+</div>
+<div class="win" id="win">
+  <div class="bar"><span class="t"><span class="ic">&lt;/&gt;</span>Systemic Auditor</span><span class="x">✕</span></div>
+  <iframe id="f"></iframe>
+</div>
+<script>
+const mode = new URLSearchParams(location.search).get("mode") || "hero";
+document.body.className = mode === "hero" ? "hero" : "panel";
+if (mode === "hero") document.getElementById("copy").hidden = false;
+const F = document.getElementById("f");
+const send = (m) => F.contentWindow.postMessage({ pluginMessage: m }, "*");
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+const v = (id, name, color, deltaE, collection = "Semantic") =>
+  ({ id: "V:" + id, name, displayName: `${collection} / ${name}`, collectionName: collection, color, deltaE, score: deltaE < 2 ? 3 : 1, source: "variable" });
+const ts = (id, name) => ({ id: "textstyle:" + id, name, displayName: "Text styles / " + name, collectionName: "Text styles", score: 3, source: "style" });
+
+const issues = [
+  { id: "10:3", type: "ROGUE_FILL", name: "Trend badge", path: "Dashboard / Revenue card / Trend badge" },
+  { id: "10:1", type: "ROGUE_FILL", name: "Surface", path: "Dashboard / Revenue card / Surface" },
+  { id: "10:2", type: "UNSTYLED_TEXT", name: "Card title", path: "Dashboard / Revenue card / Card title" },
+  { id: "10:5", type: "DETACHED_INSTANCE", name: "Button / Primary", path: "Dashboard / Header / Button / Primary", detachedComponentName: "Button" },
+  { id: "10:4", type: "ROGUE_STROKE", name: "Divider", path: "Dashboard / Revenue card / Divider" },
+  { id: "10:6", type: "UNSTYLED_TEXT", name: "Caption", path: "Dashboard / Revenue card / Caption" },
+  { id: "10:7", type: "ROGUE_FILL", name: "Icon", path: "Dashboard / Sidebar / Nav item / Icon" },
+];
+const candidatesByKey = {
+  "10:1:fill": { candidates: [v("s1", "surface/raised", "rgba(23,31,42,1)", 0.6), v("s2", "surface/default", "rgba(15,20,27,1)", 3.1), v("s3", "surface/sunken", "rgba(10,13,18,1)", 5.8)], recommendedId: "V:s1" },
+  "10:2:text": { candidates: [ts("h", "heading/sm"), ts("b", "body/md")], recommendedId: "textstyle:h" },
+  "10:4:stroke": { candidates: [v("b1", "border/subtle", "rgba(51,65,85,1)", 0.9), v("b2", "border/default", "rgba(71,85,105,1)", 4.2)], recommendedId: "V:b1" },
+  "10:3:fill": { candidates: [v("g1", "success/strong", "rgba(34,197,94,1)", 0.7), v("g2", "success/surface", "rgba(22,101,52,1)", 3.4), v("g3", "brand/primary", "rgba(163,230,53,1)", 4.6, "Brand")], recommendedId: "V:g1" },
+  "10:6:text": { candidates: [ts("s", "body/sm"), ts("c", "caption")], recommendedId: "textstyle:s" },
+  "10:7:fill": { candidates: [v("i1", "icon/muted", "rgba(148,163,184,1)", 0.4), v("i2", "text/secondary", "rgba(160,174,192,1)", 2.6)], recommendedId: "V:i1" },
+};
+const ignoredIssues = [
+  { id: "11:1", type: "ROGUE_FILL", name: "Illustration / Sky", path: "Dashboard / Empty state / Illustration / Sky" },
+  { id: "11:2", type: "UNSTYLED_TEXT", name: "Legal footnote", path: "Dashboard / Footer / Legal footnote" },
+];
+const summary = { total: 46, rogueFills: 18, unstyledText: 21, rogueStrokes: 4, detached: 3, scannedElements: 296, elementsWithIssues: 38, ignored: mode === "ignored" ? 2 : 0 };
+
+window.addEventListener("message", (e) => {
+  const m = e.data && e.data.pluginMessage; if (!m) return;
+  if (m.type === "run-audit") setTimeout(() => send({ type: "audit-result", issues, ignoredIssues: mode === "ignored" ? ignoredIssues : [], summary }), 30);
+  else if (m.type === "autofix:candidates") {
+    const r = candidatesByKey[m.key] || { candidates: [], recommendedId: null };
+    setTimeout(() => send(Object.assign({ type: "autofix:candidates", key: m.key, debug: { libraryCollections: 0, libraryVariables: 0 } }, r)), 15);
+  } else if (m.type === "get-saved-options") setTimeout(() => send({ type: "saved-options", options: null }), 5);
+});
+
+(async () => {
+  await new Promise((res) => { F.onload = res; F.src = "../../ui.html?" + Date.now(); });
+  F.contentWindow.requestAnimationFrame = (cb) => setTimeout(() => cb(performance.now()), 16);
+  const ns = F.contentDocument.createElement("style");
+  ns.textContent = "*,*::before,*::after{transition:none !important;animation:none !important}";
+  F.contentDocument.head.appendChild(ns);
+  await sleep(300);
+  F.contentDocument.getElementById("scanBtn").click();
+  await sleep(1500);
+  const doc = F.contentDocument;
+  if (mode !== "hero") {
+    F.style.height = (mode === "menu" ? 720 : 780) + "px";
+    await sleep(1500);
+  }
+  if (mode === "menu") {
+    // Capture-only: headless Chrome resizes the viewport to take the screenshot, and the plugin
+    // (correctly) closes open dropdowns on resize. Keep this one open for the picture.
+    F.contentWindow.closeAllFixDropdowns = () => {};
+    F.contentWindow.closeOffscreenDropdowns = () => {};
+    for (let i = 0; i < 3 && !doc.querySelector(".fixMenu.isOpen"); i++) {
+      doc.querySelector('.fixTrigger[data-issue-key="10:3:fill"]').click();
+      await sleep(600);
+    }
+  }
+  if (mode === "ignored") {
+    doc.getElementById("ignoredLink").click();
+    await sleep(300);
+  }
+  document.body.dataset.ready = "true";
+})();
+</script>
+</body></html>

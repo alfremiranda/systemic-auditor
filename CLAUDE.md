@@ -112,6 +112,9 @@ UI → backend (handled in `handleMessage`, wrapped by `figma.ui.onmessage`, `co
 - `#healthLabelWrap`/`#healthInfoBtn`: a small "ⓘ" next to "Health Score" with a static CSS hover/focus tooltip explaining the formula.
 - The only URL in the UI is `SUPPORT_URL` (Ko-fi page; empty = button hidden). `openExternalUrl()` routes it through the backend's `open-external` so `figma.openExternal` opens it once.
 
+
+**README images** (`docs/media/hero.png`, `fix-menu.png`, `ignored-panel.png`) are rendered from the real `ui.html` with demo data by `docs/media/capture.html` (`?mode=hero|menu|ignored`). Serve the repo root and run headless Chrome, e.g. `chrome --headless=new --hide-scrollbars --force-device-scale-factor=2 --window-size=1280,640 --virtual-time-budget=10000 --screenshot=docs/media/hero.png "http://localhost:8790/docs/media/capture.html?mode=hero"` (panels: `--window-size=492,832`/`492,892`). The `menu` shot is best taken from a real, visible Chrome: headless composites the open menu oddly.
+
 ## Domain logic
 
 **Scan** (`runAudit`): flattens the selection (recursive if "Include children"), then per node: detached check (`node.detachedInfo != null`), text without style (`textStyleId` empty or mixed), rogue fill/stroke. Yields to the event loop every 200 nodes, posts progress every ~120ms.
