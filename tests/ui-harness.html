@@ -260,6 +260,34 @@ T.all = async function () {
     check("all non-stuck rows resolve while stuck rows are still retrying", ok, "resolved=" + ev('Object.keys(autofixState.candidatesByKey).length'));
   });
 
+  await section("12. Auto-fix button shows what it will actually change", async () => {
+    const noRec = (id) => ({ candidates: [{ id: "S:" + id, name: "body/md", displayName: "Text / body/md", score: 0, source: "style" }], recommendedId: null, debug: { libraryCollections: 0, libraryVariables: 0 } });
+    await load();
+    scenario = {
+      issues: [mkIssue("12:1","ROGUE_FILL","A"), mkIssue("12:2","ROGUE_FILL","B"), mkIssue("12:3","UNSTYLED_TEXT","C"), mkIssue("12:4","DETACHED_INSTANCE","D")],
+      candidates: (m) => m.kind === "text" ? noRec(m.id) : rec(m.id),
+    };
+    await scan(300);
+    const label = () => Q("#autofixAllBtn .btnLabel").textContent;
+    await waitFor(() => /^Auto-fix \d/.test(label()), 4000);
+    check("label counts only matched issues (2 fills + 1 detached), not all 4", label() === "Auto-fix 3 matched issues", label());
+    check("button explains the rule on hover", /recommended or selected match/.test($("autofixAllBtn").title), $("autofixAllBtn").title);
+    // pick the unmatched text row's candidate by hand: it now counts
+    await sleep(400); // let the delayed row refresh (refreshAutofixRows) settle before opening a menu
+    Q('.fixTrigger[data-issue-key="12:3:text"]').click();
+    const findOpt = () => Array.from(D().querySelectorAll(".fixMenu.isOpen .fixOption")).find(o => o.dataset.value === "S:12:3");
+    await waitFor(() => !!findOpt(), 2000);
+    if (findOpt()) findOpt().click();
+    await waitFor(() => label() === "Auto-fix 4 matched issues", 2000);
+    check("hand-picking a candidate adds it to the count", label() === "Auto-fix 4 matched issues", label());
+
+    await load();
+    scenario = { issues: [mkIssue("12:5","UNSTYLED_TEXT","E")], candidates: (m) => noRec(m.id) };
+    await scan(300);
+    await waitFor(() => /No confident/.test(label()), 4000);
+    check("nothing matched: says so and disables the button", label() === "No confident matches to auto-fix" && $("autofixAllBtn").disabled === true, label() + " disabled=" + $("autofixAllBtn").disabled);
+  });
+
   return results;
 };
 </script></body></html>

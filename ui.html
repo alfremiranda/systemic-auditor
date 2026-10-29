@@ -1986,7 +1986,7 @@
       }
       const plural = (n, word) => `${Number(n)} ${word}${Number(n) === 1 ? "" : "s"}`;
 
-      // The Auto-fix button's sparkle icon only makes sense in its idle "Auto-fix all N issues" state —
+      // The Auto-fix button's sparkle icon only makes sense in its idle "Auto-fix N matched issues" state —
       // hide it whenever the label switches to a progress/confirm string (those already say what's happening).
       function setAutofixBtnIcon(allBtn, show){
         const icon = allBtn && allBtn.querySelector(".btnIcon");
@@ -2249,6 +2249,7 @@
               e.stopPropagation();
               if (c.disabled) return;
               autofixState.selectedByKey[key] = c.id;
+              refreshAutofixAllButton();
               dropdown.dataset.value = c.id;
               if (valueEl) valueEl.textContent = c.name || c.displayName || "Unnamed";
               if (swatchEl) {
@@ -3285,29 +3286,17 @@
         if (!autofixState.allActive) {
           setAutofixProgressUI(false, "", 0);
           setAutofixInline(false, "", 0);
-          const allBtn = document.getElementById('autofixAllBtn');
-          if (allBtn) {
-            const n = Number(summary.total || 0);
-            const label = allBtn.querySelector('.btnLabel');
-            if (label) label.textContent = `Auto-fix all ${plural(n, "issue")}`;
-            setAutofixBtnIcon(allBtn, true);
-            allBtn.disabled = false;
-          }
+          refreshAutofixAllButton();
         }
 
         // Update the Auto-fix all button label and visibility, and bind click
         const allBtn = document.getElementById('autofixAllBtn');
         if (allBtn) {
           const n = Number(summary.total || 0);
-          const label = allBtn.querySelector('.btnLabel');
-          if (!autofixState.allActive) {
-            if (label) label.textContent = `Auto-fix all ${plural(n, "issue")}`;
-            setAutofixBtnIcon(allBtn, true);
-          }
           if (autofixState.allActive) {
             allBtn.disabled = true;
           } else {
-            allBtn.disabled = false;
+            refreshAutofixAllButton();
           }
 
           // Ensure the button is bound once
@@ -3364,12 +3353,34 @@
       }
 
       function restoreAutofixButton(){
-        const allBtn = document.getElementById('autofixAllBtn');
+        refreshAutofixAllButton();
+      }
+
+      // "Auto-fix all" only changes issues that have a recommended (or hand-picked) match, plus
+      // detached relinks (same rule as buildAutofixAllPlan), so the label shows that count rather
+      // than the total. Until every row's candidates are in, the count isn't known, so no number.
+      function refreshAutofixAllButton(){
+        const allBtn = document.getElementById("autofixAllBtn");
         if (!allBtn) return;
-        const label = allBtn.querySelector('.btnLabel');
-        if (label) label.textContent = `Auto-fix all ${plural(Number(state.summary.total || 0), "issue")}`;
-        setAutofixBtnIcon(allBtn, true);
-        allBtn.disabled = false;
+        if (autofixState.allActive || autofixState.preloadingAll || autofixState.confirmTotal > 0) return;
+        const label = allBtn.querySelector(".btnLabel");
+        const issues = Array.isArray(state.issues) ? state.issues : [];
+        const unresolved = issues.some((issue) => {
+          if (!issue || !issue.id) return false;
+          const kind = issue.type === "ROGUE_FILL" ? "fill"
+            : issue.type === "ROGUE_STROKE" ? "stroke"
+            : (issue.type === "UNSTYLED_TEXT" && !issue.mixedText ? "text" : "");
+          return !!kind && !autofixState.candidatesByKey[`${issue.id}:${kind}`];
+        });
+        const n = buildAutofixAllPlan().total;
+        let text;
+        if (unresolved) text = "Auto-fix matched issues";
+        else if (n === 0) text = "No confident matches to auto-fix";
+        else text = `Auto-fix ${n} matched ${n === 1 ? "issue" : "issues"}`;
+        if (label) label.textContent = text;
+        allBtn.title = "Only issues with a recommended or selected match are changed. Review the rest row by row.";
+        setAutofixBtnIcon(allBtn, unresolved || n > 0);
+        allBtn.disabled = !unresolved && n === 0;
       }
 
       async function handleAutofixAll(){
@@ -3539,14 +3550,7 @@
         autofixState.baseScore = null;
         autofixState.baseTotal = null;
         autofixState.canceling = false;
-        const allBtn = document.getElementById('autofixAllBtn');
-        if (allBtn) {
-          const n = Number(state.summary.total || 0);
-          const label = allBtn.querySelector('.btnLabel');
-          if (label) label.textContent = `Auto-fix all ${plural(n, "issue")}`;
-          setAutofixBtnIcon(allBtn, true);
-          allBtn.disabled = false;
-        }
+        refreshAutofixAllButton();
       }
 
       function initStatChrome(){
@@ -4209,6 +4213,7 @@
           // Final answer (possibly "nothing matches"): record it so "Fix all" can finish.
           autofixState.candidatesByKey[key] = candidates;
           autofixState.recommendedByKey[key] = String(msg.recommendedId || "");
+          refreshAutofixAllButton();
           if (msg.mixed) showMixedWarning(key);
           markCandidateDone(key);
           if (candidates.length === 0 && debug) {
