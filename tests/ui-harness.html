@@ -288,6 +288,60 @@ T.all = async function () {
     check("nothing matched: says so and disables the button", label() === "No confident matches to auto-fix" && $("autofixAllBtn").disabled === true, label() + " disabled=" + $("autofixAllBtn").disabled);
   });
 
+  await section("13. Simple Design System audit: main-component style, bound text, counts", async () => {
+    const fromMain = (id) => ({
+      candidates: [{ id: "textstyle:S:body-strong", name: "Body Strong", displayName: "Body Strong", source: "style", collectionName: "Text Styles", score: 0, matchLevel: "partial", note: "From main component", fromMainComponent: true }],
+      recommendedId: null, suggestedId: "textstyle:S:body-strong",
+    });
+    await load();
+    const footer = Object.assign(mkIssue("I321:11146;2087:8486", "UNSTYLED_TEXT", "Text Strong"), { nodeType: "TEXT", value: "Inter Bold 16" });
+    const price = Object.assign(mkIssue("I2142:1;2144:3675", "UNSTYLED_TEXT", "50"), { nodeType: "TEXT", value: "Inter Bold 48", boundTextProps: ["family", "size", "weight"] });
+    const fill = mkIssue("13:3", "ROGUE_FILL", "Card");
+    const stroke = mkIssue("13:3", "ROGUE_STROKE", "Card");
+    scenario = {
+      issues: [footer, price, fill, stroke],
+      summary: { total: 4, unstyledText: 2, rogueFills: 1, rogueStrokes: 1, detached: 0, ignored: 0, scannedElements: 10, elementsWithIssues: 3 },
+      candidates: (m) => m.kind === "text" ? (m.id === footer.id ? fromMain(m.id) : { candidates: [], recommendedId: null }) : rec(m.id),
+    };
+    await scan(300);
+    check("status line says issues on elements when one element has two issues", $("statusSub").textContent === "4 issues on 3 of 10 audited elements.", $("statusSub").textContent);
+
+    const footerKey = `${footer.id}:text`;
+    await waitFor(() => (Q(`.fixDropdown[data-issue-key="${footerKey}"]`) || {}).dataset?.value === "textstyle:S:body-strong", 3000);
+    const dd = Q(`.fixDropdown[data-issue-key="${footerKey}"]`);
+    check("main component's style is pre-selected in the row", dd && dd.dataset.value === "textstyle:S:body-strong", dd && dd.dataset.value);
+    const fixBtn = Q(`.fixBtn[data-issue-key="${footerKey}"]`);
+    check("the row's Fix button is enabled for the suggestion", fixBtn && !fixBtn.disabled, fixBtn && fixBtn.disabled);
+    const plan = ev("buildAutofixAllPlan()");
+    check("Fix all does not auto-apply a main-component suggestion", !plan.items.some(i => i.id === footer.id), JSON.stringify(plan.items));
+
+    const bound = QA(".rowBound").map(e => e.textContent);
+    check("variable-bound text shows its bindings", bound.length === 1 && bound[0] === "Variable-bound: family, size, weight · no text style", JSON.stringify(bound));
+
+    let csv = "";
+    const origBlob = W().Blob;
+    W().Blob = function (parts) { csv = parts.join(""); return new origBlob(parts); };
+    ev("exportScanCsv()");
+    W().Blob = origBlob;
+    const lines = csv.split("\r\n");
+    check("CSV has the new columns", lines[0] === "id,type,nodeType,name,path,value,insideInstance,sourceLayerId,boundTextProps,suggestedFix,matchScore,detachedComponentName,ignored", lines[0]);
+    check("CSV row for an instance layer names its source layer and suggested fix",
+      lines[1] === "I321:11146;2087:8486,UNSTYLED_TEXT,TEXT,Text Strong,Frame / Text Strong,Inter Bold 16,true,2087:8486,,Body Strong,From main component,,false", lines[1]);
+    const triggerText = (Q(`.fixDropdown[data-issue-key="${footerKey}"] .fixValue`) || {}).textContent;
+    check("the closed dropdown says the style comes from the main component", triggerText === "Body Strong · from main component", triggerText);
+
+    // Only suggestions left: the Fix-all button points at them instead of saying nothing matched.
+    await load();
+    scenario = {
+      issues: [footer, Object.assign({}, footer, { id: "I321:11147;2087:8486" })],
+      candidates: (m) => fromMain(m.id),
+    };
+    await scan(300);
+    const allLabel = () => Q("#autofixAllBtn .btnLabel").textContent;
+    await waitFor(() => /review/.test(allLabel()), 4000);
+    check("Fix all names the suggestions to review", allLabel() === "2 suggested fixes to review row by row" && $("autofixAllBtn").disabled === true, allLabel() + " disabled=" + $("autofixAllBtn").disabled);
+  });
+
   return results;
 };
 </script></body></html>

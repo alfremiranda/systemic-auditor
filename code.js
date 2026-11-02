@@ -192,7 +192,14 @@ function collectNodes(start, scanChildren) {
         visit(n);
     return out;
 }
+// Slots (Figma's slots feature) carry detachedInfo but are intentional component architecture, not
+// a detached instance. Compared as a string: older clients' typings don't know the "SLOT" type.
+function isSlotNode(node) {
+    return node.type === "SLOT";
+}
 function isDetachedInstanceLike(node) {
+    if (isSlotNode(node))
+        return false;
     return node.detachedInfo != null;
 }
 function canCheckDetachedInfo(node) {
@@ -725,8 +732,32 @@ function hasBoundPaintVariable(node, kind) {
     }
     return false;
 }
+// Figma draws this dashed violet border around every component set by default. It's editor chrome
+// that never ships, so it isn't a hardcoded stroke. Matched on the color, not the dash, so a set
+// whose border was restyled to anything else is still audited.
+const COMPONENT_SET_BORDER = { r: 151 / 255, g: 71 / 255, b: 255 / 255 };
+function isComponentSetChromeStroke(node, visibleStrokes) {
+    if (node.type !== "COMPONENT_SET")
+        return false;
+    const near = (a, b) => Math.abs(a - b) < 0.01;
+    return visibleStrokes.every((p) => {
+        var _a;
+        return p.type === "SOLID" &&
+            near(p.color.r, COMPONENT_SET_BORDER.r) &&
+            near(p.color.g, COMPONENT_SET_BORDER.g) &&
+            near(p.color.b, COMPONENT_SET_BORDER.b) &&
+            ((_a = p.opacity) !== null && _a !== void 0 ? _a : 1) > 0.99;
+    });
+}
+// Sections organize the canvas; their own fill and stroke are not product UI. Their children are
+// still collected and audited normally.
+function isCanvasOrganizer(node) {
+    return node.type === "SECTION";
+}
 function hasRogueFill(node) {
     if (!("fills" in node))
+        return false;
+    if (isCanvasOrganizer(node))
         return false;
     const paintHolder = node;
     const fills = paintHolder.fills;
@@ -748,6 +779,8 @@ function hasRogueFill(node) {
 function hasRogueStroke(node) {
     if (!("strokes" in node))
         return false;
+    if (isCanvasOrganizer(node))
+        return false;
     const paintHolder = node;
     const strokes = paintHolder.strokes;
     if (isMixed(strokes) || !Array.isArray(strokes) || strokes.length === 0)
@@ -760,6 +793,8 @@ function hasRogueStroke(node) {
     const hasNonImageVisibleStroke = visibleStrokes.some((p) => p.type !== "IMAGE");
     if (!hasNonImageVisibleStroke)
         return false;
+    if (isComponentSetChromeStroke(node, visibleStrokes))
+        return false;
     // Variable-bound paints are OK
     if (hasBoundPaintVariable(node, "strokes"))
         return false;
@@ -770,6 +805,29 @@ function hasUnstyledText(node) {
         return false;
     const textStyleId = node.textStyleId;
     return textStyleId === "" || isMixed(textStyleId);
+}
+const BOUND_TEXT_PROP_LABELS = [
+    ["fontFamily", "family"],
+    ["fontSize", "size"],
+    ["fontWeight", "weight"],
+    ["fontStyle", "weight"],
+    ["lineHeight", "line height"],
+    ["letterSpacing", "letter spacing"],
+    ["fills", "color"],
+];
+// Human labels for the text properties bound to variables, in a stable order, without duplicates.
+function getBoundTextProps(node) {
+    const bound = node.boundVariables;
+    if (!bound)
+        return [];
+    const out = [];
+    for (const [key, label] of BOUND_TEXT_PROP_LABELS) {
+        const v = bound[key];
+        const isBound = Array.isArray(v) ? v.some(Boolean) : !!v;
+        if (isBound && out.indexOf(label) < 0)
+            out.push(label);
+    }
+    return out;
 }
 function isMixedTextProps(node) {
     return (isMixed(node.fontName) ||
@@ -898,12 +956,35 @@ function textStyleHasVariableBindings(style) {
         return false;
     return Object.keys(bound).some((k) => !!bound[k]);
 }
+// The text style the same layer has in its main component, for a text layer inside an instance.
+// Instance sublayer ids are "I<instance>;…;<source>", and the last segment is the layer in the
+// innermost main component. An override (say, Semi Bold → Bold) is what dropped the style.
+function getMainComponentTextStyle(node) {
+    return __awaiter(this, void 0, void 0, function* () {
+        if (!node.id.startsWith("I") || node.id.indexOf(";") < 0)
+            return null;
+        const sourceId = node.id.split(";").pop() || "";
+        try {
+            const source = yield figma.getNodeByIdAsync(sourceId);
+            if (!source || source.type !== "TEXT")
+                return null;
+            const styleId = source.textStyleId;
+            if (typeof styleId !== "string" || !styleId)
+                return null;
+            const style = yield figma.getStyleByIdAsync(styleId);
+            return style && style.type === "TEXT" ? style : null;
+        }
+        catch (_a) {
+            return null;
+        }
+    });
+}
 function findTextCandidates(node) {
     return __awaiter(this, void 0, void 0, function* () {
         const mixed = isMixedTextProps(node);
         const props = normalizeTextProps(node);
         if (!props.fontName || !props.fontSize) {
-            return { candidates: [], recommendedId: null, mixed };
+            return { candidates: [], recommendedId: null, suggestedId: null, mixed };
         }
         const styles = yield getTextStylesForMatching();
         const candidates = [];
@@ -956,9 +1037,25 @@ function findTextCandidates(node) {
                 note,
             });
         }
+        const sourceStyle = yield getMainComponentTextStyle(node);
+        if (sourceStyle) {
+            const id = `textstyle:${sourceStyle.id}`;
+            let source = candidates.find((c) => c.id === id);
+            if (!source) {
+                // Usually absent from the loop above: the override changed the font style, so it was filtered out.
+                source = { id, name: sourceStyle.name, displayName: sourceStyle.name, source: "style", collectionName: "Text Styles", score: 0, matchLevel: "partial" };
+                candidates.push(source);
+            }
+            source.fromMainComponent = true;
+            source.note = "From main component";
+        }
         // Match quality first: a variable-bound partial match must never outrank a perfect one.
+        // The main component's own style goes above everything: it's the clearest signal of intent.
         const levelRank = (c) => (c.matchLevel === "perfect" ? 3 : c.matchLevel === "near" ? 2 : 1);
         const sorted = candidates.sort((a, b) => {
+            const dm = Number(!!b.fromMainComponent) - Number(!!a.fromMainComponent);
+            if (dm !== 0)
+                return dm;
             const dl = levelRank(b) - levelRank(a);
             if (dl !== 0)
                 return dl;
@@ -967,10 +1064,14 @@ function findTextCandidates(node) {
                 return ds;
             return (a.displayName || a.name).localeCompare(b.displayName || b.name);
         });
+        const source = sorted.find((c) => c.fromMainComponent);
+        const exact = (c) => c.matchLevel === "perfect" || c.matchLevel === "near";
         const perfect = sorted.find((c) => c.matchLevel === "perfect");
         const near = sorted.find((c) => c.matchLevel === "near");
-        const recommended = perfect || near || null;
-        return { candidates: sorted, recommendedId: recommended ? recommended.id : null, mixed };
+        // A main-component style that also matches the layer's properties is safe to auto-apply.
+        const recommended = (source && exact(source) ? source : null) || perfect || near || null;
+        const suggestedId = source && source !== recommended ? source.id : null;
+        return { candidates: sorted, recommendedId: recommended ? recommended.id : null, suggestedId, mixed };
     });
 }
 function nodeScopeForVariable(node, kind) {
@@ -1137,6 +1238,22 @@ function paintToRgba(paint) {
         b: paint.color.b,
         a: opacity,
     };
+}
+function describeIssueValue(node, type) {
+    if (type === "ROGUE_FILL" || type === "ROGUE_STROKE") {
+        const color = getSolidPaintColor(node, type === "ROGUE_FILL" ? "fills" : "strokes");
+        if (!color)
+            return "non-solid paint";
+        const hex = [color.r, color.g, color.b].map((c) => ("0" + Math.round(c * 255).toString(16)).slice(-2)).join("").toUpperCase();
+        return `#${hex} ${Math.round((typeof color.a === "number" ? color.a : 1) * 100)}%`;
+    }
+    if (type === "UNSTYLED_TEXT" && node.type === "TEXT") {
+        const { fontName, fontSize } = node;
+        if (isMixed(fontName) || isMixed(fontSize))
+            return "mixed";
+        return `${fontName.family} ${fontName.style} ${fontSize}`;
+    }
+    return "";
 }
 function getSolidPaintColor(node, kind) {
     const paints = node[kind];
@@ -1424,7 +1541,7 @@ function runAudit(selection, options) {
         let detached = 0;
         let ignored = 0;
         const addIssue = (node, type, extra = {}) => {
-            const issue = Object.assign({ id: node.id, name: node.name, type, path: getNodePath(node) }, extra);
+            const issue = Object.assign({ id: node.id, name: node.name, type, path: getNodePath(node), nodeType: node.type, value: describeIssueValue(node, type) }, extra);
             if (isIssueIgnored(node, type)) {
                 ignored++;
                 ignoredIssues.push(issue);
@@ -1454,8 +1571,9 @@ function runAudit(selection, options) {
                     markAudited(node);
                     if (hasUnstyledText(node)) {
                         const mixedText = isMixedTextProps(node);
+                        const boundTextProps = getBoundTextProps(node);
                         const before = issues.length;
-                        addIssue(node, "UNSTYLED_TEXT", { mixedText });
+                        addIssue(node, "UNSTYLED_TEXT", boundTextProps.length ? { mixedText, boundTextProps } : { mixedText });
                         if (issues.length > before)
                             unstyledText++;
                     }
@@ -1715,8 +1833,8 @@ function handleMessage(msg) {
                         reply({ candidates: [], recommendedId: null });
                         return;
                     }
-                    const { candidates, recommendedId, mixed } = yield findTextCandidates(node);
-                    reply({ candidates, recommendedId, mixed });
+                    const { candidates, recommendedId, suggestedId, mixed } = yield findTextCandidates(node);
+                    reply({ candidates, recommendedId, suggestedId, mixed });
                     return;
                 }
                 const color = getSolidPaintColor(node, kind);

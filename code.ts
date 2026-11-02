@@ -148,6 +148,11 @@ type Issue = {
   path: string;
   detachedComponentName?: string;
   mixedText?: boolean;
+  // UNSTYLED_TEXT only: typography already bound to variables (tokenized, just not a text style).
+  boundTextProps?: string[];
+  nodeType?: string;
+  // What was found, for the CSV: "#F5F5F5 100%" for paints, "Inter Bold 16" for text.
+  value?: string;
 };
 
 type AutofixCandidate = {
@@ -163,6 +168,7 @@ type AutofixCandidate = {
   disabled?: boolean;
   matchLevel?: "perfect" | "near" | "partial";
   note?: string;
+  fromMainComponent?: boolean;
 };
 
 type AutofixAllItem = {
@@ -231,7 +237,14 @@ function collectNodes(start: readonly SceneNode[], scanChildren: boolean): Scene
   return out;
 }
 
+// Slots (Figma's slots feature) carry detachedInfo but are intentional component architecture, not
+// a detached instance. Compared as a string: older clients' typings don't know the "SLOT" type.
+function isSlotNode(node: SceneNode): boolean {
+  return (node.type as string) === "SLOT";
+}
+
 function isDetachedInstanceLike(node: SceneNode): boolean {
+  if (isSlotNode(node)) return false;
   return (node as unknown as DetachedInfoHolder).detachedInfo != null;
 }
 
@@ -773,8 +786,32 @@ function hasBoundPaintVariable(node: SceneNode, kind: "fills" | "strokes"): bool
   return false;
 }
 
+// Figma draws this dashed violet border around every component set by default. It's editor chrome
+// that never ships, so it isn't a hardcoded stroke. Matched on the color, not the dash, so a set
+// whose border was restyled to anything else is still audited.
+const COMPONENT_SET_BORDER: RGB = { r: 151 / 255, g: 71 / 255, b: 255 / 255 };
+
+function isComponentSetChromeStroke(node: SceneNode, visibleStrokes: ReadonlyArray<Paint>): boolean {
+  if (node.type !== "COMPONENT_SET") return false;
+  const near = (a: number, b: number) => Math.abs(a - b) < 0.01;
+  return visibleStrokes.every((p) =>
+    p.type === "SOLID" &&
+    near(p.color.r, COMPONENT_SET_BORDER.r) &&
+    near(p.color.g, COMPONENT_SET_BORDER.g) &&
+    near(p.color.b, COMPONENT_SET_BORDER.b) &&
+    (p.opacity ?? 1) > 0.99
+  );
+}
+
+// Sections organize the canvas; their own fill and stroke are not product UI. Their children are
+// still collected and audited normally.
+function isCanvasOrganizer(node: SceneNode): boolean {
+  return node.type === "SECTION";
+}
+
 function hasRogueFill(node: SceneNode): boolean {
   if (!("fills" in node)) return false;
+  if (isCanvasOrganizer(node)) return false;
 
   const paintHolder = node as unknown as PaintHolder;
   const fills = paintHolder.fills;
@@ -797,6 +834,7 @@ function hasRogueFill(node: SceneNode): boolean {
 
 function hasRogueStroke(node: SceneNode): boolean {
   if (!("strokes" in node)) return false;
+  if (isCanvasOrganizer(node)) return false;
 
   const paintHolder = node as unknown as PaintHolder;
   const strokes = paintHolder.strokes;
@@ -811,6 +849,8 @@ function hasRogueStroke(node: SceneNode): boolean {
   const hasNonImageVisibleStroke = visibleStrokes.some((p) => p.type !== "IMAGE");
   if (!hasNonImageVisibleStroke) return false;
 
+  if (isComponentSetChromeStroke(node, visibleStrokes)) return false;
+
   // Variable-bound paints are OK
   if (hasBoundPaintVariable(node, "strokes")) return false;
 
@@ -821,6 +861,29 @@ function hasUnstyledText(node: SceneNode): boolean {
   if (node.type !== "TEXT") return false;
   const textStyleId = (node as TextNode).textStyleId as string | typeof figma.mixed;
   return textStyleId === "" || isMixed(textStyleId);
+}
+
+const BOUND_TEXT_PROP_LABELS: ReadonlyArray<[string, string]> = [
+  ["fontFamily", "family"],
+  ["fontSize", "size"],
+  ["fontWeight", "weight"],
+  ["fontStyle", "weight"],
+  ["lineHeight", "line height"],
+  ["letterSpacing", "letter spacing"],
+  ["fills", "color"],
+];
+
+// Human labels for the text properties bound to variables, in a stable order, without duplicates.
+function getBoundTextProps(node: TextNode): string[] {
+  const bound = node.boundVariables as Record<string, unknown> | undefined;
+  if (!bound) return [];
+  const out: string[] = [];
+  for (const [key, label] of BOUND_TEXT_PROP_LABELS) {
+    const v = bound[key];
+    const isBound = Array.isArray(v) ? v.some(Boolean) : !!v;
+    if (isBound && out.indexOf(label) < 0) out.push(label);
+  }
+  return out;
 }
 
 function isMixedTextProps(node: TextNode): boolean {
@@ -964,15 +1027,36 @@ function textStyleHasVariableBindings(style: TextStyle): boolean {
   return Object.keys(bound).some((k) => !!bound[k]);
 }
 
+// The text style the same layer has in its main component, for a text layer inside an instance.
+// Instance sublayer ids are "I<instance>;…;<source>", and the last segment is the layer in the
+// innermost main component. An override (say, Semi Bold → Bold) is what dropped the style.
+async function getMainComponentTextStyle(node: TextNode): Promise<TextStyle | null> {
+  if (!node.id.startsWith("I") || node.id.indexOf(";") < 0) return null;
+  const sourceId = node.id.split(";").pop() || "";
+  try {
+    const source = await figma.getNodeByIdAsync(sourceId);
+    if (!source || source.type !== "TEXT") return null;
+    const styleId = source.textStyleId;
+    if (typeof styleId !== "string" || !styleId) return null;
+    const style = await figma.getStyleByIdAsync(styleId);
+    return style && style.type === "TEXT" ? (style as TextStyle) : null;
+  } catch {
+    return null;
+  }
+}
+
 async function findTextCandidates(node: TextNode): Promise<{
   candidates: AutofixCandidate[];
   recommendedId: string | null;
+  // Pre-selected in the row but never auto-applied by Fix all: the main component's style, which
+  // may undo a deliberate override. null when there is none or it already is the recommendation.
+  suggestedId: string | null;
   mixed: boolean;
 }> {
   const mixed = isMixedTextProps(node);
   const props = normalizeTextProps(node);
   if (!props.fontName || !props.fontSize) {
-    return { candidates: [], recommendedId: null, mixed };
+    return { candidates: [], recommendedId: null, suggestedId: null, mixed };
   }
 
   const styles = await getTextStylesForMatching();
@@ -1031,9 +1115,25 @@ async function findTextCandidates(node: TextNode): Promise<{
     });
   }
 
+  const sourceStyle = await getMainComponentTextStyle(node);
+  if (sourceStyle) {
+    const id = `textstyle:${sourceStyle.id}`;
+    let source = candidates.find((c) => c.id === id);
+    if (!source) {
+      // Usually absent from the loop above: the override changed the font style, so it was filtered out.
+      source = { id, name: sourceStyle.name, displayName: sourceStyle.name, source: "style", collectionName: "Text Styles", score: 0, matchLevel: "partial" };
+      candidates.push(source);
+    }
+    source.fromMainComponent = true;
+    source.note = "From main component";
+  }
+
   // Match quality first: a variable-bound partial match must never outrank a perfect one.
+  // The main component's own style goes above everything: it's the clearest signal of intent.
   const levelRank = (c: AutofixCandidate) => (c.matchLevel === "perfect" ? 3 : c.matchLevel === "near" ? 2 : 1);
   const sorted = candidates.sort((a, b) => {
+    const dm = Number(!!b.fromMainComponent) - Number(!!a.fromMainComponent);
+    if (dm !== 0) return dm;
     const dl = levelRank(b) - levelRank(a);
     if (dl !== 0) return dl;
     const ds = (b.score || 0) - (a.score || 0);
@@ -1041,11 +1141,15 @@ async function findTextCandidates(node: TextNode): Promise<{
     return (a.displayName || a.name).localeCompare(b.displayName || b.name);
   });
 
+  const source = sorted.find((c) => c.fromMainComponent);
+  const exact = (c: AutofixCandidate) => c.matchLevel === "perfect" || c.matchLevel === "near";
   const perfect = sorted.find((c) => c.matchLevel === "perfect");
   const near = sorted.find((c) => c.matchLevel === "near");
-  const recommended = perfect || near || null;
+  // A main-component style that also matches the layer's properties is safe to auto-apply.
+  const recommended = (source && exact(source) ? source : null) || perfect || near || null;
+  const suggestedId = source && source !== recommended ? source.id : null;
 
-  return { candidates: sorted, recommendedId: recommended ? recommended.id : null, mixed };
+  return { candidates: sorted, recommendedId: recommended ? recommended.id : null, suggestedId, mixed };
 }
 
 type Lab = { l: number; a: number; b: number };
@@ -1226,6 +1330,21 @@ function paintToRgba(paint: Paint): RGBA | null {
     b: paint.color.b,
     a: opacity,
   };
+}
+
+function describeIssueValue(node: SceneNode, type: IssueType): string {
+  if (type === "ROGUE_FILL" || type === "ROGUE_STROKE") {
+    const color = getSolidPaintColor(node, type === "ROGUE_FILL" ? "fills" : "strokes");
+    if (!color) return "non-solid paint";
+    const hex = [color.r, color.g, color.b].map((c) => ("0" + Math.round(c * 255).toString(16)).slice(-2)).join("").toUpperCase();
+    return `#${hex} ${Math.round((typeof color.a === "number" ? color.a : 1) * 100)}%`;
+  }
+  if (type === "UNSTYLED_TEXT" && node.type === "TEXT") {
+    const { fontName, fontSize } = node;
+    if (isMixed(fontName) || isMixed(fontSize)) return "mixed";
+    return `${fontName.family} ${fontName.style} ${fontSize}`;
+  }
+  return "";
 }
 
 function getSolidPaintColor(node: SceneNode, kind: "fills" | "strokes"): RGBA | null {
@@ -1514,7 +1633,7 @@ async function runAudit(selection: readonly SceneNode[], options: AuditOptions) 
   let ignored = 0;
 
   const addIssue = (node: SceneNode, type: IssueType, extra: Partial<Issue> = {}) => {
-    const issue: Issue = { id: node.id, name: node.name, type, path: getNodePath(node), ...extra };
+    const issue: Issue = { id: node.id, name: node.name, type, path: getNodePath(node), nodeType: node.type, value: describeIssueValue(node, type), ...extra };
     if (isIssueIgnored(node, type)) {
       ignored++;
       ignoredIssues.push(issue);
@@ -1545,8 +1664,9 @@ async function runAudit(selection: readonly SceneNode[], options: AuditOptions) 
         markAudited(node);
         if (hasUnstyledText(node)) {
           const mixedText = isMixedTextProps(node as TextNode);
+          const boundTextProps = getBoundTextProps(node as TextNode);
           const before = issues.length;
-          addIssue(node, "UNSTYLED_TEXT", { mixedText });
+          addIssue(node, "UNSTYLED_TEXT", boundTextProps.length ? { mixedText, boundTextProps } : { mixedText });
           if (issues.length > before) unstyledText++;
         }
       }
@@ -1815,8 +1935,8 @@ async function handleMessage(msg: UiMessage): Promise<void> {
           reply({ candidates: [], recommendedId: null });
           return;
         }
-        const { candidates, recommendedId, mixed } = await findTextCandidates(node as TextNode);
-        reply({ candidates, recommendedId, mixed });
+        const { candidates, recommendedId, suggestedId, mixed } = await findTextCandidates(node as TextNode);
+        reply({ candidates, recommendedId, suggestedId, mixed });
         return;
       }
 

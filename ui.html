@@ -1159,6 +1159,14 @@
         text-overflow: ellipsis;
         max-width: 100%;
       }
+      .rowBound{
+        font-size: 12px;
+        color: var(--cyan, #22d3ee);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 100%;
+      }
       .rowMeta{
         display: flex;
         flex-direction: column;
@@ -1999,6 +2007,7 @@
       const autofixState = {
         candidatesByKey: {},
         recommendedByKey: {},
+        suggestedByKey: {},
         requestedByKey: {},
         retryByKey: {},
         pendingTimers: {},
@@ -2031,6 +2040,7 @@
       function resetAutofixState(){
         autofixState.candidatesByKey = {};
         autofixState.recommendedByKey = {};
+        autofixState.suggestedByKey = {};
         autofixState.requestedByKey = {};
         autofixState.retryByKey = {};
         autofixState.selectedByKey = {};
@@ -2140,6 +2150,22 @@
         parent.postMessage({ pluginMessage: { type: "open-external", url } }, "*");
       }
 
+      // The closed dropdown says why a main-component style was picked, not just its name.
+      function candidateTriggerLabel(c){
+        const name = c.name || c.displayName || "Unnamed";
+        return c.fromMainComponent ? `${name} · from main component` : name;
+      }
+
+      // Rows whose pre-selected fix is only a suggestion (Fix all leaves those for review).
+      function countSuggestionsToReview(){
+        const issues = Array.isArray(state.issues) ? state.issues : [];
+        return issues.filter((issue) => {
+          if (!issue || issue.type !== "UNSTYLED_TEXT" || issue.mixedText) return false;
+          const key = `${issue.id}:text`;
+          return !!autofixState.suggestedByKey[key] && !autofixState.selectedByKey[key] && !autofixState.recommendedByKey[key];
+        }).length;
+      }
+
       function updateAutofixRow(key, dropdownEl, triggerEl, menuEl, fixBtnEl){
         const dropdown = dropdownEl || document.querySelector(`.fixDropdown[data-issue-key="${key}"]`);
         const trigger = triggerEl || document.querySelector(`.fixTrigger[data-issue-key="${key}"]`);
@@ -2164,7 +2190,9 @@
 
         const candidates = autofixState.candidatesByKey[key] || [];
         const recommendedId = autofixState.recommendedByKey[key] || "";
-        const selectedId = autofixState.selectedByKey[key] || recommendedId || "";
+        // A suggestion (the main component's style) is pre-selected for the row's Fix button, but
+        // Fix all only applies recommended or hand-picked matches (pickAutofixCandidate).
+        const selectedId = autofixState.selectedByKey[key] || recommendedId || autofixState.suggestedByKey[key] || "";
 
         const prevScrollTop = wasOpen ? menu.scrollTop : 0;
         menu.innerHTML = "";
@@ -2251,7 +2279,7 @@
               autofixState.selectedByKey[key] = c.id;
               refreshAutofixAllButton();
               dropdown.dataset.value = c.id;
-              if (valueEl) valueEl.textContent = c.name || c.displayName || "Unnamed";
+              if (valueEl) valueEl.textContent = candidateTriggerLabel(c);
               if (swatchEl) {
                 swatchEl.style.background = c.color || "";
                 swatchEl.style.display = c.color ? "inline-block" : "none";
@@ -2278,7 +2306,8 @@
 
         dropdown.dataset.value = selectedId;
         if (valueEl) {
-          valueEl.textContent = (candidates.find((c) => c.id === selectedId)?.name) || (kind === "text" ? "Select text style" : "Select variable");
+          const sel = candidates.find((c) => c.id === selectedId);
+          valueEl.textContent = sel ? candidateTriggerLabel(sel) : (kind === "text" ? "Select text style" : "Select variable");
         }
         if (swatchEl) {
           const color = (candidates.find((c) => c.id === selectedId)?.color) || "";
@@ -2505,6 +2534,7 @@
         if (forceRefresh) {
           autofixState.candidatesByKey = {};
           autofixState.recommendedByKey = {};
+          autofixState.suggestedByKey = {};
           autofixState.requestedByKey = {};
           autofixState.retryByKey = {};
           autofixState.pendingKeys = {};
@@ -2999,6 +3029,14 @@
           breadcrumb.className = "rowBreadcrumb";
           breadcrumb.textContent = issue.path || "";
 
+          // Tokenized text without a style is a different decision from hand-typed text: say so.
+          let boundNote = null;
+          if (issue.type === "UNSTYLED_TEXT" && Array.isArray(issue.boundTextProps) && issue.boundTextProps.length) {
+            boundNote = document.createElement("div");
+            boundNote.className = "rowBound";
+            boundNote.textContent = `Variable-bound: ${issue.boundTextProps.join(", ")} · no text style`;
+          }
+
           const actions = document.createElement("div");
           actions.className = "rowActions";
 
@@ -3012,6 +3050,7 @@
           meta.className = "rowMeta";
           meta.appendChild(top);
           meta.appendChild(breadcrumb);
+          if (boundNote) meta.appendChild(boundNote);
           row.appendChild(meta);
 
           const isDetached = issue.type === "DETACHED_INSTANCE";
@@ -3275,7 +3314,11 @@
         const elementsLine = scanned > 0
           ? (withIssues === 0
               ? `${scanned} audited ${elWord(scanned)} without issues.`
-              : `${withIssues} of ${scanned} audited ${elWord(scanned)} ${hasHave(withIssues)} issues.`)
+              // One element can carry several issues (a fill and a stroke), so say so when the
+              // counts differ instead of showing "72 of …" next to "73 issues".
+              : totalIssues > withIssues
+                ? `${plural(totalIssues, "issue")} on ${withIssues} of ${scanned} audited ${elWord(scanned)}.`
+                : `${withIssues} of ${scanned} audited ${elWord(scanned)} ${hasHave(withIssues)} issues.`)
           : `Found ${plural(totalIssues, "issue")} in scan.`;
 
         // Health % is shown in the gauge; use this line to communicate audit coverage.
@@ -3373,8 +3416,10 @@
           return !!kind && !autofixState.candidatesByKey[`${issue.id}:${kind}`];
         });
         const n = buildAutofixAllPlan().total;
+        const toReview = countSuggestionsToReview();
         let text;
         if (unresolved) text = "Auto-fix matched issues";
+        else if (n === 0 && toReview > 0) text = `${toReview} suggested ${toReview === 1 ? "fix" : "fixes"} to review row by row`;
         else if (n === 0) text = "No confident matches to auto-fix";
         else text = `Auto-fix ${n} matched ${n === 1 ? "issue" : "issues"}`;
         if (label) label.textContent = text;
@@ -4045,11 +4090,34 @@
         return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
       }
 
+      // The fix the row would apply (hand-picked, recommended, or suggested) and how good a match it is.
+      function csvSuggestedFix(issue){
+        const kind = issue.type === "ROGUE_FILL" ? "fill" : issue.type === "ROGUE_STROKE" ? "stroke" : issue.type === "UNSTYLED_TEXT" ? "text" : "";
+        if (!kind) return ["", ""];
+        const key = `${issue.id}:${kind}`;
+        const id = autofixState.selectedByKey[key] || autofixState.recommendedByKey[key] || autofixState.suggestedByKey[key] || "";
+        const c = (autofixState.candidatesByKey[key] || []).find((x) => x.id === id);
+        if (!c) return ["", ""];
+        const score = typeof c.deltaE === "number" ? `ΔE ${c.deltaE}` : (c.note || c.matchLevel || "");
+        return [c.displayName || c.name || "", score];
+      }
+
       function exportScanCsv(){
-        const rows = [["id", "type", "name", "path", "detachedComponentName"]];
-        for (const issue of state.issues) {
-          rows.push([issue.id, issue.type, issue.name, issue.path, issue.detachedComponentName || ""]);
-        }
+        const rows = [["id", "type", "nodeType", "name", "path", "value", "insideInstance", "sourceLayerId", "boundTextProps", "suggestedFix", "matchScore", "detachedComponentName", "ignored"]];
+        const pushRow = (issue, ignored) => {
+          const id = String(issue.id || "");
+          // Instance sublayer ids are "I<instance>;…;<layer in the main component>".
+          const insideInstance = id.startsWith("I") && id.includes(";");
+          const [fix, score] = ignored ? ["", ""] : csvSuggestedFix(issue);
+          rows.push([
+            id, issue.type, issue.nodeType || "", issue.name, issue.path, issue.value || "",
+            insideInstance ? "true" : "false", insideInstance ? id.split(";").pop() : "",
+            (issue.boundTextProps || []).join(" + "), fix, score,
+            issue.detachedComponentName || "", ignored ? "true" : "false",
+          ]);
+        };
+        for (const issue of state.issues) pushRow(issue, false);
+        for (const issue of (state.ignoredIssues || [])) pushRow(issue, true);
         const csv = rows.map((r) => r.map(csvField).join(",")).join("\r\n");
         try {
           const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
@@ -4213,6 +4281,7 @@
           // Final answer (possibly "nothing matches"): record it so "Fix all" can finish.
           autofixState.candidatesByKey[key] = candidates;
           autofixState.recommendedByKey[key] = String(msg.recommendedId || "");
+          autofixState.suggestedByKey[key] = String(msg.suggestedId || "");
           refreshAutofixAllButton();
           if (msg.mixed) showMixedWarning(key);
           markCandidateDone(key);

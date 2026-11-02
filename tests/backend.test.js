@@ -377,6 +377,85 @@ const solid = (r, g, b) => ({ type: "SOLID", color: { r, g, b }, opacity: 1, vis
     assert.strictEqual(summary.elementsWithIssues, 4);
   });
 
+  // ---------- canvas chrome: slots, sections, component-set borders (Simple Design System audit) ----------
+  const ALL = { scanChildren: true, checkRogueFills: true, checkRogueStrokes: true, checkDetached: true, checkTextStyles: true };
+
+  await test("a SLOT with detachedInfo is not reported as detached, but its children are still audited", async () => {
+    const comp = makeNode({ id: "s:comp", type: "COMPONENT", name: "AI Chatbot" });
+    const inside = makeNode({ id: "s:2", type: "RECTANGLE", fills: [solid(1, 0, 0)] });
+    const slot = makeNode({ id: "s:1", type: "SLOT", name: "Container", fills: [], strokes: [], detachedInfo: { type: "local", componentId: "s:comp" }, children: [inside] });
+    const b = boot({ nodes: { "s:1": slot, "s:2": inside, "s:comp": comp } });
+    const { issues, summary } = await b.get("runAudit")([slot], ALL);
+    assert.strictEqual(summary.detached, 0);
+    eq(issues.map(i => i.id + ":" + i.type), ["s:2:ROGUE_FILL"]);
+  });
+
+  await test("Figma's default dashed violet component-set border is not a rogue stroke; children still are", async () => {
+    const border = solid(151 / 255, 71 / 255, 1);
+    const child = makeNode({ id: "cs:2", type: "COMPONENT", fills: [], strokes: [solid(0, 0, 0)] });
+    const set = makeNode({ id: "cs:1", type: "COMPONENT_SET", fills: [], strokes: [border], dashPattern: [10, 5], children: [child] });
+    const b = boot({ nodes: { "cs:1": set, "cs:2": child } });
+    const { issues } = await b.get("runAudit")([set], ALL);
+    eq(issues.map(i => i.id + ":" + i.type), ["cs:2:ROGUE_STROKE"]);
+  });
+
+  await test("a component set restyled with a different border color is still audited", async () => {
+    const set = makeNode({ id: "cs:3", type: "COMPONENT_SET", fills: [], strokes: [solid(1, 0, 0)] });
+    const b = boot({ nodes: { "cs:3": set } });
+    const { issues } = await b.get("runAudit")([set], ALL);
+    eq(issues.map(i => i.type), ["ROGUE_STROKE"]);
+  });
+
+  await test("a SECTION's own fill and stroke are skipped; its children are audited", async () => {
+    const child = makeNode({ id: "sec:2", type: "RECTANGLE", fills: [solid(1, 0, 0)] });
+    const section = makeNode({ id: "sec:1", type: "SECTION", fills: [solid(0.96, 0.96, 0.96)], strokes: [Object.assign(solid(0, 0, 0), { opacity: 0.1 })], children: [child] });
+    const b = boot({ nodes: { "sec:1": section, "sec:2": child } });
+    const { issues, summary } = await b.get("runAudit")([section], ALL);
+    eq(issues.map(i => i.id + ":" + i.type), ["sec:2:ROGUE_FILL"]);
+    assert.strictEqual(summary.total, summary.elementsWithIssues);
+  });
+
+  // ---------- text style from the main component (Footer mobile titles) ----------
+  const textProps = (style) => ({ fontName: { family: "Inter", style }, fontSize: 16, lineHeight: { unit: "PIXELS", value: 22 }, letterSpacing: { unit: "PIXELS", value: 0 }, characters: "Use cases" });
+  const bodyStrong = { id: "S:body-strong", type: "TEXT", name: "Body Strong", fontName: { family: "Inter", style: "Semi Bold" }, fontSize: 16, lineHeight: { unit: "PIXELS", value: 22 }, letterSpacing: { unit: "PIXELS", value: 0 } };
+
+  await test("an overridden text layer inside an instance suggests its main component's style, but Fix all won't auto-apply it", async () => {
+    const source = makeNode({ id: "2087:8486", type: "TEXT", textStyleId: bodyStrong.id, ...textProps("Semi Bold") });
+    const layer = makeNode({ id: "I321:11146;2087:8486", type: "TEXT", textStyleId: "", ...textProps("Bold") });
+    const b = boot({ nodes: { [source.id]: source, [layer.id]: layer } });
+    b.figma.getStyleByIdAsync = async (id) => (id === bodyStrong.id ? bodyStrong : null);
+    b.figma.getLocalTextStylesAsync = async () => [bodyStrong];
+    const r = await b.get("findTextCandidates")(layer);
+    assert.strictEqual(r.candidates[0].id, "textstyle:" + bodyStrong.id);
+    assert.strictEqual(r.candidates[0].note, "From main component");
+    assert.strictEqual(r.suggestedId, "textstyle:" + bodyStrong.id);
+    assert.strictEqual(r.recommendedId, null, "a weight-changing style must not be auto-applied");
+  });
+
+  await test("when the main component's style also matches the layer exactly, it is the recommendation", async () => {
+    const source = makeNode({ id: "2087:9000", type: "TEXT", textStyleId: bodyStrong.id, ...textProps("Semi Bold") });
+    const layer = makeNode({ id: "I1:1;2087:9000", type: "TEXT", textStyleId: "", ...textProps("Semi Bold") });
+    const b = boot({ nodes: { [source.id]: source, [layer.id]: layer } });
+    b.figma.getStyleByIdAsync = async (id) => (id === bodyStrong.id ? bodyStrong : null);
+    b.figma.getLocalTextStylesAsync = async () => [bodyStrong];
+    const r = await b.get("findTextCandidates")(layer);
+    assert.strictEqual(r.recommendedId, "textstyle:" + bodyStrong.id);
+    assert.strictEqual(r.suggestedId, null);
+  });
+
+  await test("issues carry nodeType, a readable value, and which text props are variable-bound", async () => {
+    const rect = makeNode({ id: "v:1", type: "RECTANGLE", fills: [Object.assign(solid(0.96, 0.96, 0.96), { opacity: 1 })] });
+    const price = makeNode({ id: "v:2", type: "TEXT", textStyleId: "", ...textProps("Bold"), characters: "50",
+      boundVariables: { fontSize: [{ type: "VARIABLE_ALIAS", id: "x" }], fontFamily: [{ type: "VARIABLE_ALIAS", id: "y" }], fontWeight: [{ type: "VARIABLE_ALIAS", id: "z" }] } });
+    const b = boot({ nodes: { "v:1": rect, "v:2": price } });
+    const { issues } = await b.get("runAudit")([rect, price], ALL);
+    const fill = issues.find(i => i.id === "v:1"), text = issues.find(i => i.id === "v:2");
+    assert.strictEqual(fill.nodeType, "RECTANGLE");
+    assert.strictEqual(fill.value, "#F5F5F5 100%");
+    assert.strictEqual(text.value, "Inter Bold 16");
+    eq(text.boundTextProps, ["family", "size", "weight"]);
+  });
+
   for (const [s, n] of results) console.log(s.padEnd(5), n);
   const failed = results.filter(r => r[0] === "FAIL").length;
   console.log(`\n${results.length - failed}/${results.length} passed`);
