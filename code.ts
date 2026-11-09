@@ -147,6 +147,14 @@ type Issue = {
   type: IssueType;
   path: string;
   detachedComponentName?: string;
+  // DETACHED_INSTANCE only. One key per source component ("lib:<key>" / "local:<id>"), so the UI
+  // can group frames detached from the same component.
+  detachedSourceKey?: string;
+  // The source component can't be reached from this file (library not available, or deleted), so
+  // relinking is impossible and the label comes from the frames' own names.
+  detachedSourceMissing?: boolean;
+  // Detached frames inside this one: one decision, so they're listed here, not as separate issues.
+  nestedDetached?: Array<{ id: string; name: string }>;
   mixedText?: boolean;
   // UNSTYLED_TEXT only: typography already bound to variables (tokenized, just not a text style).
   boundTextProps?: string[];
@@ -184,6 +192,8 @@ type AuditOptions = {
   checkRogueStrokes: boolean;
   checkDetached: boolean;
   checkTextStyles: boolean;
+  // Optional so options saved before it existed default to on (only an explicit false turns it off).
+  ignoreDocLayers?: boolean;
 };
 
 let lastAuditOptions: AuditOptions | null = null;
@@ -225,12 +235,26 @@ function hasChildren(node: SceneNode): node is SceneNode & ChildrenMixin {
   return "children" in node;
 }
 
-function collectNodes(start: readonly SceneNode[], scanChildren: boolean): SceneNode[] {
+// Kits put a documentation banner or notes straight on a section, next to the real screens
+// (Material 3's "Header" instance, for example). Those aren't product UI.
+const DOC_LAYER_NAME = /^(header|documentation|docs?|notes?|annotations?|description|readme|cover|legend|instructions?)\b/i;
+
+function isDocumentationLayer(node: SceneNode): boolean {
+  if (!node.parent || node.parent.type !== "SECTION") return false;
+  if (node.type === "COMPONENT" || node.type === "COMPONENT_SET") return false;
+  return DOC_LAYER_NAME.test(node.name || "");
+}
+
+// skip() is only consulted below the selection: a layer the user selected directly is always scanned.
+function collectNodes(start: readonly SceneNode[], scanChildren: boolean, skip?: (n: SceneNode) => boolean): SceneNode[] {
   const out: SceneNode[] = [];
   const visit = (n: SceneNode) => {
     out.push(n);
     if (scanChildren && hasChildren(n)) {
-      for (const child of n.children) visit(child);
+      for (const child of n.children) {
+        if (skip && skip(child)) continue;
+        visit(child);
+      }
     }
   };
   for (const n of start) visit(n);
@@ -252,40 +276,55 @@ function canCheckDetachedInfo(node: SceneNode): boolean {
   return (node as unknown as DetachedInfoHolder).detachedInfo !== undefined;
 }
 
-const detachedLabelCache = new Map<string, string>();
+type DetachedSource = { key: string; label: string; available: boolean };
 
-async function getDetachedComponentName(info: DetachedInfo): Promise<string> {
-  const key = info.type === "local" ? `local:${info.componentId}` : `lib:${info.componentKey}`;
-  const cached = detachedLabelCache.get(key);
+const detachedSourceCache = new Map<string, DetachedSource>();
+
+function detachedSourceKey(info: DetachedInfo): string {
+  return info.type === "local" ? `local:${info.componentId}` : `lib:${info.componentKey}`;
+}
+
+// The component a frame was detached from, and whether it can still be reached from this file.
+// A library that isn't published or enabled here makes importComponentByKeyAsync throw; the label
+// is then left empty and runAudit names the group from its frames instead.
+async function getDetachedSource(info: DetachedInfo): Promise<DetachedSource> {
+  const key = detachedSourceKey(info);
+  const cached = detachedSourceCache.get(key);
   if (cached) return cached;
 
-  let label = info.type === "library" ? "Library component" : "Component";
+  let source: DetachedSource = { key, label: "", available: false };
   try {
-    if (info.type === "local") {
-      const comp = await figma.getNodeByIdAsync(info.componentId);
-      if (comp && "name" in comp) {
-        if (comp.type === "COMPONENT" && comp.parent && comp.parent.type === "COMPONENT_SET") {
-          label = comp.parent.name || comp.name || label;
-        } else {
-          label = comp.name || label;
-        }
-      }
-    } else {
-      const comp = await figma.importComponentByKeyAsync(info.componentKey);
-      if (comp && "name" in comp) {
-        if (comp.parent && comp.parent.type === "COMPONENT_SET") {
-          label = comp.parent.name || comp.name || label;
-        } else {
-          label = comp.name || label;
-        }
-      }
+    const comp = info.type === "local"
+      ? await figma.getNodeByIdAsync(info.componentId)
+      : await figma.importComponentByKeyAsync(info.componentKey);
+    if (comp && "name" in comp) {
+      const inSet = comp.type === "COMPONENT" && comp.parent && comp.parent.type === "COMPONENT_SET";
+      const label = (inSet && comp.parent ? comp.parent.name : "") || comp.name || "Component";
+      source = { key, label, available: comp.type === "COMPONENT" || comp.type === "COMPONENT_SET" };
     }
   } catch {
-    // keep fallback label
+    // unreachable source: keep available:false
   }
 
-  detachedLabelCache.set(key, label);
-  return label;
+  detachedSourceCache.set(key, source);
+  return source;
+}
+
+// "Card 01", "Card 02", "Card" → "Card": the most common frame name with a trailing number removed.
+function commonFrameName(names: readonly string[]): string {
+  const counts = new Map<string, number>();
+  let best = "";
+  let bestCount = 0;
+  for (const raw of names) {
+    const base = (raw || "").replace(/[\s_-]*\d+$/, "").trim() || raw || "Frame";
+    const n = (counts.get(base) || 0) + 1;
+    counts.set(base, n);
+    if (n > bestCount) {
+      best = base;
+      bestCount = n;
+    }
+  }
+  return best || "Frame";
 }
 
 async function createInstanceFromDetachedInfo(info: DetachedInfo): Promise<InstanceNode | null> {
@@ -803,6 +842,24 @@ function isComponentSetChromeStroke(node: SceneNode, visibleStrokes: ReadonlyArr
   );
 }
 
+// Variables can't store gradients, so a paint list that is only gradients (plus images) has
+// nothing to bind to: that's a limit of tokens, not drift. Reported as an informational count.
+function isGradientOnlyPaint(node: SceneNode, kind: "fills" | "strokes"): boolean {
+  const paints = (node as unknown as PaintHolder)[kind];
+  if (!paints || isMixed(paints) || !Array.isArray(paints)) return false;
+  const visible = paints.filter((p) => (p.visible ?? true) === true && p.type !== "IMAGE");
+  return visible.length > 0 && visible.every((p) => p.type.indexOf("GRADIENT") === 0);
+}
+
+// A gradient that would have been a rogue paint if variables could hold it: counted, not flagged.
+function isUntokenizedGradient(node: SceneNode, kind: "fills" | "strokes"): boolean {
+  if (isCanvasOrganizer(node) || !isGradientOnlyPaint(node, kind)) return false;
+  if (hasBoundPaintVariable(node, kind)) return false;
+  const holder = node as unknown as PaintHolder;
+  const styleId = kind === "fills" ? holder.fillStyleId : holder.strokeStyleId;
+  return !styleId || isMixed(styleId);
+}
+
 // Sections organize the canvas; their own fill and stroke are not product UI. Their children are
 // still collected and audited normally.
 function isCanvasOrganizer(node: SceneNode): boolean {
@@ -825,6 +882,7 @@ function hasRogueFill(node: SceneNode): boolean {
   // If all visible fills are IMAGE, consider OK
   const hasNonImageVisibleFill = visibleFills.some((p) => p.type !== "IMAGE");
   if (!hasNonImageVisibleFill) return false;
+  if (isGradientOnlyPaint(node, "fills")) return false;
 
   // Variable-bound paints are OK
   if (hasBoundPaintVariable(node, "fills")) return false;
@@ -850,6 +908,7 @@ function hasRogueStroke(node: SceneNode): boolean {
   if (!hasNonImageVisibleStroke) return false;
 
   if (isComponentSetChromeStroke(node, visibleStrokes)) return false;
+  if (isGradientOnlyPaint(node, "strokes")) return false;
 
   // Variable-bound paints are OK
   if (hasBoundPaintVariable(node, "strokes")) return false;
@@ -1607,7 +1666,13 @@ async function findColorCandidates(target: RGBA, consumer: SceneNode, kind: "fil
 }
 
 async function runAudit(selection: readonly SceneNode[], options: AuditOptions) {
-  const nodes = collectNodes(selection, options.scanChildren);
+  let docLayers = 0;
+  const skipDocs = options.ignoreDocLayers !== false;
+  const nodes = collectNodes(selection, options.scanChildren, (n) => {
+    if (!skipDocs || !isDocumentationLayer(n)) return false;
+    docLayers++;
+    return true;
+  });
   const issues: Issue[] = [];
   // Issues the user marked "not a problem": kept (not counted) so the UI can list and restore them.
   const ignoredIssues: Issue[] = [];
@@ -1631,16 +1696,32 @@ async function runAudit(selection: readonly SceneNode[], options: AuditOptions) 
   let unstyledText = 0;
   let detached = 0;
   let ignored = 0;
+  let gradients = 0;
+  // Top-level detached issues by node id (ignored ones too), so a detached frame nested inside
+  // one of them is attached to it instead of becoming its own row.
+  const detachedById = new Map<string, Issue>();
 
-  const addIssue = (node: SceneNode, type: IssueType, extra: Partial<Issue> = {}) => {
+  // Returns the issue (ignored or not) so callers can keep a handle on it.
+  const addIssue = (node: SceneNode, type: IssueType, extra: Partial<Issue> = {}): Issue => {
     const issue: Issue = { id: node.id, name: node.name, type, path: getNodePath(node), nodeType: node.type, value: describeIssueValue(node, type), ...extra };
     if (isIssueIgnored(node, type)) {
       ignored++;
       ignoredIssues.push(issue);
-      return;
+      return issue;
     }
     issues.push(issue);
     elementsWithIssuesSet.add(node.id);
+    return issue;
+  };
+
+  // Nodes are collected parent-first, so an outer detached frame is always seen before its children.
+  const outermostDetachedAncestor = (node: SceneNode): Issue | null => {
+    let found: Issue | null = null;
+    for (let p: BaseNode | null = node.parent; p && p.type !== "PAGE"; p = p.parent) {
+      const hit = detachedById.get(p.id);
+      if (hit) found = hit;
+    }
+    return found;
   };
 
   for (const node of nodes) {
@@ -1652,11 +1733,21 @@ async function runAudit(selection: readonly SceneNode[], options: AuditOptions) 
       if (options.checkDetached && canCheckDetachedInfo(node)) {
         markAudited(node);
         if (isDetachedInstanceLike(node)) {
-          const info = (node as unknown as DetachedInfoHolder).detachedInfo ?? null;
-          const label = info ? await getDetachedComponentName(info) : undefined;
-          const before = issues.length;
-          addIssue(node, "DETACHED_INSTANCE", { detachedComponentName: label });
-          if (issues.length > before) detached++;
+          const outer = outermostDetachedAncestor(node);
+          if (outer) {
+            (outer.nestedDetached = outer.nestedDetached || []).push({ id: node.id, name: node.name });
+          } else {
+            const info = (node as unknown as DetachedInfoHolder).detachedInfo ?? null;
+            const source = info ? await getDetachedSource(info) : null;
+            const before = issues.length;
+            const issue = addIssue(node, "DETACHED_INSTANCE", source ? {
+              detachedComponentName: source.label || undefined,
+              detachedSourceKey: source.key,
+              detachedSourceMissing: !source.available,
+            } : {});
+            detachedById.set(node.id, issue);
+            if (issues.length > before) detached++;
+          }
         }
       }
 
@@ -1677,6 +1768,8 @@ async function runAudit(selection: readonly SceneNode[], options: AuditOptions) 
           const before = issues.length;
           addIssue(node, "ROGUE_FILL");
           if (issues.length > before) rogueFills++;
+        } else if (isUntokenizedGradient(node, "fills")) {
+          gradients++;
         }
       }
 
@@ -1686,6 +1779,8 @@ async function runAudit(selection: readonly SceneNode[], options: AuditOptions) 
           const before = issues.length;
           addIssue(node, "ROGUE_STROKE");
           if (issues.length > before) rogueStrokes++;
+        } else if (isUntokenizedGradient(node, "strokes")) {
+          gradients++;
         }
       }
     } catch {
@@ -1712,6 +1807,22 @@ async function runAudit(selection: readonly SceneNode[], options: AuditOptions) 
   scannedElements = auditedElementIds.size;
   const elementsWithIssues = elementsWithIssuesSet.size;
 
+  // Frames detached from an unreachable component get the name their frames share
+  // ("Card · 38 frames") instead of a generic "Library component".
+  const missingByKey = new Map<string, Issue[]>();
+  for (const issue of detachedById.values()) {
+    if (!issue.detachedSourceMissing || !issue.detachedSourceKey) continue;
+    const group = missingByKey.get(issue.detachedSourceKey) || [];
+    group.push(issue);
+    missingByKey.set(issue.detachedSourceKey, group);
+  }
+  for (const group of missingByKey.values()) {
+    const label = commonFrameName(group.map((i) => i.name));
+    for (const issue of group) issue.detachedComponentName = label;
+  }
+  const detachedSources = new Set(issues.filter((i) => i.detachedSourceKey).map((i) => i.detachedSourceKey)).size;
+  const nestedDetached = issues.reduce((n, i) => n + (i.nestedDetached ? i.nestedDetached.length : 0), 0);
+
   const summary = {
     total: issues.length,
     rogueFills,
@@ -1721,6 +1832,13 @@ async function runAudit(selection: readonly SceneNode[], options: AuditOptions) 
     ignored,
     scannedElements,
     elementsWithIssues,
+    // Informational, not issues: gradient paints (variables can't hold them), documentation
+    // layers skipped on sections, detached frames folded into an outer detached frame, and how
+    // many source components the detached frames come from.
+    gradients,
+    docLayers,
+    nestedDetached,
+    detachedSources,
   };
 
   return { issues, ignoredIssues, summary, canceled };
@@ -1786,6 +1904,7 @@ async function handleMessage(msg: UiMessage): Promise<void> {
           checkRogueStrokes: !!options.checkRogueStrokes,
           checkDetached: !!options.checkDetached,
           checkTextStyles: !!options.checkTextStyles,
+          ignoreDocLayers: options.ignoreDocLayers !== false,
         }).catch(() => {
           /* ignore storage failures */
         });
@@ -2013,6 +2132,7 @@ async function handleMessage(msg: UiMessage): Promise<void> {
       checkRogueStrokes: true,
       checkDetached: true,
       checkTextStyles: true,
+      ignoreDocLayers: true,
     };
     lastAuditOptions = options;
     lastAuditSelectionIds = selection.map((node) => node.id);
@@ -2020,6 +2140,8 @@ async function handleMessage(msg: UiMessage): Promise<void> {
     // finally block to re-run the last audit, and that re-audit must never inherit a
     // cancellation meant for this user-initiated scan.
     scanCancelRequested = false;
+    // A library enabled since the last scan should make its detached frames relinkable again.
+    detachedSourceCache.clear();
 
     try {
       const { issues, ignoredIssues, summary, canceled } = await runAudit(selection, options);

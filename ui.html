@@ -49,6 +49,7 @@
         inset: 0;
         pointer-events: none;
         overflow: hidden;
+        border-radius: inherit;
       }
       .confettiWrap span{
         position: absolute;
@@ -742,8 +743,11 @@
       display: flex;
       align-items: center;
       gap: 12px; /* space/12 */
-      overflow: hidden;
+      /* Not overflow:hidden: the ⓘ tooltips (Health Score, scan notes) must be able to leave the card.
+         The decorative layers round their own corners instead. Stacked above the stat cards so a
+         tooltip opening downward isn't painted under them. */
       position: relative;
+      z-index: 3;
       min-height: 88px;
       box-shadow:
         0 1px 0 rgba(255,255,255,.06) inset,
@@ -791,6 +795,7 @@
         width: 220px;
         height: 100%;
         background: radial-gradient(120px 220px at 90% 50%, rgba(255,255,255,.06), transparent 70%);
+        border-radius: 0 8px 8px 0;
         pointer-events: none;
       }
 
@@ -1158,6 +1163,58 @@
         overflow: hidden;
         text-overflow: ellipsis;
         max-width: 100%;
+      }
+      /* "ⓘ" after the status line: what the counts include and what was left out (setStats).
+         The tooltip hangs from the start of the status line, not the icon (whose position moves
+         with the text), and opens downward over the stat cards. */
+      #statusSub{ position: relative; }
+      .scanInfoWrap{
+        display: inline-flex;
+        vertical-align: -1px;
+        margin-left: 4px;
+      }
+      .scanInfoWrap[hidden]{ display: none; }
+      .scanInfoWrap .tooltip{
+        left: 0;
+        top: calc(100% + 8px);
+        bottom: auto;
+        transform: none;
+        width: 240px;
+        white-space: pre-line;
+        text-align: left;
+        z-index: 20;
+      }
+      .scanInfoWrap .tooltip::after{ display: none; }
+      .scanInfoWrap:hover .tooltip,
+      .scanInfoWrap:focus-within .tooltip{
+        opacity: 1;
+        transform: translateY(2px);
+      }
+      .rowNote{
+        font-size: 12px;
+        line-height: 1.35;
+        color: var(--muted-2);
+      }
+      .rowNested{
+        font-size: 12px;
+        color: var(--muted-2);
+      }
+      .rowNested summary{
+        cursor: pointer;
+        color: var(--violet);
+        list-style: none;
+      }
+      .rowNested summary::-webkit-details-marker{ display: none; }
+      .rowNested summary::before{ content: "▸ "; }
+      .rowNested[open] summary::before{ content: "▾ "; }
+      .rowNested ul{
+        margin: 4px 0 0;
+        padding-left: 16px;
+      }
+      .groupHint{ color: var(--violet); cursor: pointer; }
+      .row.groupMember{
+        margin-left: 14px;
+        border-left: 2px solid rgba(167,139,250,.35);
       }
       .rowBound{
         font-size: 12px;
@@ -1610,13 +1667,24 @@
       .healthLabelWrap:hover .tooltip,
       .healthLabelWrap:focus-within .tooltip{
         opacity: 1;
-        transform: translateX(-50%) translateY(-2px);
+        transform: translateX(-50%) translateY(2px);
       }
+      /* Opens downward, like the scan-notes tooltip: upward it ran off the top of the panel
+         whenever the status card was scrolled to the top. */
       .healthLabelWrap .tooltip{
         left: 50%;
+        top: calc(100% + 8px);
+        bottom: auto;
         white-space: normal;
         width: 170px;
         text-align: left;
+        z-index: 20;
+      }
+      .healthLabelWrap .tooltip::after{
+        top: -12px;
+        bottom: auto;
+        border-top-color: transparent;
+        border-bottom-color: rgba(15,23,42,.92);
       }
       .healthInfoBtn{
         border: none;
@@ -1769,6 +1837,17 @@
                   <div class="optDesc">Stroke without paint style or variable</div>
                 </div>
               </div>
+
+              <div class="optCard">
+                <label class="switch" id="swDocs" data-on="true">
+                  <input type="checkbox" id="ignoreDocLayers" aria-label="Ignore documentation layers" checked />
+                  <span class="knob"></span>
+                </label>
+                <div class="optText">
+                  <div class="optLabel">Ignore documentation layers</div>
+                  <div class="optDesc">Skip headers and notes placed on sections</div>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -1790,7 +1869,7 @@
             <div class="statusContent">
               <div class="statusLeft">
                 <p class="statusTitle" id="statusTitle" role="status">Scan status: completed</p>
-                <p class="statusSub" id="statusSub">Found 0 issues in scan.</p>
+                <p class="statusSub" id="statusSub"><span id="statusSubText">Found 0 issues in scan.</span><span class="scanInfoWrap" id="scanInfoWrap" hidden><button class="healthInfoBtn" id="scanInfoBtn" type="button" aria-label="What these counts include" aria-describedby="scanNotes"><svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="6.5" stroke="currentColor" stroke-width="1.4"/><path d="M8 7.2v4M8 5.2v.01" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg></button><span class="tooltip" id="scanNotes" role="tooltip"></span></span></p>
                 <p class="celebrateMsg" id="celebrateMsg" style="display:none;">You’re all set — nothing to fix. ✨</p>
                 <div class="autofixProgress" id="autofixProgress">
                   <div class="autofixProgressBar" id="autofixProgressBar"></div>
@@ -2130,8 +2209,13 @@
           scannedElements: Number(prevSummary?.scannedElements || 0),
           elementsWithIssues: 0,
           ignored: Number(prevSummary?.ignored || 0),
+          gradients: Number(prevSummary?.gradients || 0),
+          docLayers: Number(prevSummary?.docLayers || 0),
+          nestedDetached: 0,
+          detachedSources: 0,
         };
         const uniqueIds = new Set();
+        const sourceKeys = new Set();
         for (const issue of issues) {
           summary.total += 1;
           if (issue.type === "DETACHED_INSTANCE") summary.detached += 1;
@@ -2139,8 +2223,11 @@
           if (issue.type === "ROGUE_FILL") summary.rogueFills += 1;
           if (issue.type === "ROGUE_STROKE") summary.rogueStrokes += 1;
           if (issue.id) uniqueIds.add(issue.id);
+          if (issue.detachedSourceKey) sourceKeys.add(issue.detachedSourceKey);
+          if (Array.isArray(issue.nestedDetached)) summary.nestedDetached += issue.nestedDetached.length;
         }
         summary.elementsWithIssues = uniqueIds.size;
+        summary.detachedSources = sourceKeys.size;
         return summary;
       }
 
@@ -2797,6 +2884,8 @@
         // Empty set == "all" — several can be active together (e.g. Fills + Strokes).
         activeFilter: new Set(),
         sortMode: "scan", // scan | type | name
+        // Detached source groups (detachedSourceKey) the user expanded in the list.
+        expandedGroups: new Set(),
         scanCanceled: false,
         issues: [],
         summary: { total: 0, detached: 0, unstyledText: 0, rogueFills: 0, rogueStrokes: 0, ignored: 0 },
@@ -2860,6 +2949,7 @@
           checkTextStyles: $("textWithoutStyle").checked,
           checkRogueFills: $("rogueFills").checked,
           checkRogueStrokes: $("rogueStrokes").checked,
+          ignoreDocLayers: $("ignoreDocLayers").checked,
         };
       }
 
@@ -2869,6 +2959,7 @@
         $("swText").dataset.on = String($("textWithoutStyle").checked);
         $("swFills").dataset.on = String($("rogueFills").checked);
         $("swStrokes").dataset.on = String($("rogueStrokes").checked);
+        $("swDocs").dataset.on = String($("ignoreDocLayers").checked);
       }
 
       function setFiltersActive(){
@@ -2957,150 +3048,263 @@
         return issues; // "scan": scan-traversal order, as found
       }
 
-      // keepScroll: re-render after a single row changed, without jumping back to the top.
-      function renderList(keepScroll = false){
-        const list = $("list");
-        const prevScroll = keepScroll ? list.scrollTop : 0;
-        // Open fix menus are re-parented to <body>; wiping the list would orphan them.
-        document.querySelectorAll("body > .fixMenu").forEach((el) => el.remove());
-        list.innerHTML = "";
-        list.scrollTop = 0;
-
-        const issues = sortIssues(filteredIssues());
-        if (!issues || issues.length === 0){
-          const div = document.createElement("div");
-          div.className = "empty";
-          div.textContent = state.scanComplete ? "No issues found for this category." : "Run a scan to see issues here.";
-          list.appendChild(div);
-          // After rendering, re-measure to prevent the list from being clipped
-          scheduleResizeToFit(80);
-          return;
+      // Detached frames from the same source component (detachedSourceKey) collapse into one group
+      // row at the position of the first one, so 38 frames detached from "Card" read as one decision.
+      // Everything else, and sources with a single frame, stay as plain rows.
+      function groupDetachedForDisplay(issues){
+        const byKey = new Map();
+        for (const issue of issues) {
+          if (issue.type !== "DETACHED_INSTANCE" || !issue.detachedSourceKey) continue;
+          const list = byKey.get(issue.detachedSourceKey) || [];
+          list.push(issue);
+          byKey.set(issue.detachedSourceKey, list);
         }
-        
-        let idx = 0;
-        for (const issue of issues){
-          const row = document.createElement("div");
-          row.className = "row";
-          row.dataset.issueId = issue.id || "";
-          row.style.setProperty('--i', String(idx++));
-          row.setAttribute("role", "listitem");
-          row.tabIndex = 0;
-          bindKeyboardActivate(row, true);
-          row.onclick = () => {
-            // Keep scan status text stable; only request canvas focus.
-            parent.postMessage({ pluginMessage: { type: "select-node", id: issue.id } }, "*");
-          };
-
-          const top = document.createElement("div");
-          top.className = "rowTop";
-
-          // left group holds the name and the path inline
-          const leftGroup = document.createElement("div");
-          leftGroup.className = "leftGroup";
-
-          const iconWrap = document.createElement("div");
-          iconWrap.className = "issueIconWrap";
-
-          const icon = document.createElement("div");
-          icon.className = "issueIcon";
-          icon.innerHTML = getIssueIconSvg(issue.type, `mask-${issue.id}-${idx}`);
-
-          const iconTip = document.createElement("div");
-          iconTip.className = "tooltip";
-          iconTip.textContent = typeToLabel(issue.type);
-
-          iconWrap.appendChild(icon);
-          iconWrap.appendChild(iconTip);
-          iconWrap.addEventListener("mouseenter", () => {
-            showIconTooltip(iconWrap, iconTip);
-          });
-          iconWrap.addEventListener("mouseleave", () => {
-            hideIconTooltip(iconWrap, iconTip);
-          });
-
-          const textGroup = document.createElement("div");
-          textGroup.className = "textGroup";
-
-          const name = document.createElement("div");
-          name.className = "name";
-          name.textContent = issue.name || "(unnamed)";
-
-          const breadcrumb = document.createElement("div");
-          breadcrumb.className = "rowBreadcrumb";
-          breadcrumb.textContent = issue.path || "";
-
-          // Tokenized text without a style is a different decision from hand-typed text: say so.
-          let boundNote = null;
-          if (issue.type === "UNSTYLED_TEXT" && Array.isArray(issue.boundTextProps) && issue.boundTextProps.length) {
-            boundNote = document.createElement("div");
-            boundNote.className = "rowBound";
-            boundNote.textContent = `Variable-bound: ${issue.boundTextProps.join(", ")} · no text style`;
+        const out = [];
+        const placed = new Set();
+        for (const issue of issues) {
+          const key = issue.type === "DETACHED_INSTANCE" ? issue.detachedSourceKey : "";
+          const group = key ? byKey.get(key) : null;
+          if (!group || group.length < 2) {
+            out.push({ issue });
+            continue;
           }
+          if (placed.has(key)) continue;
+          placed.add(key);
+          out.push({ key, group });
+        }
+        return out;
+      }
 
-          const actions = document.createElement("div");
-          actions.className = "rowActions";
+      function buildDetachedGroupRow(item, idx, open){
+        const { key, group } = item;
+        const first = group[0];
+        const missing = !!first.detachedSourceMissing;
+        const nested = group.reduce((n, i) => n + (Array.isArray(i.nestedDetached) ? i.nestedDetached.length : 0), 0);
 
-          leftGroup.appendChild(iconWrap);
-          textGroup.appendChild(name);
-          leftGroup.appendChild(textGroup);
-          top.appendChild(leftGroup);
-          top.appendChild(actions);
+        const row = document.createElement("div");
+        row.className = "row groupRow";
+        row.dataset.groupKey = key;
+        row.style.setProperty("--i", String(idx));
+        row.setAttribute("role", "listitem");
+        row.setAttribute("aria-expanded", String(open));
+        row.tabIndex = 0;
+        bindKeyboardActivate(row, true);
+        const toggle = () => {
+          if (state.expandedGroups.has(key)) state.expandedGroups.delete(key);
+          else state.expandedGroups.add(key);
+          renderList(true);
+        };
+        row.onclick = toggle;
 
-          const meta = document.createElement("div");
-          meta.className = "rowMeta";
-          meta.appendChild(top);
-          meta.appendChild(breadcrumb);
-          if (boundNote) meta.appendChild(boundNote);
-          row.appendChild(meta);
+        const top = document.createElement("div");
+        top.className = "rowTop";
+        const leftGroup = document.createElement("div");
+        leftGroup.className = "leftGroup";
+        const iconWrap = document.createElement("div");
+        iconWrap.className = "issueIconWrap";
+        const icon = document.createElement("div");
+        icon.className = "issueIcon";
+        icon.innerHTML = getIssueIconSvg("DETACHED_INSTANCE", `mask-group-${idx}`);
+        iconWrap.appendChild(icon);
+        const textGroup = document.createElement("div");
+        textGroup.className = "textGroup";
+        const name = document.createElement("div");
+        name.className = "name";
+        name.textContent = first.detachedComponentName || first.name || "Component";
+        textGroup.appendChild(name);
+        leftGroup.appendChild(iconWrap);
+        leftGroup.appendChild(textGroup);
 
-          const isDetached = issue.type === "DETACHED_INSTANCE";
-          const isTextIssue = issue.type === "UNSTYLED_TEXT";
-          const canAutofix = issue.type === "ROGUE_FILL" || issue.type === "ROGUE_STROKE" || isDetached || isTextIssue;
-          const fixKind = issue.type === "ROGUE_FILL" ? "fill" : issue.type === "ROGUE_STROKE" ? "stroke" : (isDetached ? "detached" : (isTextIssue ? "text" : ""));
-          const issueKey = `${issue.id || ""}:${fixKind}`;
+        const actions = document.createElement("div");
+        actions.className = "rowActions";
+        const selectBtn = document.createElement("button");
+        selectBtn.type = "button";
+        selectBtn.className = "fixBtn groupSelectBtn";
+        selectBtn.textContent = "Select";
+        selectBtn.title = "Select these frames on the canvas";
+        selectBtn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          parent.postMessage({ pluginMessage: { type: "select-nodes", ids: group.map((i) => i.id) } }, "*");
+        });
+        actions.appendChild(selectBtn);
+        top.appendChild(leftGroup);
+        top.appendChild(actions);
 
-          const fixBtn = document.createElement("button");
-          fixBtn.className = "fixBtn";
-          fixBtn.type = "button";
-          fixBtn.textContent = isDetached ? "Relink" : "Fix";
-          fixBtn.dataset.issueId = issue.id;
-          fixBtn.dataset.issueKey = issueKey;
+        const count = document.createElement("div");
+        count.className = "rowNote";
+        count.textContent = `${group.length} frames detached from ${missing ? "a library that isn't available in this file" : "this component"}`
+          + (nested ? ` · ${nested} more nested inside them` : "");
 
-          let dropdown = null;
-          let trigger = null;
-          let menu = null;
+        const hint = document.createElement("div");
+        hint.className = "rowNested groupHint";
+        hint.textContent = open ? "▾ Hide frames" : `▸ Show ${group.length} frames`
+          + (missing ? " · Relinking isn't possible here" : "");
 
-          fixBtn.addEventListener("click", (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            if (!isDetached) {
-              const value = dropdown ? dropdown.dataset.value || "" : "";
-              if (!value) return;
+        const meta = document.createElement("div");
+        meta.className = "rowMeta";
+        meta.appendChild(top);
+        meta.appendChild(count);
+        meta.appendChild(hint);
+        row.appendChild(meta);
+        return row;
+      }
+
+      // One issue row: name, path, notes, fix control, ignore button. inGroup: shown under a
+      // detached group row, which already names the source and says whether it's reachable.
+      function buildIssueRow(issue, idx, inGroup = false){
+        const row = document.createElement("div");
+        row.className = "row";
+        row.dataset.issueId = issue.id || "";
+        row.style.setProperty('--i', String(idx++));
+        row.setAttribute("role", "listitem");
+        row.tabIndex = 0;
+        bindKeyboardActivate(row, true);
+        row.onclick = () => {
+          // Keep scan status text stable; only request canvas focus.
+          parent.postMessage({ pluginMessage: { type: "select-node", id: issue.id } }, "*");
+        };
+
+        const top = document.createElement("div");
+        top.className = "rowTop";
+
+        // left group holds the name and the path inline
+        const leftGroup = document.createElement("div");
+        leftGroup.className = "leftGroup";
+
+        const iconWrap = document.createElement("div");
+        iconWrap.className = "issueIconWrap";
+
+        const icon = document.createElement("div");
+        icon.className = "issueIcon";
+        icon.innerHTML = getIssueIconSvg(issue.type, `mask-${issue.id}-${idx}`);
+
+        const iconTip = document.createElement("div");
+        iconTip.className = "tooltip";
+        iconTip.textContent = typeToLabel(issue.type);
+
+        iconWrap.appendChild(icon);
+        iconWrap.appendChild(iconTip);
+        iconWrap.addEventListener("mouseenter", () => {
+          showIconTooltip(iconWrap, iconTip);
+        });
+        iconWrap.addEventListener("mouseleave", () => {
+          hideIconTooltip(iconWrap, iconTip);
+        });
+
+        const textGroup = document.createElement("div");
+        textGroup.className = "textGroup";
+
+        const name = document.createElement("div");
+        name.className = "name";
+        name.textContent = issue.name || "(unnamed)";
+
+        const breadcrumb = document.createElement("div");
+        breadcrumb.className = "rowBreadcrumb";
+        breadcrumb.textContent = issue.path || "";
+
+        // Tokenized text without a style is a different decision from hand-typed text: say so.
+        let boundNote = null;
+        if (issue.type === "UNSTYLED_TEXT" && Array.isArray(issue.boundTextProps) && issue.boundTextProps.length) {
+          boundNote = document.createElement("div");
+          boundNote.className = "rowBound";
+          boundNote.textContent = `Variable-bound: ${issue.boundTextProps.join(", ")} · no text style`;
+        }
+
+        // A detached frame whose component can't be reached can't be relinked: say why.
+        let sourceNote = null;
+        if (issue.type === "DETACHED_INSTANCE" && issue.detachedSourceMissing && !inGroup) {
+          sourceNote = document.createElement("div");
+          sourceNote.className = "rowNote";
+          sourceNote.textContent = "Source library isn't available in this file, so it can't be relinked here.";
+        }
+
+        // Detached frames inside this one are part of the same decision; list them on demand.
+        let nestedDetails = null;
+        if (issue.type === "DETACHED_INSTANCE" && Array.isArray(issue.nestedDetached) && issue.nestedDetached.length) {
+          nestedDetails = document.createElement("details");
+          nestedDetails.className = "rowNested";
+          nestedDetails.addEventListener("click", (e) => e.stopPropagation());
+          const summaryEl = document.createElement("summary");
+          const n = issue.nestedDetached.length;
+          summaryEl.textContent = `Contains ${n} more detached ${n === 1 ? "frame" : "frames"}`;
+          nestedDetails.appendChild(summaryEl);
+          const ul = document.createElement("ul");
+          for (const child of issue.nestedDetached) {
+            const li = document.createElement("li");
+            li.textContent = child.name || "(unnamed)";
+            ul.appendChild(li);
+          }
+          nestedDetails.appendChild(ul);
+        }
+
+        const actions = document.createElement("div");
+        actions.className = "rowActions";
+
+        leftGroup.appendChild(iconWrap);
+        textGroup.appendChild(name);
+        leftGroup.appendChild(textGroup);
+        top.appendChild(leftGroup);
+        top.appendChild(actions);
+
+        const meta = document.createElement("div");
+        meta.className = "rowMeta";
+        meta.appendChild(top);
+        meta.appendChild(breadcrumb);
+        if (boundNote) meta.appendChild(boundNote);
+        if (sourceNote) meta.appendChild(sourceNote);
+        if (nestedDetails) meta.appendChild(nestedDetails);
+        row.appendChild(meta);
+
+        const isDetached = issue.type === "DETACHED_INSTANCE";
+        const isTextIssue = issue.type === "UNSTYLED_TEXT";
+        const canAutofix = issue.type === "ROGUE_FILL" || issue.type === "ROGUE_STROKE" || isDetached || isTextIssue;
+        const fixKind = issue.type === "ROGUE_FILL" ? "fill" : issue.type === "ROGUE_STROKE" ? "stroke" : (isDetached ? "detached" : (isTextIssue ? "text" : ""));
+        const issueKey = `${issue.id || ""}:${fixKind}`;
+
+        const fixBtn = document.createElement("button");
+        fixBtn.className = "fixBtn";
+        fixBtn.type = "button";
+        fixBtn.textContent = isDetached ? "Relink" : "Fix";
+        fixBtn.dataset.issueId = issue.id;
+        fixBtn.dataset.issueKey = issueKey;
+
+        let dropdown = null;
+        let trigger = null;
+        let menu = null;
+
+        fixBtn.addEventListener("click", (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          if (!isDetached) {
+            const value = dropdown ? dropdown.dataset.value || "" : "";
+            if (!value) return;
+          }
+          fixBtn.disabled = true;
+          fixBtn.dataset.state = "loading";
+          fixBtn.textContent = isDetached ? "Relinking…" : "Fixing…";
+          parent.postMessage({
+            pluginMessage: {
+              type: "autofix:apply",
+              id: issue.id,
+              issueType: issue.type,
+              candidateId: isDetached ? "" : (dropdown ? dropdown.dataset.value || "" : ""),
+              kind: fixKind
             }
-            fixBtn.disabled = true;
-            fixBtn.dataset.state = "loading";
-            fixBtn.textContent = isDetached ? "Relinking…" : "Fixing…";
-            parent.postMessage({
-              pluginMessage: {
-                type: "autofix:apply",
-                id: issue.id,
-                issueType: issue.type,
-                candidateId: isDetached ? "" : (dropdown ? dropdown.dataset.value || "" : ""),
-                kind: fixKind
-              }
-            }, "*");
-          });
+          }, "*");
+        });
 
-          // Kept as a named flag since several checks below read it.
-          const showAutofixUI = true;
-          const fixRow = document.createElement("div");
-          fixRow.className = "fixRow";
-          const loadingRow = document.createElement("div");
-          loadingRow.className = "fixLoading";
-          loadingRow.innerHTML = `<span class="spinner" aria-hidden="true"></span><span>Looking for best match...</span>`;
-          fixRow.appendChild(loadingRow);
+        // Kept as a named flag since several checks below read it.
+        const showAutofixUI = true;
+        const fixRow = document.createElement("div");
+        fixRow.className = "fixRow";
+        const loadingRow = document.createElement("div");
+        loadingRow.className = "fixLoading";
+        loadingRow.innerHTML = `<span class="spinner" aria-hidden="true"></span><span>Looking for best match...</span>`;
+        fixRow.appendChild(loadingRow);
 
-          if (showAutofixUI && isDetached) {
+        if (showAutofixUI && isDetached) {
+          // The pill names the relink target; an unreachable source has none to offer.
+          if (!issue.detachedSourceMissing) {
             const relinkPill = document.createElement("div");
             relinkPill.className = "relinkPill";
 
@@ -3122,155 +3326,194 @@
             relinkPill.appendChild(icon);
             relinkPill.appendChild(text);
             fixRow.appendChild(relinkPill);
-          } else if (showAutofixUI) {
-            dropdown = document.createElement("div");
-            dropdown.className = "fixDropdown";
-            dropdown.dataset.issueId = issue.id;
-            dropdown.dataset.issueKey = issueKey;
-
-            trigger = document.createElement("button");
-            trigger.className = "fixTrigger";
-            trigger.type = "button";
-            trigger.dataset.issueId = issue.id;
-            trigger.dataset.issueKey = issueKey;
-            trigger.addEventListener("click", (e) => {
-              e.stopPropagation();
-              if (trigger.disabled) return;
-              closeAllFixDropdowns(issueKey);
-              dropdown.classList.toggle("isOpen");
-              row.classList.toggle("isOpen");
-            if (dropdown.classList.contains("isOpen")) {
-              document.body.appendChild(menu);
-              menu.classList.add("isOpen");
-              positionFixDropdown(dropdown, menu);
-              const firstOpt = menu.querySelector('.fixOption[data-selected="true"]') || menu.querySelector(".fixOption:not([data-disabled])");
-              if (firstOpt) firstOpt.focus();
-            } else {
-              menu.classList.remove("isOpen");
-              if (!menu.parentElement || !menu.parentElement.classList.contains("fixDropdown")) {
-                dropdown.appendChild(menu);
-              }
-            }
-          });
-
-            const valueWrap = document.createElement("span");
-            valueWrap.className = "fixValueWrap";
-
-          const triggerSwatch = document.createElement("span");
-          triggerSwatch.className = "fixSwatch";
-          if (isTextIssue) triggerSwatch.style.display = "none";
-
-            const value = document.createElement("span");
-            value.className = "fixValue";
-            value.textContent = isTextIssue ? "Select text style" : "Select variable";
-
-            valueWrap.appendChild(triggerSwatch);
-            valueWrap.appendChild(value);
-
-            const chevron = document.createElement("span");
-            chevron.className = "fixChevron";
-            chevron.innerHTML = `
-              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                <path d="M7 10l5 5 5-5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-              </svg>
-            `;
-
-            trigger.appendChild(valueWrap);
-            trigger.appendChild(chevron);
-
-            menu = document.createElement("div");
-            menu.className = "fixMenu";
-            menu.setAttribute("role", "listbox");
-            menu.addEventListener("keydown", (e) => {
-              const opts = Array.from(menu.querySelectorAll(".fixOption:not([data-disabled])"));
-              const at = opts.indexOf(document.activeElement);
-              if (e.key === "ArrowDown" || e.key === "ArrowUp") {
-                e.preventDefault();
-                const next = e.key === "ArrowDown" ? at + 1 : at - 1;
-                if (opts[next]) opts[next].focus();
-              } else if (e.key === "Escape") {
-                e.preventDefault();
-                dropdown.classList.remove("isOpen");
-                row.classList.remove("isOpen");
-                menu.classList.remove("isOpen");
-                if (menu.parentElement !== dropdown) dropdown.appendChild(menu);
-                trigger.focus();
-              }
-            });
-            menu.dataset.issueId = issue.id;
-            menu.dataset.issueKey = issueKey;
-            menu.addEventListener("click", (e) => e.stopPropagation());
-            menu.addEventListener("click", () => {});
-
-            dropdown.appendChild(trigger);
-            dropdown.appendChild(menu);
-            fixRow.appendChild(dropdown);
-
-            if (!canAutofix) {
-              value.textContent = "No auto-fix available";
-              triggerSwatch.style.background = "";
-              trigger.disabled = true;
-              dropdown.dataset.value = "";
-              fixBtn.disabled = true;
-            } else {
-              const cached = autofixState.candidatesByKey[issueKey];
-              if (Array.isArray(cached)) {
-                updateAutofixRow(issueKey, dropdown, trigger, menu, fixBtn);
-              } else {
-                setAutofixLoading(issueKey, dropdown, trigger, menu, fixBtn);
-                scheduleAutofixQueue();
-              }
-            }
           }
+        } else if (showAutofixUI) {
+          dropdown = document.createElement("div");
+          dropdown.className = "fixDropdown";
+          dropdown.dataset.issueId = issue.id;
+          dropdown.dataset.issueKey = issueKey;
 
-          if (isDetached) {
-            fixBtn.disabled = !canAutofix;
-          }
-
-          const fixWrap = document.createElement("div");
-          fixWrap.className = "fixBtnWrap";
-          fixWrap.appendChild(fixBtn);
-          actions.appendChild(fixWrap);
-
-          const ignoreWrap = document.createElement("div");
-          ignoreWrap.className = "ignoreBtnWrap";
-          const ignoreBtn = document.createElement("button");
-          ignoreBtn.className = "ignoreBtn";
-          ignoreBtn.type = "button";
-          ignoreBtn.setAttribute("aria-label", "Ignore this issue");
-          ignoreBtn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2"/><path d="M9 9l6 6M15 9l-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>`;
-          const ignoreTip = document.createElement("div");
-          ignoreTip.className = "tooltip";
-          ignoreTip.textContent = "Ignore this issue";
-          ignoreWrap.appendChild(ignoreBtn);
-          ignoreWrap.appendChild(ignoreTip);
-          ignoreWrap.addEventListener("mouseenter", () => showFixTooltip(ignoreWrap, ignoreTip));
-          ignoreWrap.addEventListener("mouseleave", () => hideFixTooltip(ignoreWrap, ignoreTip));
-          ignoreBtn.addEventListener("click", (e) => {
-            e.preventDefault();
+          trigger = document.createElement("button");
+          trigger.className = "fixTrigger";
+          trigger.type = "button";
+          trigger.dataset.issueId = issue.id;
+          trigger.dataset.issueKey = issueKey;
+          trigger.addEventListener("click", (e) => {
             e.stopPropagation();
-            ignoreBtn.disabled = true;
-            parent.postMessage({ pluginMessage: { type: "issue:ignore", id: issue.id, issueType: issue.type } }, "*");
-          });
-          actions.appendChild(ignoreWrap);
-
-          if (showAutofixUI && (fixRow.childElementCount > 0)) {
-            if (state.isScanning) {
-              fixRow.dataset.loading = "true";
-            } else if (showAutofixUI && !isDetached && canAutofix && !autofixState.candidatesByKey[issueKey]) {
-              fixRow.dataset.loading = "true";
-            } else {
-              fixRow.dataset.loading = "false";
+            if (trigger.disabled) return;
+            closeAllFixDropdowns(issueKey);
+            dropdown.classList.toggle("isOpen");
+            row.classList.toggle("isOpen");
+          if (dropdown.classList.contains("isOpen")) {
+            document.body.appendChild(menu);
+            menu.classList.add("isOpen");
+            positionFixDropdown(dropdown, menu);
+            const firstOpt = menu.querySelector('.fixOption[data-selected="true"]') || menu.querySelector(".fixOption:not([data-disabled])");
+            if (firstOpt) firstOpt.focus();
+          } else {
+            menu.classList.remove("isOpen");
+            if (!menu.parentElement || !menu.parentElement.classList.contains("fixDropdown")) {
+              dropdown.appendChild(menu);
             }
-            row.appendChild(fixRow);
           }
-          if (isTextIssue && issue.mixedText) {
-            const warn = document.createElement("div");
-            warn.className = "fixWarning";
-            warn.textContent = "Mixed styles detected. Applying a style will reset local formatting.";
-            row.appendChild(warn);
+        });
+
+          const valueWrap = document.createElement("span");
+          valueWrap.className = "fixValueWrap";
+
+        const triggerSwatch = document.createElement("span");
+        triggerSwatch.className = "fixSwatch";
+        if (isTextIssue) triggerSwatch.style.display = "none";
+
+          const value = document.createElement("span");
+          value.className = "fixValue";
+          value.textContent = isTextIssue ? "Select text style" : "Select variable";
+
+          valueWrap.appendChild(triggerSwatch);
+          valueWrap.appendChild(value);
+
+          const chevron = document.createElement("span");
+          chevron.className = "fixChevron";
+          chevron.innerHTML = `
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M7 10l5 5 5-5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          `;
+
+          trigger.appendChild(valueWrap);
+          trigger.appendChild(chevron);
+
+          menu = document.createElement("div");
+          menu.className = "fixMenu";
+          menu.setAttribute("role", "listbox");
+          menu.addEventListener("keydown", (e) => {
+            const opts = Array.from(menu.querySelectorAll(".fixOption:not([data-disabled])"));
+            const at = opts.indexOf(document.activeElement);
+            if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+              e.preventDefault();
+              const next = e.key === "ArrowDown" ? at + 1 : at - 1;
+              if (opts[next]) opts[next].focus();
+            } else if (e.key === "Escape") {
+              e.preventDefault();
+              dropdown.classList.remove("isOpen");
+              row.classList.remove("isOpen");
+              menu.classList.remove("isOpen");
+              if (menu.parentElement !== dropdown) dropdown.appendChild(menu);
+              trigger.focus();
+            }
+          });
+          menu.dataset.issueId = issue.id;
+          menu.dataset.issueKey = issueKey;
+          menu.addEventListener("click", (e) => e.stopPropagation());
+          menu.addEventListener("click", () => {});
+
+          dropdown.appendChild(trigger);
+          dropdown.appendChild(menu);
+          fixRow.appendChild(dropdown);
+
+          if (!canAutofix) {
+            value.textContent = "No auto-fix available";
+            triggerSwatch.style.background = "";
+            trigger.disabled = true;
+            dropdown.dataset.value = "";
+            fixBtn.disabled = true;
+          } else {
+            const cached = autofixState.candidatesByKey[issueKey];
+            if (Array.isArray(cached)) {
+              updateAutofixRow(issueKey, dropdown, trigger, menu, fixBtn);
+            } else {
+              setAutofixLoading(issueKey, dropdown, trigger, menu, fixBtn);
+              scheduleAutofixQueue();
+            }
           }
-          list.appendChild(row);
+        }
+
+        if (isDetached) {
+          fixBtn.disabled = !canAutofix || !!issue.detachedSourceMissing;
+          if (issue.detachedSourceMissing) fixBtn.title = "The source component isn't available in this file";
+        }
+
+        const fixWrap = document.createElement("div");
+        fixWrap.className = "fixBtnWrap";
+        fixWrap.appendChild(fixBtn);
+        actions.appendChild(fixWrap);
+
+        const ignoreWrap = document.createElement("div");
+        ignoreWrap.className = "ignoreBtnWrap";
+        const ignoreBtn = document.createElement("button");
+        ignoreBtn.className = "ignoreBtn";
+        ignoreBtn.type = "button";
+        ignoreBtn.setAttribute("aria-label", "Ignore this issue");
+        ignoreBtn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2"/><path d="M9 9l6 6M15 9l-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>`;
+        const ignoreTip = document.createElement("div");
+        ignoreTip.className = "tooltip";
+        ignoreTip.textContent = "Ignore this issue";
+        ignoreWrap.appendChild(ignoreBtn);
+        ignoreWrap.appendChild(ignoreTip);
+        ignoreWrap.addEventListener("mouseenter", () => showFixTooltip(ignoreWrap, ignoreTip));
+        ignoreWrap.addEventListener("mouseleave", () => hideFixTooltip(ignoreWrap, ignoreTip));
+        ignoreBtn.addEventListener("click", (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          ignoreBtn.disabled = true;
+          parent.postMessage({ pluginMessage: { type: "issue:ignore", id: issue.id, issueType: issue.type } }, "*");
+        });
+        actions.appendChild(ignoreWrap);
+
+        if (showAutofixUI && (fixRow.childElementCount > 0)) {
+          if (state.isScanning) {
+            fixRow.dataset.loading = "true";
+          } else if (showAutofixUI && !isDetached && canAutofix && !autofixState.candidatesByKey[issueKey]) {
+            fixRow.dataset.loading = "true";
+          } else {
+            fixRow.dataset.loading = "false";
+          }
+          row.appendChild(fixRow);
+        }
+        if (isTextIssue && issue.mixedText) {
+          const warn = document.createElement("div");
+          warn.className = "fixWarning";
+          warn.textContent = "Mixed styles detected. Applying a style will reset local formatting.";
+          row.appendChild(warn);
+        }
+        return row;
+      }
+
+      // keepScroll: re-render after a single row changed, without jumping back to the top.
+      function renderList(keepScroll = false){
+        const list = $("list");
+        const prevScroll = keepScroll ? list.scrollTop : 0;
+        // Open fix menus are re-parented to <body>; wiping the list would orphan them.
+        document.querySelectorAll("body > .fixMenu").forEach((el) => el.remove());
+        list.innerHTML = "";
+        list.scrollTop = 0;
+
+        const issues = sortIssues(filteredIssues());
+        if (!issues || issues.length === 0){
+          const div = document.createElement("div");
+          div.className = "empty";
+          div.textContent = state.scanComplete ? "No issues found for this category." : "Run a scan to see issues here.";
+          list.appendChild(div);
+          // After rendering, re-measure to prevent the list from being clipped
+          scheduleResizeToFit(80);
+          return;
+        }
+        
+        let idx = 0;
+        for (const item of groupDetachedForDisplay(issues)){
+          if (item.group) {
+            const open = state.expandedGroups.has(item.key);
+            list.appendChild(buildDetachedGroupRow(item, idx++, open));
+            if (open) {
+              for (const member of item.group) {
+                const memberRow = buildIssueRow(member, idx++, true);
+                memberRow.classList.add("groupMember");
+                list.appendChild(memberRow);
+              }
+            }
+            continue;
+          }
+          list.appendChild(buildIssueRow(item.issue, idx++));
         }
         if (prevScroll) list.scrollTop = prevScroll;
         // After rendering, re-measure to prevent the list from being clipped
@@ -3322,7 +3565,27 @@
           : `Found ${plural(totalIssues, "issue")} in scan.`;
 
         // Health % is shown in the gauge; use this line to communicate audit coverage.
-        $("statusSub").textContent = elementsLine;
+        $("statusSubText").textContent = elementsLine;
+
+        // What the counts above mean, and what was deliberately left out of them.
+        const notes = [];
+        const detachedCount = Number(summary.detached || 0);
+        const sources = Number(summary.detachedSources || 0);
+        const nested = Number(summary.nestedDetached || 0);
+        if (detachedCount > 0 && sources > 0) {
+          notes.push(`${plural(detachedCount, "detached frame")} from ${plural(sources, "source component")}`
+            + (nested ? `, with ${nested} more detached ${nested === 1 ? "frame" : "frames"} inside them` : ""));
+        }
+        const notCounted = [];
+        if (summary.gradients) notCounted.push(`${plural(summary.gradients, "gradient")} (variables can't store gradients)`);
+        if (summary.docLayers) notCounted.push(plural(summary.docLayers, "documentation layer"));
+        if (notCounted.length) notes.push(`Not counted: ${notCounted.join(", ")}`);
+        const notesEl = $("scanNotes");
+        const infoWrap = $("scanInfoWrap");
+        if (notesEl && infoWrap) {
+          notesEl.textContent = notes.map((n) => n + ".").join("\n");
+          infoWrap.hidden = notes.length === 0;
+        }
         state.lastStatusSub = elementsLine;
 
         // Safety reset: if auto-fix is not active, ensure progress UI + button state are restored.
@@ -3487,7 +3750,7 @@
         document.body.dataset.fixing = "true";
         startFixingGauge();
         if (state.lastStatusSub) {
-          $("statusSub").textContent = state.lastStatusSub;
+          $("statusSubText").textContent = state.lastStatusSub;
         }
         if (allBtn) {
           const label = allBtn.querySelector('.btnLabel');
@@ -3514,6 +3777,11 @@
         for (const issue of issues) {
           if (!issue || !issue.id) continue;
           if (issue.type === "DETACHED_INSTANCE") {
+            // An unreachable source can't be relinked; sending it would only fail.
+            if (issue.detachedSourceMissing) {
+              skipped.noCandidate += 1;
+              continue;
+            }
             items.push({ id: issue.id, issueType: issue.type, kind: "detached", candidateId: "" });
             continue;
           }
@@ -4103,8 +4371,8 @@
       }
 
       function exportScanCsv(){
-        const rows = [["id", "type", "nodeType", "name", "path", "value", "insideInstance", "sourceLayerId", "boundTextProps", "suggestedFix", "matchScore", "detachedComponentName", "ignored"]];
-        const pushRow = (issue, ignored) => {
+        const rows = [["id", "type", "nodeType", "name", "path", "value", "insideInstance", "sourceLayerId", "boundTextProps", "suggestedFix", "matchScore", "detachedComponentName", "detachedSourceKey", "sourceAvailable", "parentIssueId", "ignored"]];
+        const pushRow = (issue, ignored, parentId) => {
           const id = String(issue.id || "");
           // Instance sublayer ids are "I<instance>;…;<layer in the main component>".
           const insideInstance = id.startsWith("I") && id.includes(";");
@@ -4113,8 +4381,14 @@
             id, issue.type, issue.nodeType || "", issue.name, issue.path, issue.value || "",
             insideInstance ? "true" : "false", insideInstance ? id.split(";").pop() : "",
             (issue.boundTextProps || []).join(" + "), fix, score,
-            issue.detachedComponentName || "", ignored ? "true" : "false",
+            issue.detachedComponentName || "", issue.detachedSourceKey || "",
+            issue.type === "DETACHED_INSTANCE" && issue.detachedSourceKey ? (issue.detachedSourceMissing ? "false" : "true") : "",
+            parentId || "", ignored ? "true" : "false",
           ]);
+          // Detached frames folded into this one get their own rows, pointing back at it.
+          for (const child of (issue.nestedDetached || [])) {
+            rows.push([child.id, "DETACHED_INSTANCE", "", child.name, "", "", "", "", "", "", "", "", "", "", id, ignored ? "true" : "false"]);
+          }
         };
         for (const issue of state.issues) pushRow(issue, false);
         for (const issue of (state.ignoredIssues || [])) pushRow(issue, true);
@@ -4157,7 +4431,7 @@
       }
 
       let optionsSaveTimer = null;
-      ["includeChildren","detachedInstances","textWithoutStyle","rogueFills","rogueStrokes"].forEach(id => {
+      ["includeChildren","detachedInstances","textWithoutStyle","rogueFills","rogueStrokes","ignoreDocLayers"].forEach(id => {
         $(id).addEventListener("change", () => {
           updateSwitchUI();
           if (optionsSaveTimer) clearTimeout(optionsSaveTimer);
@@ -4222,7 +4496,7 @@
         if (msg.type === "saved-options") {
           const o = msg.options;
           if (o && typeof o === "object") {
-            const map = { scanChildren: "includeChildren", checkDetached: "detachedInstances", checkTextStyles: "textWithoutStyle", checkRogueFills: "rogueFills", checkRogueStrokes: "rogueStrokes" };
+            const map = { scanChildren: "includeChildren", checkDetached: "detachedInstances", checkTextStyles: "textWithoutStyle", checkRogueFills: "rogueFills", checkRogueStrokes: "rogueStrokes", ignoreDocLayers: "ignoreDocLayers" };
             for (const [field, id] of Object.entries(map)) {
               if (typeof o[field] === "boolean") $(id).checked = o[field];
             }
@@ -4357,7 +4631,7 @@
           const phase = String(msg.phase || "");
           setAutofixProgressUI(false, "", 0);
           if (state.lastStatusSub) {
-            $("statusSub").textContent = state.lastStatusSub;
+            $("statusSubText").textContent = state.lastStatusSub;
           }
           if (autofixState.baseSummary) {
             const baseScore = typeof autofixState.baseScore === "number" ? autofixState.baseScore : computeHealthScore(autofixState.baseSummary);
@@ -4522,6 +4796,11 @@
             ignored: Number(s.ignored || 0),
             scannedElements,
             elementsWithIssues,
+            // Informational counts (not issues), shown in #scanNotes.
+            gradients: Number(s.gradients || 0),
+            docLayers: Number(s.docLayers || 0),
+            nestedDetached: Number(s.nestedDetached || 0),
+            detachedSources: Number(s.detachedSources || 0),
           };
 
           hideNoSelection();

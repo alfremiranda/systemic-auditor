@@ -179,13 +179,27 @@ function getNodePath(node) {
 function hasChildren(node) {
     return "children" in node;
 }
-function collectNodes(start, scanChildren) {
+// Kits put a documentation banner or notes straight on a section, next to the real screens
+// (Material 3's "Header" instance, for example). Those aren't product UI.
+const DOC_LAYER_NAME = /^(header|documentation|docs?|notes?|annotations?|description|readme|cover|legend|instructions?)\b/i;
+function isDocumentationLayer(node) {
+    if (!node.parent || node.parent.type !== "SECTION")
+        return false;
+    if (node.type === "COMPONENT" || node.type === "COMPONENT_SET")
+        return false;
+    return DOC_LAYER_NAME.test(node.name || "");
+}
+// skip() is only consulted below the selection: a layer the user selected directly is always scanned.
+function collectNodes(start, scanChildren, skip) {
     const out = [];
     const visit = (n) => {
         out.push(n);
         if (scanChildren && hasChildren(n)) {
-            for (const child of n.children)
+            for (const child of n.children) {
+                if (skip && skip(child))
+                    continue;
                 visit(child);
+            }
         }
     };
     for (const n of start)
@@ -205,44 +219,52 @@ function isDetachedInstanceLike(node) {
 function canCheckDetachedInfo(node) {
     return node.detachedInfo !== undefined;
 }
-const detachedLabelCache = new Map();
-function getDetachedComponentName(info) {
+const detachedSourceCache = new Map();
+function detachedSourceKey(info) {
+    return info.type === "local" ? `local:${info.componentId}` : `lib:${info.componentKey}`;
+}
+// The component a frame was detached from, and whether it can still be reached from this file.
+// A library that isn't published or enabled here makes importComponentByKeyAsync throw; the label
+// is then left empty and runAudit names the group from its frames instead.
+function getDetachedSource(info) {
     return __awaiter(this, void 0, void 0, function* () {
-        const key = info.type === "local" ? `local:${info.componentId}` : `lib:${info.componentKey}`;
-        const cached = detachedLabelCache.get(key);
+        const key = detachedSourceKey(info);
+        const cached = detachedSourceCache.get(key);
         if (cached)
             return cached;
-        let label = info.type === "library" ? "Library component" : "Component";
+        let source = { key, label: "", available: false };
         try {
-            if (info.type === "local") {
-                const comp = yield figma.getNodeByIdAsync(info.componentId);
-                if (comp && "name" in comp) {
-                    if (comp.type === "COMPONENT" && comp.parent && comp.parent.type === "COMPONENT_SET") {
-                        label = comp.parent.name || comp.name || label;
-                    }
-                    else {
-                        label = comp.name || label;
-                    }
-                }
-            }
-            else {
-                const comp = yield figma.importComponentByKeyAsync(info.componentKey);
-                if (comp && "name" in comp) {
-                    if (comp.parent && comp.parent.type === "COMPONENT_SET") {
-                        label = comp.parent.name || comp.name || label;
-                    }
-                    else {
-                        label = comp.name || label;
-                    }
-                }
+            const comp = info.type === "local"
+                ? yield figma.getNodeByIdAsync(info.componentId)
+                : yield figma.importComponentByKeyAsync(info.componentKey);
+            if (comp && "name" in comp) {
+                const inSet = comp.type === "COMPONENT" && comp.parent && comp.parent.type === "COMPONENT_SET";
+                const label = (inSet && comp.parent ? comp.parent.name : "") || comp.name || "Component";
+                source = { key, label, available: comp.type === "COMPONENT" || comp.type === "COMPONENT_SET" };
             }
         }
         catch (_a) {
-            // keep fallback label
+            // unreachable source: keep available:false
         }
-        detachedLabelCache.set(key, label);
-        return label;
+        detachedSourceCache.set(key, source);
+        return source;
     });
+}
+// "Card 01", "Card 02", "Card" → "Card": the most common frame name with a trailing number removed.
+function commonFrameName(names) {
+    const counts = new Map();
+    let best = "";
+    let bestCount = 0;
+    for (const raw of names) {
+        const base = (raw || "").replace(/[\s_-]*\d+$/, "").trim() || raw || "Frame";
+        const n = (counts.get(base) || 0) + 1;
+        counts.set(base, n);
+        if (n > bestCount) {
+            best = base;
+            bestCount = n;
+        }
+    }
+    return best || "Frame";
 }
 function createInstanceFromDetachedInfo(info) {
     return __awaiter(this, void 0, void 0, function* () {
@@ -749,6 +771,25 @@ function isComponentSetChromeStroke(node, visibleStrokes) {
             ((_a = p.opacity) !== null && _a !== void 0 ? _a : 1) > 0.99;
     });
 }
+// Variables can't store gradients, so a paint list that is only gradients (plus images) has
+// nothing to bind to: that's a limit of tokens, not drift. Reported as an informational count.
+function isGradientOnlyPaint(node, kind) {
+    const paints = node[kind];
+    if (!paints || isMixed(paints) || !Array.isArray(paints))
+        return false;
+    const visible = paints.filter((p) => { var _a; return ((_a = p.visible) !== null && _a !== void 0 ? _a : true) === true && p.type !== "IMAGE"; });
+    return visible.length > 0 && visible.every((p) => p.type.indexOf("GRADIENT") === 0);
+}
+// A gradient that would have been a rogue paint if variables could hold it: counted, not flagged.
+function isUntokenizedGradient(node, kind) {
+    if (isCanvasOrganizer(node) || !isGradientOnlyPaint(node, kind))
+        return false;
+    if (hasBoundPaintVariable(node, kind))
+        return false;
+    const holder = node;
+    const styleId = kind === "fills" ? holder.fillStyleId : holder.strokeStyleId;
+    return !styleId || isMixed(styleId);
+}
 // Sections organize the canvas; their own fill and stroke are not product UI. Their children are
 // still collected and audited normally.
 function isCanvasOrganizer(node) {
@@ -770,6 +811,8 @@ function hasRogueFill(node) {
     // If all visible fills are IMAGE, consider OK
     const hasNonImageVisibleFill = visibleFills.some((p) => p.type !== "IMAGE");
     if (!hasNonImageVisibleFill)
+        return false;
+    if (isGradientOnlyPaint(node, "fills"))
         return false;
     // Variable-bound paints are OK
     if (hasBoundPaintVariable(node, "fills"))
@@ -794,6 +837,8 @@ function hasRogueStroke(node) {
     if (!hasNonImageVisibleStroke)
         return false;
     if (isComponentSetChromeStroke(node, visibleStrokes))
+        return false;
+    if (isGradientOnlyPaint(node, "strokes"))
         return false;
     // Variable-bound paints are OK
     if (hasBoundPaintVariable(node, "strokes"))
@@ -1520,7 +1565,14 @@ function findColorCandidates(target, consumer, kind) {
 function runAudit(selection, options) {
     return __awaiter(this, void 0, void 0, function* () {
         var _a;
-        const nodes = collectNodes(selection, options.scanChildren);
+        let docLayers = 0;
+        const skipDocs = options.ignoreDocLayers !== false;
+        const nodes = collectNodes(selection, options.scanChildren, (n) => {
+            if (!skipDocs || !isDocumentationLayer(n))
+                return false;
+            docLayers++;
+            return true;
+        });
         const issues = [];
         // Issues the user marked "not a problem": kept (not counted) so the UI can list and restore them.
         const ignoredIssues = [];
@@ -1540,15 +1592,31 @@ function runAudit(selection, options) {
         let unstyledText = 0;
         let detached = 0;
         let ignored = 0;
+        let gradients = 0;
+        // Top-level detached issues by node id (ignored ones too), so a detached frame nested inside
+        // one of them is attached to it instead of becoming its own row.
+        const detachedById = new Map();
+        // Returns the issue (ignored or not) so callers can keep a handle on it.
         const addIssue = (node, type, extra = {}) => {
             const issue = Object.assign({ id: node.id, name: node.name, type, path: getNodePath(node), nodeType: node.type, value: describeIssueValue(node, type) }, extra);
             if (isIssueIgnored(node, type)) {
                 ignored++;
                 ignoredIssues.push(issue);
-                return;
+                return issue;
             }
             issues.push(issue);
             elementsWithIssuesSet.add(node.id);
+            return issue;
+        };
+        // Nodes are collected parent-first, so an outer detached frame is always seen before its children.
+        const outermostDetachedAncestor = (node) => {
+            let found = null;
+            for (let p = node.parent; p && p.type !== "PAGE"; p = p.parent) {
+                const hit = detachedById.get(p.id);
+                if (hit)
+                    found = hit;
+            }
+            return found;
         };
         for (const node of nodes) {
             if (scanCancelRequested) {
@@ -1559,12 +1627,23 @@ function runAudit(selection, options) {
                 if (options.checkDetached && canCheckDetachedInfo(node)) {
                     markAudited(node);
                     if (isDetachedInstanceLike(node)) {
-                        const info = (_a = node.detachedInfo) !== null && _a !== void 0 ? _a : null;
-                        const label = info ? yield getDetachedComponentName(info) : undefined;
-                        const before = issues.length;
-                        addIssue(node, "DETACHED_INSTANCE", { detachedComponentName: label });
-                        if (issues.length > before)
-                            detached++;
+                        const outer = outermostDetachedAncestor(node);
+                        if (outer) {
+                            (outer.nestedDetached = outer.nestedDetached || []).push({ id: node.id, name: node.name });
+                        }
+                        else {
+                            const info = (_a = node.detachedInfo) !== null && _a !== void 0 ? _a : null;
+                            const source = info ? yield getDetachedSource(info) : null;
+                            const before = issues.length;
+                            const issue = addIssue(node, "DETACHED_INSTANCE", source ? {
+                                detachedComponentName: source.label || undefined,
+                                detachedSourceKey: source.key,
+                                detachedSourceMissing: !source.available,
+                            } : {});
+                            detachedById.set(node.id, issue);
+                            if (issues.length > before)
+                                detached++;
+                        }
                     }
                 }
                 if (options.checkTextStyles && node.type === "TEXT") {
@@ -1586,6 +1665,9 @@ function runAudit(selection, options) {
                         if (issues.length > before)
                             rogueFills++;
                     }
+                    else if (isUntokenizedGradient(node, "fills")) {
+                        gradients++;
+                    }
                 }
                 if (options.checkRogueStrokes && ("strokes" in node)) {
                     markAudited(node);
@@ -1594,6 +1676,9 @@ function runAudit(selection, options) {
                         addIssue(node, "ROGUE_STROKE");
                         if (issues.length > before)
                             rogueStrokes++;
+                    }
+                    else if (isUntokenizedGradient(node, "strokes")) {
+                        gradients++;
                     }
                 }
             }
@@ -1617,6 +1702,23 @@ function runAudit(selection, options) {
         }
         scannedElements = auditedElementIds.size;
         const elementsWithIssues = elementsWithIssuesSet.size;
+        // Frames detached from an unreachable component get the name their frames share
+        // ("Card · 38 frames") instead of a generic "Library component".
+        const missingByKey = new Map();
+        for (const issue of detachedById.values()) {
+            if (!issue.detachedSourceMissing || !issue.detachedSourceKey)
+                continue;
+            const group = missingByKey.get(issue.detachedSourceKey) || [];
+            group.push(issue);
+            missingByKey.set(issue.detachedSourceKey, group);
+        }
+        for (const group of missingByKey.values()) {
+            const label = commonFrameName(group.map((i) => i.name));
+            for (const issue of group)
+                issue.detachedComponentName = label;
+        }
+        const detachedSources = new Set(issues.filter((i) => i.detachedSourceKey).map((i) => i.detachedSourceKey)).size;
+        const nestedDetached = issues.reduce((n, i) => n + (i.nestedDetached ? i.nestedDetached.length : 0), 0);
         const summary = {
             total: issues.length,
             rogueFills,
@@ -1626,6 +1728,13 @@ function runAudit(selection, options) {
             ignored,
             scannedElements,
             elementsWithIssues,
+            // Informational, not issues: gradient paints (variables can't hold them), documentation
+            // layers skipped on sections, detached frames folded into an outer detached frame, and how
+            // many source components the detached frames come from.
+            gradients,
+            docLayers,
+            nestedDetached,
+            detachedSources,
         };
         return { issues, ignoredIssues, summary, canceled };
     });
@@ -1693,6 +1802,7 @@ function handleMessage(msg) {
                         checkRogueStrokes: !!options.checkRogueStrokes,
                         checkDetached: !!options.checkDetached,
                         checkTextStyles: !!options.checkTextStyles,
+                        ignoreDocLayers: options.ignoreDocLayers !== false,
                     }).catch(() => {
                         /* ignore storage failures */
                     });
@@ -1904,6 +2014,7 @@ function handleMessage(msg) {
                 checkRogueStrokes: true,
                 checkDetached: true,
                 checkTextStyles: true,
+                ignoreDocLayers: true,
             };
             lastAuditOptions = options;
             lastAuditSelectionIds = selection.map((node) => node.id);
@@ -1911,6 +2022,8 @@ function handleMessage(msg) {
             // finally block to re-run the last audit, and that re-audit must never inherit a
             // cancellation meant for this user-initiated scan.
             scanCancelRequested = false;
+            // A library enabled since the last scan should make its detached frames relinkable again.
+            detachedSourceCache.clear();
             try {
                 const { issues, ignoredIssues, summary, canceled } = yield runAudit(selection, options);
                 figma.ui.postMessage({ type: "audit-result", issues, ignoredIssues, summary, canceled });

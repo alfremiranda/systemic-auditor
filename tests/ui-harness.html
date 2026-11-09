@@ -304,7 +304,7 @@ T.all = async function () {
       candidates: (m) => m.kind === "text" ? (m.id === footer.id ? fromMain(m.id) : { candidates: [], recommendedId: null }) : rec(m.id),
     };
     await scan(300);
-    check("status line says issues on elements when one element has two issues", $("statusSub").textContent === "4 issues on 3 of 10 audited elements.", $("statusSub").textContent);
+    check("status line says issues on elements when one element has two issues", $("statusSubText").textContent === "4 issues on 3 of 10 audited elements.", $("statusSubText").textContent);
 
     const footerKey = `${footer.id}:text`;
     await waitFor(() => (Q(`.fixDropdown[data-issue-key="${footerKey}"]`) || {}).dataset?.value === "textstyle:S:body-strong", 3000);
@@ -324,9 +324,9 @@ T.all = async function () {
     ev("exportScanCsv()");
     W().Blob = origBlob;
     const lines = csv.split("\r\n");
-    check("CSV has the new columns", lines[0] === "id,type,nodeType,name,path,value,insideInstance,sourceLayerId,boundTextProps,suggestedFix,matchScore,detachedComponentName,ignored", lines[0]);
+    check("CSV has the new columns", lines[0] === "id,type,nodeType,name,path,value,insideInstance,sourceLayerId,boundTextProps,suggestedFix,matchScore,detachedComponentName,detachedSourceKey,sourceAvailable,parentIssueId,ignored", lines[0]);
     check("CSV row for an instance layer names its source layer and suggested fix",
-      lines[1] === "I321:11146;2087:8486,UNSTYLED_TEXT,TEXT,Text Strong,Frame / Text Strong,Inter Bold 16,true,2087:8486,,Body Strong,From main component,,false", lines[1]);
+      lines[1] === "I321:11146;2087:8486,UNSTYLED_TEXT,TEXT,Text Strong,Frame / Text Strong,Inter Bold 16,true,2087:8486,,Body Strong,From main component,,,,,false", lines[1]);
     const triggerText = (Q(`.fixDropdown[data-issue-key="${footerKey}"] .fixValue`) || {}).textContent;
     check("the closed dropdown says the style comes from the main component", triggerText === "Body Strong · from main component", triggerText);
 
@@ -340,6 +340,59 @@ T.all = async function () {
     const allLabel = () => Q("#autofixAllBtn .btnLabel").textContent;
     await waitFor(() => /review/.test(allLabel()), 4000);
     check("Fix all names the suggestions to review", allLabel() === "2 suggested fixes to review row by row" && $("autofixAllBtn").disabled === true, allLabel() + " disabled=" + $("autofixAllBtn").disabled);
+  });
+
+  await section("14. Material 3 kit audit: detached groups, nested frames, notes, doc-layer option", async () => {
+    await load();
+    const card = (n) => Object.assign(mkIssue("14:" + n, "DETACHED_INSTANCE", "Card 0" + n), {
+      detachedComponentName: "Card", detachedSourceKey: "lib:cardKey", detachedSourceMissing: true,
+      nestedDetached: n === 1 ? [{ id: "14:1a", name: "Title header" }, { id: "14:1b", name: "Item 01" }] : undefined,
+    });
+    const header = Object.assign(mkIssue("14:9", "DETACHED_INSTANCE", "Header"), { detachedComponentName: "Section header", detachedSourceKey: "local:5:5", detachedSourceMissing: false });
+    const text = mkIssue("14:t", "UNSTYLED_TEXT", "9:30");
+    scenario = {
+      issues: [card(1), text, card(2), card(3), header],
+      summary: { total: 5, detached: 4, unstyledText: 1, rogueFills: 0, rogueStrokes: 0, ignored: 0, scannedElements: 50, elementsWithIssues: 5,
+        gradients: 15, docLayers: 1, nestedDetached: 2, detachedSources: 2 },
+      candidates: () => ({ candidates: [], recommendedId: null }),
+    };
+    await scan(300);
+    const groups = QA(".row.groupRow");
+    check("frames from one source collapse into a single group row", groups.length === 1 && groups[0].dataset.groupKey === "lib:cardKey", groups.length);
+    check("the group is named from its frames, not 'Library component'", groups[0] && groups[0].querySelector(".name").textContent === "Card", groups[0] && groups[0].querySelector(".name").textContent);
+    check("the group explains the unreachable library and the nested frames",
+      groups[0] && /3 frames detached from a library that isn't available in this file · 2 more nested inside them/.test(groups[0].textContent), groups[0] && groups[0].textContent);
+    check("the group sits where its first frame was found (scan order kept)", QA("#list > .row")[0] === groups[0] && QA("#list > .row")[1].dataset.issueId === "14:t", QA("#list > .row").map(r => r.dataset.issueId || r.dataset.groupKey).join(","));
+    check("a source with one frame stays a plain row", !!Q('.row[data-issue-id="14:9"]:not(.groupMember)'), "");
+    check("an info button explains what's counted and what isn't", $("scanInfoWrap").hidden === false &&
+      $("scanNotes").textContent === "4 detached frames from 2 source components, with 2 more detached frames inside them.\nNot counted: 15 gradients (variables can't store gradients), 1 documentation layer.", $("scanNotes").textContent);
+    check("the explanation is a tooltip: hidden until hover or focus", W().getComputedStyle($("scanNotes")).opacity === "0", W().getComputedStyle($("scanNotes")).opacity);
+    $("scanInfoBtn").focus();
+    check("keyboard focus reveals it", W().getComputedStyle($("scanNotes")).opacity === "1", W().getComputedStyle($("scanNotes")).opacity);
+    $("scanInfoBtn").blur();
+
+    groups[0].click();
+    await waitFor(() => QA(".row.groupMember").length === 3, 2000);
+    check("expanding a group shows its frames", QA(".row.groupMember").length === 3, QA(".row.groupMember").length);
+    const first = Q('.row.groupMember[data-issue-id="14:1"]');
+    const relink = first && first.querySelector(".fixBtn");
+    check("unreachable frames can't be relinked, and say why", relink && relink.disabled && /isn't available in this file/.test(relink.title), relink && relink.title);
+    check("frames inside a group don't repeat the group's note", !/Source library/.test(first.textContent), first && first.textContent);
+    check("detached frames never get a variable dropdown", !first.querySelector(".fixDropdown") && !/No matching/.test(first.textContent), first && first.textContent);
+    check("nested detached frames are listed inside their outer frame", first && first.querySelector(".rowNested summary").textContent === "Contains 2 more detached frames", first && first.textContent);
+    const plan = ev("buildAutofixAllPlan()");
+    check("Fix all skips frames whose source is unreachable", plan.items.length === 1 && plan.items[0].id === "14:9" && plan.skipped.noCandidate >= 3, JSON.stringify(plan));
+
+    let csv = "";
+    const origBlob = W().Blob;
+    W().Blob = function (parts) { csv = parts.join(""); return new origBlob(parts); };
+    ev("exportScanCsv()");
+    W().Blob = origBlob;
+    const lines = csv.split("\r\n");
+    check("CSV lists nested frames with their parentIssueId", lines.some(l => l.startsWith("14:1a,DETACHED_INSTANCE,") && l.endsWith(",14:1,false")), lines.slice(0, 4).join(" | "));
+
+    check("documentation-layer option exists, on by default, and is sent with the scan",
+      $("ignoreDocLayers").checked === true && sent("run-audit").pop().options.ignoreDocLayers === true, JSON.stringify(sent("run-audit").pop().options));
   });
 
   return results;

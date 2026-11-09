@@ -321,7 +321,7 @@ const solid = (r, g, b) => ({ type: "SOLID", color: { r, g, b }, opacity: 1, vis
   // ---------- 7. Scanner options persistence ----------
   await test("options:save persists (debounced) and get-saved-options reads it back", async () => {
     const b = boot();
-    const opts = { scanChildren: false, checkRogueFills: true, checkRogueStrokes: false, checkDetached: true, checkTextStyles: false };
+    const opts = { scanChildren: false, checkRogueFills: true, checkRogueStrokes: false, checkDetached: true, checkTextStyles: false, ignoreDocLayers: false };
     await b.send({ type: "options:save", options: opts });
     await tick(400);
     eq(b.store.get("systemic_scanner_options_v1"), opts);
@@ -454,6 +454,72 @@ const solid = (r, g, b) => ({ type: "SOLID", color: { r, g, b }, opacity: 1, vis
     assert.strictEqual(fill.value, "#F5F5F5 100%");
     assert.strictEqual(text.value, "Inter Bold 16");
     eq(text.boundTextProps, ["family", "size", "weight"]);
+  });
+
+  // ---------- Material 3 kit audit: nested detached, unreachable libraries, gradients, doc layers ----------
+  const lib = (key) => ({ type: "library", componentKey: key });
+
+  await test("a detached frame inside another detached frame is folded into the outermost one", async () => {
+    const c = makeNode({ id: "n:3", type: "FRAME", name: "Item 01", detachedInfo: lib("k1") });
+    const bNode = makeNode({ id: "n:2", type: "FRAME", name: "Title header", detachedInfo: lib("k2"), children: [c] });
+    const a = makeNode({ id: "n:1", type: "FRAME", name: "Section 1", detachedInfo: lib("k1"), children: [bNode] });
+    const b = boot({ nodes: { "n:1": a, "n:2": bNode, "n:3": c } });
+    const { issues, summary } = await b.get("runAudit")([a], ALL);
+    eq(issues.map(i => i.id), ["n:1"]);
+    eq(issues[0].nestedDetached.map(n => n.name), ["Title header", "Item 01"]);
+    assert.strictEqual(summary.detached, 1);
+    assert.strictEqual(summary.nestedDetached, 2);
+    assert.strictEqual(summary.elementsWithIssues, 1);
+  });
+
+  await test("frames detached from an unreachable library are named from their frames, never 'Library component'", async () => {
+    const frames = ["Card 01", "Card 02", "Card"].map((name, i) => makeNode({ id: "u:" + i, type: "FRAME", name, detachedInfo: lib("cardKey") }));
+    const other = makeNode({ id: "u:9", type: "FRAME", name: "Chrome browser bar", detachedInfo: lib("barKey") });
+    const nodes = Object.fromEntries([...frames, other].map(n => [n.id, n]));
+    const b = boot({ nodes });
+    b.figma.importComponentByKeyAsync = async (key) => { throw new Error(`Component with key "${key}" not found`); };
+    const { issues, summary } = await b.get("runAudit")([...frames, other], ALL);
+    eq(issues.map(i => i.detachedComponentName), ["Card", "Card", "Card", "Chrome browser bar"]);
+    assert.ok(issues.every(i => i.detachedSourceMissing === true));
+    eq(issues.map(i => i.detachedSourceKey), ["lib:cardKey", "lib:cardKey", "lib:cardKey", "lib:barKey"]);
+    assert.strictEqual(summary.detachedSources, 2);
+  });
+
+  await test("a reachable source keeps the component's name and is relinkable", async () => {
+    const comp = makeNode({ id: "rc:comp", type: "COMPONENT", name: "Section header" });
+    const d = makeNode({ id: "rc:1", type: "FRAME", name: "Header", detachedInfo: { type: "local", componentId: "rc:comp" } });
+    const b = boot({ nodes: { "rc:1": d, "rc:comp": comp } });
+    const { issues } = await b.get("runAudit")([d], ALL);
+    assert.strictEqual(issues[0].detachedComponentName, "Section header");
+    assert.strictEqual(issues[0].detachedSourceMissing, false);
+  });
+
+  await test("gradient-only paints are counted as informational, not rogue; a solid next to a gradient still is", async () => {
+    const grad = { type: "GRADIENT_LINEAR", visible: true, gradientStops: [{ color: { r: 0, g: 0, b: 0, a: 0 }, position: 0 }, { color: { r: 0, g: 0, b: 0, a: 0.6 }, position: 1 }] };
+    const scrim = makeNode({ id: "g:1", type: "FRAME", name: "Content", fills: [grad], strokes: [] });
+    const mixedPaints = makeNode({ id: "g:2", type: "FRAME", name: "Mixed", fills: [grad, solid(1, 0, 0)], strokes: [] });
+    const b = boot({ nodes: { "g:1": scrim, "g:2": mixedPaints } });
+    const { issues, summary } = await b.get("runAudit")([scrim, mixedPaints], ALL);
+    eq(issues.map(i => i.id + ":" + i.type), ["g:2:ROGUE_FILL"]);
+    assert.strictEqual(summary.gradients, 1);
+    assert.strictEqual(b.get("hasRogueFill")(scrim), false, "issues:validate must agree with the scan");
+  });
+
+  await test("documentation layers on a section are skipped by default, scanned when the option is off or when selected directly", async () => {
+    const docText = makeNode({ id: "d:t1", type: "TEXT", name: "Component name", textStyleId: "", ...textProps("Regular") });
+    const header = makeNode({ id: "d:h", type: "INSTANCE", name: "Header", fills: [], strokes: [], children: [docText] });
+    const uiText = makeNode({ id: "d:t2", type: "TEXT", name: "9:30", textStyleId: "", ...textProps("Medium") });
+    const screen = makeNode({ id: "d:s", type: "COMPONENT", name: "Examples/Header-Mobile", fills: [], strokes: [], children: [uiText] });
+    const section = makeNode({ id: "d:sec", type: "SECTION", name: "", fills: [], strokes: [], children: [header, screen] });
+    const b = boot({ nodes: { "d:sec": section, "d:h": header, "d:s": screen, "d:t1": docText, "d:t2": uiText } });
+    const runAudit = b.get("runAudit");
+    const on = await runAudit([section], ALL);
+    eq(on.issues.map(i => i.id), ["d:t2"]);
+    assert.strictEqual(on.summary.docLayers, 1);
+    const off = await runAudit([section], Object.assign({}, ALL, { ignoreDocLayers: false }));
+    eq(off.issues.map(i => i.id).sort(), ["d:t1", "d:t2"]);
+    const direct = await runAudit([header], ALL);
+    eq(direct.issues.map(i => i.id), ["d:t1"]);
   });
 
   for (const [s, n] of results) console.log(s.padEnd(5), n);
