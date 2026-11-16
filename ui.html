@@ -1211,6 +1211,20 @@
         margin: 4px 0 0;
         padding-left: 16px;
       }
+      .showMoreBtn{
+        display: block;
+        width: 100%;
+        margin: 6px 0 2px;
+        padding: 10px 12px;
+        border: 1px dashed rgba(255,255,255,.18);
+        border-radius: 8px;
+        background: rgba(255,255,255,.03);
+        color: rgba(255,255,255,.75);
+        font: inherit;
+        font-size: 12px;
+        cursor: pointer;
+      }
+      .showMoreBtn:hover{ background: rgba(255,255,255,.06); color: #fff; }
       .groupHint{ color: var(--violet); cursor: pointer; }
       .row.groupMember{
         margin-left: 14px;
@@ -2449,7 +2463,17 @@
         document.querySelectorAll(".fixDropdown[data-issue-key]").forEach((dropdown) => {
           const key = dropdown.dataset.issueKey;
           if (!key) return;
-          updateAutofixRow(key);
+          // Look inside this row, not the whole document: a document-wide search per row made this
+          // quadratic (830 ms at 2,000 rows, ~17 s at 9,000). An open menu lives on <body>, so it
+          // falls back to the global lookup inside updateAutofixRow.
+          const row = dropdown.closest(".row");
+          updateAutofixRow(
+            key,
+            dropdown,
+            dropdown.querySelector(".fixTrigger"),
+            dropdown.querySelector(".fixMenu") || undefined,
+            row ? row.querySelector(".fixBtn") : undefined
+          );
         });
       }
 
@@ -2886,6 +2910,8 @@
         sortMode: "scan", // scan | type | name
         // Detached source groups (detachedSourceKey) the user expanded in the list.
         expandedGroups: new Set(),
+        // How many list items are rendered; "Show more" raises it. Reset by each scan.
+        listLimit: 200,
         scanCanceled: false,
         issues: [],
         summary: { total: 0, detached: 0, unstyledText: 0, rogueFills: 0, rogueStrokes: 0, ignored: 0 },
@@ -3479,6 +3505,8 @@
         return row;
       }
 
+      const LIST_PAGE = 200;
+
       // keepScroll: re-render after a single row changed, without jumping back to the top.
       function renderList(keepScroll = false){
         const list = $("list");
@@ -3499,8 +3527,16 @@
           return;
         }
         
+        // Rendered in pages: thousands of rows make every layout slow, and candidate matching only
+        // runs for rows that exist. Counts, filters, sort, CSV, "Select all" and Fix all still use
+        // every issue.
+        const items = groupDetachedForDisplay(issues);
+        const limit = Math.max(LIST_PAGE, Number(state.listLimit) || LIST_PAGE);
         let idx = 0;
-        for (const item of groupDetachedForDisplay(issues)){
+        let rendered = 0;
+        for (const item of items){
+          if (rendered >= limit) break;
+          rendered += 1;
           if (item.group) {
             const open = state.expandedGroups.has(item.key);
             list.appendChild(buildDetachedGroupRow(item, idx++, open));
@@ -3514,6 +3550,21 @@
             continue;
           }
           list.appendChild(buildIssueRow(item.issue, idx++));
+        }
+        const remaining = items.length - rendered;
+        if (remaining > 0) {
+          const more = document.createElement("button");
+          more.type = "button";
+          more.className = "showMoreBtn";
+          more.id = "showMoreBtn";
+          const next = Math.min(LIST_PAGE, remaining);
+          more.textContent = `Show ${next} more · ${remaining.toLocaleString()} not shown`;
+          more.addEventListener("click", (e) => {
+            e.stopPropagation();
+            state.listLimit = limit + LIST_PAGE;
+            renderList(true);
+          });
+          list.appendChild(more);
         }
         if (prevScroll) list.scrollTop = prevScroll;
         // After rendering, re-measure to prevent the list from being clipped
@@ -4774,6 +4825,7 @@
 
           state.scanComplete = true;
           state.activeFilter.clear();
+          state.listLimit = LIST_PAGE;
           state.scanCanceled = !!msg.canceled;
           state.issues = msg.issues || [];
           state.ignoredIssues = Array.isArray(msg.ignoredIssues) ? msg.ignoredIssues : [];

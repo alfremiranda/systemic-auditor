@@ -395,6 +395,25 @@ T.all = async function () {
       $("ignoreDocLayers").checked === true && sent("run-audit").pop().options.ignoreDocLayers === true, JSON.stringify(sent("run-audit").pop().options));
   });
 
+  await section("15. Large scans: the list renders in pages, everything else covers all issues", async () => {
+    const issues = [];
+    for (let i = 0; i < 450; i++) issues.push(mkIssue("big:" + i, i % 2 ? "ROGUE_FILL" : "UNSTYLED_TEXT", "Layer " + i));
+    await load(undefined, { issues, candidates: (m) => rec(m.id) });
+    await scan(400);
+    await waitFor(() => QA("#list > .row").length > 0, 3000);
+    check("only the first 200 rows are rendered", QA("#list > .row").length === 200, QA("#list > .row").length);
+    check("a Show more button says what's left", $("showMoreBtn") && $("showMoreBtn").textContent === "Show 200 more · 250 not shown", $("showMoreBtn") && $("showMoreBtn").textContent);
+    check("the total still counts every issue", $("statTotal").textContent === "450", $("statTotal").textContent);
+    $("showMoreBtn").click(); await sleep(200);
+    check("Show more renders the next page", QA("#list > .row").length === 400 && $("showMoreBtn").textContent === "Show 50 more · 50 not shown", QA("#list > .row").length);
+    $("showMoreBtn").click(); await sleep(200);
+    check("the last page removes the button", QA("#list > .row").length === 450 && !$("showMoreBtn"), QA("#list > .row").length);
+    const t = performance.now(); ev("refreshAutofixRows()"); const ms = performance.now() - t;
+    check("refreshing 450 rows stays fast (no per-row document search)", ms < 300, Math.round(ms) + "ms");
+    await scan(400);
+    check("a new scan starts from the first page again", QA("#list > .row").length === 200, QA("#list > .row").length);
+  });
+
   return results;
 };
 </script></body></html>
